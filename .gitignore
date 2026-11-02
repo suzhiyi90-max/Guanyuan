@@ -1,0 +1,18 @@
+# dependencies / build
+node_modules/
+dist/
+.vite/
+*.tsbuildinfo
+
+# environment / secrets
+.env
+.env.*
+!.env.example
+
+# local tools and experiments (not part of the published app)
+local/
+
+# logs / OS
+*.log
+.DS_Store
+Thumbs.db
