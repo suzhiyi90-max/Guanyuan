@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { ArrowLeft, BookMarked, BookOpen, Calculator, Check, ChevronRight, ClipboardList, Coffee, FileSearch, Files, Footprints, Gift, Landmark, Map, MoonStar, PackageOpen, ScrollText, Search, Stamp, Sun, UsersRound, Waves, X } from 'lucide-react'
 import { PeriodLight, RiverProjection, SceneArt } from './components/SceneArt'
-import { AtlasDrawer } from './components/AtlasDrawer'
+import { AtlasDrawer, type AtlasView } from './components/AtlasDrawer'
+import { LocationScene, type LocationSceneId } from './components/LocationScene'
+import { SettlementScene } from './components/SettlementScene'
 import { DocumentWorkspace } from './components/DocumentWorkspace'
 import { BanquetModal, DaySummary, GoalPrologue, IntelligenceDrawer, PlanDrawer } from './components/Overlays'
 import { PersonPanel } from './components/PersonPanel'
@@ -16,6 +18,7 @@ import { EpilogueCard } from './components/EpilogueCard'
 import { worldEvents } from './game/schedule'
 import { AnimatedNumber } from './components/AnimatedNumber'
 import { goals, people } from './data'
+import { streetStationOf, type CityLocationId, type StreetStationId } from './city'
 import { goalReckoningOf, officialAvailableOf, periods, useGuanyuanGame } from './game/useGame'
 import type { ClueSource, DocMode, OfficialActionId, OverlayId, SceneId, SectionId } from './types'
 
@@ -45,6 +48,15 @@ export default function App() {
   const [selectedCompare, setSelectedCompare] = useState<string[]>([])
   const [selectedLedger, setSelectedLedger] = useState<string[]>([])
   const [selectedPersonId, setSelectedPersonId] = useState('expert')
+  const [atlasEntry, setAtlasEntry] = useState<{ view: AtlasView, location: CityLocationId, node?: string, streetId?: StreetStationId }>({ view: 'map', location: 'county' })
+  const [locationScene, setLocationScene] = useState<LocationSceneId>('ferry')
+  const [lifeDestination, setLifeDestination] = useState<{ space: 'gift' | 'home' | 'street', streetId: StreetStationId, version: number }>({ space: 'gift', streetId: 'tea', version: 0 })
+
+  useEffect(() => {
+    if (activeSection !== 'life' && lifeDestination.space !== 'gift') {
+      setLifeDestination({ space: 'gift', streetId: 'tea', version: 0 })
+    }
+  }, [activeSection, lifeDestination.space])
 
   const period = periods[state.periodIndex]
   const selectedPerson = useMemo(() => people.find(p => p.id === selectedPersonId) ?? people[0], [selectedPersonId])
@@ -73,7 +85,7 @@ export default function App() {
   const navigate = (id: SectionId) => {
     if (id === 'cases') {
       setActiveSection('today')
-      setDocMode('original')
+      setDocMode('dossier')
       setOverlay('document')
       return
     }
@@ -198,6 +210,18 @@ export default function App() {
     setOverlay('person')
   }
 
+  const openAtlas = (view: AtlasView = 'map', streetId?: StreetStationId) => {
+    const location = streetId ? streetStationOf(streetId)?.cityLocationId ?? 'street' : 'county'
+    setAtlasEntry({ view, location, streetId })
+    setOverlay('atlas')
+  }
+
+  const openLifeDestination = (space: 'gift' | 'home' | 'street', streetId: StreetStationId = 'tea') => {
+    setLifeDestination(current => ({ space, streetId, version: current.version + 1 }))
+    setOverlay(null)
+    setActiveSection('life')
+  }
+
   const currentEvent = worldEvents.find(e => e.id === state.pendingEvent) ?? null
 
   useEffect(() => {
@@ -271,14 +295,14 @@ export default function App() {
 
             </motion.section>
             </AnimatePresence>
-            <div className="scene-switcher" aria-label="切换所在场景"><button className="scene-atlas-button" onClick={() => setOverlay('atlas')} aria-label="抽阅一县舆图" title="抽阅一县舆图"><Map size={15} /><span>舆图</span></button>{([['county', '县衙'], ['river', '东堤'], ['study', '夜书房']] as Array<[SceneId, string]>).map(([id, label]) => <button key={id} className={scene === id ? 'active' : ''} aria-pressed={scene === id} onClick={() => changeScene(id)}>{scene === id && <motion.span className="scene-switch-ink" layoutId="scene-switch-ink" transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 430, damping: 35 }} aria-hidden="true" />}<span>{label}</span></button>)}</div>
+            <div className="scene-switcher" aria-label="切换所在场景"><button className="scene-atlas-button" onClick={() => openAtlas('map')} aria-label="抽阅一县舆图" title="抽阅一县舆图"><Map size={15} /><span>舆图</span></button>{([['county', '县衙'], ['river', '东堤'], ['study', '夜书房']] as Array<[SceneId, string]>).map(([id, label]) => <button key={id} className={scene === id ? 'active' : ''} aria-pressed={scene === id} onClick={() => changeScene(id)}>{scene === id && <motion.span className="scene-switch-ink" layoutId="scene-switch-ink" transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 430, damping: 35 }} aria-hidden="true" />}<span>{label}</span></button>)}</div>
             </div>
             <TodayAside day={state.day} onOpenDoc={() => { setDocMode('original'); setOverlay('document') }} onOpenPlan={openPlan} onOpenBanquet={() => setOverlay('banquet')} onOpenAffairs={() => setActiveSection('affairs')} onOpenReview={() => setOverlay('review')} pendingEventTitle={currentEvent?.title ?? null} onOpenWorld={() => setOverlay('world')} reviewAvailable={officialAvailableOf(state)} reviewPending={state.officialActions.length === 0} cluesCount={state.clues.length} taskStarted={taskStarted} period={period} log={state.log} />
             </motion.div>}
             {activeSection === 'affairs' && <AffairsSection key="affairs" state={state} onOpenPlan={openPlan} onOpenEvidence={() => setOverlay('evidence')} onOpenReview={() => setOverlay('review')} onOpenEpilogue={() => setOverlay('epilogue')} onNavigate={navigate} onGoRiver={() => { setActiveSection('today'); changeScene('river') }} />}
             {activeSection === 'people' && <PeopleSection key="people" state={state} onSelect={openPerson} />}
             {activeSection === 'ledger' && <LedgerSection key="ledger" unlocked={state.unlocked} selected={selectedLedger} onToggle={id => toggleSelection(id, 'ledger')} onRemember={handleRememberLedger} remembered={ledgerRemembered} onAudit={handleAudit} audited={audited} onOpenEvidence={() => setOverlay('evidence')} material={state.material} />}
-            {activeSection === 'life' && <LifeSection key="life" privateFunds={state.privateFunds} giftEntries={state.giftEntries} onOpenBanquet={() => setOverlay('banquet')} onOpenAtlas={() => setOverlay('atlas')} log={state.log} period={period} />}
+            {activeSection === 'life' && <LifeSection key="life" privateFunds={state.privateFunds} giftEntries={state.giftEntries} onOpenBanquet={() => setOverlay('banquet')} onOpenAtlas={stationId => openAtlas('city', stationId)} log={state.log} period={period} requestedSpace={lifeDestination.space} requestedStreetId={lifeDestination.streetId} requestVersion={lifeDestination.version} />}
           </AnimatePresence>
         </div>
       </main>
@@ -291,8 +315,9 @@ export default function App() {
       </AnimatePresence>
 
       <AnimatePresence>
-        {overlay === 'atlas' && <AtlasDrawer key="atlas" state={state} period={period} scene={scene} onClose={() => setOverlay(null)} onGoRiver={() => { setOverlay(null); setActiveSection('today'); changeScene('river') }} onOpenLedger={() => { setOverlay(null); setActiveSection('ledger') }} onOpenForeman={() => openPerson('foreman')} />}
-        {overlay === 'document' && <DocumentWorkspace key="document" mode={docMode} onModeChange={setDocMode} selected={selectedCompare} onToggle={id => toggleSelection(id, 'document')} onRemember={handleRememberDoc} remembered={docRemembered} onClose={() => setOverlay(null)} />}
+        {overlay === 'atlas' && <AtlasDrawer key="atlas" state={state} period={period} scene={scene} initialView={atlasEntry.view} initialNode={atlasEntry.node} initialCityLocation={atlasEntry.location} initialStreetId={atlasEntry.streetId} onClose={() => setOverlay(null)} onGoRiver={() => { setOverlay(null); setActiveSection('today'); changeScene('river') }} onGoCounty={() => { setOverlay(null); setActiveSection('today'); changeScene('county') }} onGoStudy={() => { setOverlay(null); setActiveSection('today'); changeScene('study') }} onReturnStreet={stationId => openLifeDestination('street', stationId)} onReturnHome={() => openLifeDestination('home')} onOpenLedger={() => { setOverlay(null); setActiveSection('ledger') }} onOpenForeman={() => openPerson('foreman')} onOpenBanquet={() => setOverlay('banquet')} onOpenPerson={openPerson} onOpenLocation={id => { setLocationScene(id); setAtlasEntry({ view: 'map', location: 'county', node: id }); setOverlay('location') }} />}
+        {overlay === 'location' && (locationScene === 'town' || locationScene === 'manor' ? <SettlementScene key="settlement" initialLocation={locationScene} state={state} period={period} onClose={() => setOverlay(null)} onReturnAtlas={node => { setAtlasEntry({ view: 'map', location: 'county', node }); setOverlay('atlas') }} onOpenEvidence={() => setOverlay('evidence')} onOpenPerson={openPerson} onOpenPlan={openPlan} /> : <LocationScene key="location" initialLocation={locationScene} state={state} period={period} onClose={() => setOverlay(null)} onReturnAtlas={node => { setAtlasEntry({ view: 'map', location: 'county', node }); setOverlay('atlas') }} onOpenLedger={() => { setOverlay(null); setActiveSection('ledger') }} onOpenIntelligence={() => setOverlay('intelligence')} onOpenReview={() => setOverlay('review')} />)}
+        {overlay === 'document' && <DocumentWorkspace key="document" mode={docMode} onModeChange={setDocMode} selected={selectedCompare} onToggle={id => toggleSelection(id, 'document')} onRemember={handleRememberDoc} remembered={docRemembered} onClose={() => setOverlay(null)} state={state} onOpenReview={() => setOverlay('review')} onOpenEvidence={() => setOverlay('evidence')} onOpenEpilogue={() => setOverlay('epilogue')} />}
         {overlay === 'plan' && <PlanDrawer key="plan" onClose={() => setOverlay(null)} onConfirm={handleConfirmPlan} canPlan={!taskStarted} />}
         {overlay === 'intelligence' && <IntelligenceDrawer key="intel" clues={state.clues} asked={state.asked} onClose={() => setOverlay(null)} onOpenSource={openSource} onOpenEvidence={() => setOverlay('evidence')} />}
         {overlay === 'evidence' && <EvidenceBoard key="evidence" state={state} onClose={() => setOverlay(null)} onOpenSource={openSource} />}

@@ -1,8 +1,10 @@
 import { useState, type KeyboardEvent } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import { Check, ChevronLeft, ChevronRight, Columns2, FileText, Link2, MapPin, PenLine, ScrollText, X } from 'lucide-react'
+import { Check, ChevronLeft, ChevronRight, Columns2, FileText, FolderClosed, Link2, MapPin, PenLine, ScrollText, X } from 'lucide-react'
 import { useOverlayDialog } from './Overlays'
+import { DossierFolio } from './DossierFolio'
 import { documentVersions } from '../data'
+import type { GameState } from '../game/useGame'
 import type { DocMode } from '../types'
 
 interface Props {
@@ -13,6 +15,10 @@ interface Props {
   onRemember: () => void
   remembered: boolean
   onClose: () => void
+  state: GameState
+  onOpenReview: () => void
+  onOpenEvidence: () => void
+  onOpenEpilogue: () => void
 }
 
 const compareRows = [
@@ -23,6 +29,7 @@ const compareRows = [
 ]
 
 const docTabs = [
+  { id: 'dossier' as DocMode, label: '卷宗', icon: FolderClosed },
   { id: 'original' as DocMode, label: '原件', icon: ScrollText },
   { id: 'reading' as DocMode, label: '释文', icon: FileText },
   { id: 'compare' as DocMode, label: '对勘', icon: Columns2 },
@@ -31,7 +38,7 @@ const docTabs = [
 const reviewOrder = compareRows.flatMap(row => [`${row.id}-initial`, `${row.id}-final`])
 const groupOf = (id: string) => id.replace(/-(initial|final)$/, '')
 
-export function DocumentWorkspace({ mode, onModeChange, selected, onToggle, onRemember, remembered, onClose }: Props) {
+export function DocumentWorkspace({ mode, onModeChange, selected, onToggle, onRemember, remembered, onClose, state, onOpenReview, onOpenEvidence, onOpenEpilogue }: Props) {
   const { initial, final } = documentVersions
   const reduceMotion = useReducedMotion()
   const dialogRef = useOverlayDialog<HTMLDivElement>()
@@ -64,7 +71,7 @@ export function DocumentWorkspace({ mode, onModeChange, selected, onToggle, onRe
   }
 
   const handleReviewKey = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (!event.altKey || !['ArrowLeft', 'ArrowRight'].includes(event.key)) return
+    if (mode === 'dossier' || !event.altKey || !['ArrowLeft', 'ArrowRight'].includes(event.key)) return
     event.preventDefault()
     stepReview(event.key === 'ArrowRight' ? 1 : -1)
   }
@@ -94,7 +101,7 @@ export function DocumentWorkspace({ mode, onModeChange, selected, onToggle, onRe
         <header className="document-toolbar">
           <div className="document-heading">
             <span className="eyebrow">河工案卷 · 001</span>
-            <h2 id="document-title">东堤渗水呈文</h2>
+            <h2 id="document-title">{mode === 'dossier' ? '东堤河工卷宗' : '东堤渗水呈文'}</h2>
           </div>
           <div className="document-tabs" role="tablist" aria-label="文书查看方式">
             {docTabs.map(tab => <motion.button
@@ -119,16 +126,21 @@ export function DocumentWorkspace({ mode, onModeChange, selected, onToggle, onRe
 
         <div className="document-meta">
           <span>第一日 · 辰时收件</span><span>河工书办呈</span><span>知县亲览</span>
-          <div className="document-review-stepper" aria-label="批阅焦点，Alt 加左右方向键移证">
+          {mode !== 'dossier' && <div className="document-review-stepper" aria-label="批阅焦点，Alt 加左右方向键移证">
             <button onClick={() => stepReview(-1)} aria-label="上一处批阅" title="上一处（Alt+←）"><ChevronLeft size={13} /></button>
             <span aria-live="polite"><b>{focusedRow.label}</b><small>{focusedVersion} · {focusedGroupSelected ? '已选' : '查验'}</small></span>
             <button onClick={() => stepReview(1)} aria-label="下一处批阅" title="下一处（Alt+→）"><ChevronRight size={13} /></button>
-          </div>
-          <span className="doc-status">两版有改</span>
+          </div>}
+          <span className="doc-status">{mode === 'dossier' ? '四类归卷' : '两版有改'}</span>
         </div>
 
         <div className="document-panel" id="document-panel" role="tabpanel" aria-labelledby={`document-tab-${mode}`} data-doc-mode={mode} data-review-group={focusedRow.id}>
         <AnimatePresence mode="wait" initial={false}>
+          {mode === 'dossier' && (
+            <motion.div key="dossier" className="dossier-view" {...pageMotion}>
+              <DossierFolio state={state} onOpenDocument={changeMode} onOpenReview={onOpenReview} onOpenEvidence={onOpenEvidence} onOpenEpilogue={onOpenEpilogue} />
+            </motion.div>
+          )}
           {mode === 'original' && (
             <motion.div key="original" className="original-view" {...pageMotion}>
               <div className="vertical-document">
@@ -184,11 +196,16 @@ export function DocumentWorkspace({ mode, onModeChange, selected, onToggle, onRe
         </AnimatePresence>
         </div>
 
-        <footer className="document-footer">
-          <div className="evidence-source"><Link2 size={15} /><span>来源链</span><b>V-001</b><em>书办呈文</em><b>V-002</b><em>幕友改定</em></div>
-          <button className={`primary-button remember-button ${remembered ? 'is-done' : ''}`} disabled={selected.length < 2 || remembered} onClick={onRemember}>
-            {remembered ? <><Check size={17} />已记入情报台账</> : <><MapPin size={17} />{selected.length < 2 ? '选两处，记下疑点' : '记住疑点'}</>}
-          </button>
+        <footer className={`document-footer ${mode === 'dossier' ? 'dossier-document-footer' : ''}`}>
+          {mode === 'dossier' ? <>
+            <div className="evidence-source"><FolderClosed size={15} /><span>卷宗目录</span><em>只归卷与回查 · 不新立文书</em></div>
+            <button className="primary-button remember-button" onClick={() => changeMode('original')}>展开东堤呈文<ScrollText size={16} /></button>
+          </> : <>
+            <div className="evidence-source"><Link2 size={15} /><span>来源链</span><b>V-001</b><em>书办呈文</em><b>V-002</b><em>幕友改定</em></div>
+            <button className={`primary-button remember-button ${remembered ? 'is-done' : ''}`} disabled={selected.length < 2 || remembered} onClick={onRemember}>
+              {remembered ? <><Check size={17} />已记入情报台账</> : <><MapPin size={17} />{selected.length < 2 ? '选两处，记下疑点' : '记住疑点'}</>}
+            </button>
+          </>}
         </footer>
       </motion.div>
     </motion.section>

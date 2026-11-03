@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import type { KeyboardEvent } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import { ArrowRight, BookMarked, BookOpen, Check, ChevronRight, CircleDollarSign, ClipboardList, Clock3, Coffee, DoorClosed, EyeOff, FileSearch, Gift, Home, Landmark, Library, Link2, LockKeyhole, MapPin, MessageCircle, Music, PackageOpen, Scale, Ship, Store, UserRound, Utensils, Wine } from 'lucide-react'
+import { ArrowRight, BookMarked, BookOpen, Check, ChevronRight, CircleDollarSign, ClipboardList, Clock3, Coffee, DoorClosed, EyeOff, FileSearch, Gift, Home, Landmark, Library, Link2, LockKeyhole, MapPin, MessageCircle, PackageOpen, Scale, UserRound, Utensils } from 'lucide-react'
 import { fixedEvents, ledgerRows, people } from '../data'
+import { streetStations, type StreetStationId } from '../city'
 import { AnimatedNumber } from './AnimatedNumber'
 import { Portrait } from './Portrait'
 import { revealDepthOf, sharedHistoryOf, specialtyOf } from '../game/people'
@@ -341,22 +342,12 @@ const homeStations = [
   { name: '厨房', label: '家用与虚报', status: '账位预留', icon: Utensils, title: '家用入私囊 大额另记', text: '月度家用与疾病 婚嫁 丧葬各有账位 当前只保留纸面结构 不预设金额 不执行月结', accounts: '私囊 · 身体' },
 ]
 
-const teaRecord = ledgerRows.find(row => row.id === 'P-006')!
-const streetStations = [
-  { id: 'P-006', name: '茶楼', label: '吃茶与打听', status: '有来源', icon: Coffee, text: teaRecord.text, source: teaRecord.source, accounts: '私囊 · 人情 · 风评' },
-  { id: '', name: '酒肆', label: '应酬与酒话', status: '未接触', icon: Wine, text: '尚无已接触记录 此处只保留地点索引', source: '未接触不显示传闻与人物秘密', accounts: '私囊 · 身体 · 风评' },
-  { id: '', name: '戏园', label: '听戏与堂会', status: '未接触', icon: Music, text: '尚无已接触记录 此处只保留地点索引', source: '享受须有钱 时间 身体或风评代价', accounts: '私囊 · 身体 · 风评' },
-  { id: '', name: '商号', label: '买卖与旧欠', status: '未接触', icon: Store, text: '尚无已接触记录 此处只保留地点索引', source: '不在地点卡中预写商号秘密或经营数值', accounts: '私囊 · 人情' },
-  { id: '', name: '当铺', label: '典当与借债', status: '未接触', icon: Landmark, text: '尚无已接触记录 此处只保留地点索引', source: '借债与典当结算尚未启用', accounts: '私囊 · 人情 · 风评' },
-  { id: '', name: '码头', label: '脚夫与船运', status: '未接触', icon: Ship, text: '尚无已接触记录 此处只保留地点索引', source: '船运消息必须另有来源才可入台账', accounts: '私囊 · 人情 · 风评' },
-]
-
-export function LifeSection({ privateFunds, giftEntries, onOpenBanquet, onOpenAtlas, log, period }: { privateFunds: number, giftEntries: string[], onOpenBanquet: () => void, onOpenAtlas: () => void, log: GameLog, period: Period }) {
+export function LifeSection({ privateFunds, giftEntries, onOpenBanquet, onOpenAtlas, log, period, requestedSpace = 'gift', requestedStreetId = 'tea', requestVersion = 0 }: { privateFunds: number, giftEntries: string[], onOpenBanquet: () => void, onOpenAtlas: (stationId: StreetStationId) => void, log: GameLog, period: Period, requestedSpace?: LifeSpace, requestedStreetId?: StreetStationId, requestVersion?: number }) {
   const reduceMotion = useReducedMotion()
-  const [space, setSpace] = useState<LifeSpace>('gift')
+  const [space, setSpace] = useState<LifeSpace>(requestedSpace)
   const [selectedGift, setSelectedGift] = useState(0)
   const [homeStation, setHomeStation] = useState(0)
-  const [streetStation, setStreetStation] = useState(0)
+  const [streetStation, setStreetStation] = useState(() => Math.max(0, streetStations.findIndex(station => station.id === requestedStreetId)))
   const activeGift = Math.min(selectedGift, Math.max(0, giftEntries.length - 1))
   const activeHome = homeStations[homeStation]
   const activeStreet = streetStations[streetStation]
@@ -370,6 +361,11 @@ export function LifeSection({ privateFunds, giftEntries, onOpenBanquet, onOpenAt
     { name: '风评', value: giftEntries.length ? '初见应酬' : '新到任', note: '只记录依据，不折算单一分数', icon: Scale, detail: giftEntries.length ? '当前只记初见应酬 具体褒贬仍须以三行日志和真实事件为据' : '新到任 尚无应酬风评记录 不生成评价', source: log.rumor },
   ]
   const activeAccount = lifeAccounts.find(item => item.name === accountFocus) ?? lifeAccounts[1]
+  useEffect(() => {
+    setSpace(requestedSpace)
+    const requestedIndex = streetStations.findIndex(station => station.id === requestedStreetId)
+    if (requestedIndex >= 0) setStreetStation(requestedIndex)
+  }, [requestVersion, requestedSpace, requestedStreetId])
   const handleSpaceKeys = (event: KeyboardEvent<HTMLDivElement>) => {
     const current = lifeSpaceTabs.findIndex(tab => tab.id === space)
     let next = current
@@ -411,11 +407,11 @@ export function LifeSection({ privateFunds, giftEntries, onOpenBanquet, onOpenAt
         </motion.button>)}</div><footer><EyeOff size={14} /><span>请求 家用 仆役各有纸位 不展示私密细节</span></footer></section>
           <AnimatePresence mode="wait" initial={false}><motion.aside className="space-inspector" key={homeStation} initial={{ opacity: 0, x: reduceMotion ? 0 : 12 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: reduceMotion ? 0 : -8 }} transition={{ duration: reduceMotion ? 0 : .2 }} aria-live="polite"><header><span>内宅门簿 / 只记可知的</span><b>纸面预览</b></header><div className="space-inspector-title"><activeHome.icon size={23} /><div><span>{activeHome.label}</span><h2>{activeHome.title}</h2></div></div><p>{activeHome.text}</p><div className="space-ledger-line"><span>关联网账</span><b>{activeHome.accounts}</b></div><div className="space-source"><span>事件接口</span><p>家人请求到来时仍沿用 S-11 夜事件 不在这里直接结算</p></div><footer><EyeOff size={14} /><span>不生成请求 金额或家人秘密</span></footer></motion.aside></AnimatePresence>
         </div>}
-        {space === 'street' && <div className="life-spread street-spread"><section className="life-space-index"><header><div><MapPin size={18} /><h2>街市地点</h2></div><span>只列名目 不是全知地图</span></header><div className="space-index-list">{streetStations.map((station, index) => <motion.button layout className={`space-index-row ${streetStation === index ? 'selected' : ''}`} aria-pressed={streetStation === index} onClick={() => setStreetStation(index)} key={station.name} whileTap={reduceMotion ? undefined : { scale: .99 }}>
+        {space === 'street' && <div className="life-spread street-spread"><section className="life-space-index"><header><div><MapPin size={18} /><h2>街市地点</h2></div><span>与城郭图共用六处投影</span></header><div className="space-index-list">{streetStations.map((station, index) => <motion.button layout data-street-id={station.id} className={`space-index-row ${streetStation === index ? 'selected' : ''}`} aria-pressed={streetStation === index} onClick={() => setStreetStation(index)} key={station.id} whileTap={reduceMotion ? undefined : { scale: .99 }}>
           {streetStation === index && <motion.span className="space-select-ink" layoutId="street-select-ink" transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 380, damping: 32 }} aria-hidden="true" />}
           <span className="space-index-icon"><station.icon size={17} /></span><div><h3>{station.name}</h3><p>{station.label}</p></div><b>{station.status}</b>
-        </motion.button>)}</div><footer><MapPin size={14} /><span>地点可先读 接触与消费仍须真实事件</span><button className="text-link street-atlas-link" onClick={onOpenAtlas}>抽阅一县舆图 <ArrowRight size={13} /></button></footer></section>
-          <AnimatePresence mode="wait" initial={false}><motion.aside className="space-inspector" key={streetStation} initial={{ opacity: 0, x: reduceMotion ? 0 : 12 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: reduceMotion ? 0 : -8 }} transition={{ duration: reduceMotion ? 0 : .2 }} aria-live="polite"><header><span>街市查验 / 来源先于结论</span><b>{activeStreet.id ? '有来源' : '未接触'}</b></header><div className="space-inspector-title"><activeStreet.icon size={23} /><div><span>{activeStreet.name} · {activeStreet.label}</span><h2>{activeStreet.id ? '传闻只按原文留档' : '尚无可查验的话'}</h2></div></div><p>{activeStreet.text}</p><div className="space-ledger-line"><span>关联网账</span><b>{activeStreet.accounts}</b></div><div className="space-source"><span>{activeStreet.id || '来源边界'}</span><p>{activeStreet.source}</p></div><footer><MapPin size={14} /><span>不生成传闻 不推进时段 不执行消费</span></footer><button className="text-link space-event-link" onClick={onOpenBanquet}>应酬仍由夜宴事件承载 <ArrowRight size={14} /></button></motion.aside></AnimatePresence>
+        </motion.button>)}</div><footer><MapPin size={14} /><span>地点可先读 接触与消费仍须真实事件</span><button className="text-link street-atlas-link" onClick={() => onOpenAtlas(activeStreet.id)}>抽阅城郭图 <ArrowRight size={13} /></button></footer></section>
+          <AnimatePresence mode="wait" initial={false}><motion.aside className="space-inspector" data-station-id={activeStreet.id} key={streetStation} initial={{ opacity: 0, x: reduceMotion ? 0 : 12 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: reduceMotion ? 0 : -8 }} transition={{ duration: reduceMotion ? 0 : .2 }} aria-live="polite"><header><span>街市查验 / 城郭同源</span><b>{activeStreet.recordId ? '有来源' : '未接触'}</b></header><div className="space-inspector-title"><activeStreet.icon size={23} /><div><span>{activeStreet.name} · {activeStreet.label}</span><h2>{activeStreet.recordId ? '传闻只按原文留档' : '尚无可查验的话'}</h2></div></div><p>{activeStreet.text}</p><div className="space-ledger-line"><span>关联网账</span><b>{activeStreet.accounts.join(' · ')}</b></div><div className="space-source"><span>{activeStreet.recordId || '来源边界'}</span><p>{activeStreet.source}</p></div><div className="street-shared-note"><MapPin size={13} /><span>城郭选中：{activeStreet.cityLocationId === 'street' ? '街市' : activeStreet.name} · 来源与网账同步</span></div><footer><MapPin size={14} /><span>不生成传闻 不推进时段 不执行消费</span></footer><button className="text-link space-event-link" onClick={onOpenBanquet}>应酬仍由夜宴事件承载 <ArrowRight size={14} /></button></motion.aside></AnimatePresence>
         </div>}
       </motion.div></AnimatePresence>
       <section className="life-log"><span>今日三行</span><p>{log.done}</p><p>{log.stuck}</p><p>{log.rumor}</p></section>

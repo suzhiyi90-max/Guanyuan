@@ -3,6 +3,7 @@ import type { KeyboardEvent } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { ArrowLeft, ArrowRight, CalendarClock, Check, CircleDollarSign, Coins, FileSearch, Flag, Landmark, Layers, Link2, LockKeyhole, PackageOpen, Plus, RotateCcw, ScrollText, Stamp, UsersRound, Waves, X } from 'lucide-react'
 import { nextCheckpointOf, periods, taskProgressOf, taskStageOf, type GameState } from '../game/useGame'
+import { OfficeBoard } from './OfficeBoard'
 import type { SectionId, TaskStage } from '../types'
 
 const stages: Array<{ id: TaskStage; label: string; hint: string }> = [
@@ -32,11 +33,12 @@ const worldClock = [
 const clockDays = Array.from({ length: 10 }, (_, index) => index + 1)
 const durationOffsets = Array.from({ length: 16 }, (_, index) => index)
 
-type AffairsView = 'tasks' | 'tokens'
+type AffairsView = 'tasks' | 'tokens' | 'offices'
 
 const affairsViews = [
   { id: 'tasks' as AffairsView, label: '事务盘', note: '进度与检查点' },
   { id: 'tokens' as AffairsView, label: '政令牌', note: 'M2 牌式预览' },
+  { id: 'offices' as AffairsView, label: '六房值房', note: 'M2 案台预览' },
 ]
 
 const policyTokens = [
@@ -279,7 +281,7 @@ export function AffairsSection({ state, onOpenPlan, onOpenEvidence, onOpenReview
           </section>
         </aside>
       </div>
-        </motion.div> : <motion.div key="tokens" id="affairs-panel-tokens" role="tabpanel" aria-labelledby="affairs-tab-tokens" className="affairs-view-panel policy-panel" initial={{ opacity: 0, x: reduceMotion ? 0 : 18 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: reduceMotion ? 0 : -12 }} transition={{ duration: reduceMotion ? 0 : .24 }}>
+        </motion.div> : view === 'tokens' ? <motion.div key="tokens" id="affairs-panel-tokens" role="tabpanel" aria-labelledby="affairs-tab-tokens" className="affairs-view-panel policy-panel" initial={{ opacity: 0, x: reduceMotion ? 0 : 18 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: reduceMotion ? 0 : -12 }} transition={{ duration: reduceMotion ? 0 : .24 }}>
           <div className="policy-workspace-grid">
             <section className="policy-rack-section">
               <header className="policy-section-head"><div><span className="eyebrow">S-16 / 牌票而非稀有卡</span><h2>政令样牌</h2></div><span>牌式 03 · 实得 00</span></header>
@@ -341,6 +343,8 @@ export function AffairsSection({ state, onOpenPlan, onOpenEvidence, onOpenReview
             })}</AnimatePresence></div> : <div className="policy-compare-empty">从木牌架抽取一牌 再收入并置<br /><span>这里只核对先后与代价 不合成增益</span></div>}
             <footer><Stamp size={14} /><span>预览不打牌 不耗时段 不发起政令 不写入事务存档</span></footer>
           </section>
+        </motion.div> : <motion.div key="offices" id="affairs-panel-offices" role="tabpanel" aria-labelledby="affairs-tab-offices" className="affairs-view-panel" initial={{ opacity: 0, x: reduceMotion ? 0 : 14 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: reduceMotion ? 0 : -10 }} transition={{ duration: reduceMotion ? 0 : .2 }}>
+          <OfficeBoard state={state} onOpenPlan={onOpenPlan} onOpenEvidence={onOpenEvidence} onOpenReview={onOpenReview} onNavigate={onNavigate} onGoRiver={onGoRiver} />
         </motion.div>}
       </AnimatePresence>
     </motion.section>

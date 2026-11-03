@@ -2,11 +2,14 @@ import { useState, type KeyboardEvent } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { ArrowRight, BookOpen, Clock3, Coins, Compass, FileText, Footprints, Home, Landmark, Map as MapIcon, MapPin, Mountain, PackageOpen, PenLine, Route as RouteIcon, ScrollText, Ship, Store, UserRound, Waves, X } from 'lucide-react'
 import { useOverlayDialog } from './Overlays'
+import { CityAtlas } from './CityAtlas'
+import type { LocationSceneId } from './LocationScene'
+import type { CityLocationId, MapKnowledge, StreetStationId } from '../city'
 import type { GameState } from '../game/useGame'
 import type { Period, SceneId } from '../types'
 
-type AtlasView = 'map' | 'journey' | 'arrival'
-type Knowledge = '亲至' | '见图' | '听说' | '未详'
+export type AtlasView = 'map' | 'city' | 'journey' | 'arrival'
+type Knowledge = MapKnowledge
 
 interface AtlasNode {
   id: string
@@ -56,15 +59,37 @@ const routes: AtlasRoute[] = [
 
 const viewTabs: Array<{ id: AtlasView, label: string, note: string }> = [
   { id: 'map', label: '一县舆图', note: '节点与路段' },
+  { id: 'city', label: '县治城郭', note: '地点与在场' },
   { id: 'journey', label: '行程样纸', note: '只预演' },
   { id: 'arrival', label: '抵达样张', note: '回既有场景' },
 ]
 
 const dayNames = ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十']
 
-export function AtlasDrawer({ state, period, scene, onClose, onGoRiver, onOpenLedger, onOpenForeman }: { state: GameState, period: Period, scene: SceneId, onClose: () => void, onGoRiver: () => void, onOpenLedger: () => void, onOpenForeman: () => void }) {
-  const [view, setView] = useState<AtlasView>('map')
-  const [selectedNode, setSelectedNode] = useState('river')
+interface AtlasDrawerProps {
+  state: GameState
+  period: Period
+  scene: SceneId
+  initialView?: AtlasView
+  initialNode?: string
+  initialCityLocation?: CityLocationId
+  initialStreetId?: StreetStationId
+  onClose: () => void
+  onGoRiver: () => void
+  onGoCounty: () => void
+  onGoStudy: () => void
+  onReturnStreet: (stationId: StreetStationId) => void
+  onReturnHome: () => void
+  onOpenLedger: () => void
+  onOpenForeman: () => void
+  onOpenBanquet: () => void
+  onOpenPerson: (id: string) => void
+  onOpenLocation: (id: LocationSceneId) => void
+}
+
+export function AtlasDrawer({ state, period, scene, initialView = 'map', initialNode = 'river', initialCityLocation = 'county', initialStreetId, onClose, onGoRiver, onGoCounty, onGoStudy, onReturnStreet, onReturnHome, onOpenLedger, onOpenForeman, onOpenBanquet, onOpenPerson, onOpenLocation }: AtlasDrawerProps) {
+  const [view, setView] = useState<AtlasView>(initialView)
+  const [selectedNode, setSelectedNode] = useState(initialNode)
   const [selectedRoute, setSelectedRoute] = useState<string | null>(null)
   const [journeyRoute, setJourneyRoute] = useState<'dike' | 'ferry'>('dike')
   const [unfolding, setUnfolding] = useState(false)
@@ -176,13 +201,19 @@ export function AtlasDrawer({ state, period, scene, onClose, onGoRiver, onOpenLe
                       <p className="atlas-node-summary">{activeNode.summary}</p>
                       <div className="atlas-source-line"><BookOpen size={14} /><div><span>认知来源</span><p>{activeNode.source}</p></div></div>
                       <div className="atlas-knowledge-note"><PenLine size={13} /><span>{activeKnowledge === '亲至' ? '只表示此刻所在 不代表知道当地秘密' : activeKnowledge === '见图' ? '图上见过 不等于亲至或核实' : '只记听说来源 不转成事实'}</span></div>
+                      {activeNode.id === 'county' && <button className="primary-button" onClick={() => setView('city')}>展开县治城郭图<ArrowRight size={15} /></button>}
                       {activeNode.id === 'river' && <button className="primary-button" onClick={() => setView('journey')}>展开行程样纸<ArrowRight size={15} /></button>}
+                      {['ferry', 'station', 'town', 'manor'].includes(activeNode.id) && <button className="primary-button" onClick={() => onOpenLocation(activeNode.id as LocationSceneId)}>进入{activeNode.name}场景样张<ArrowRight size={15} /></button>}
                     </>}
                   </motion.section>}
                 </AnimatePresence>
                 <footer><MapIcon size={13} /><span>节点与墨线都可点选 · 方向键移节点</span></footer>
               </aside>
             </motion.div>}
+
+            {view === 'city' && <motion.section key="city" id="atlas-panel-city" role="tabpanel" aria-labelledby="atlas-tab-city" className="city-panel" {...pageMotion}>
+              <CityAtlas state={state} period={period} scene={scene} initialLocation={initialCityLocation} initialStreetId={initialStreetId} onGoScene={next => { if (next === 'county') onGoCounty(); else if (next === 'study') onGoStudy() }} onReturnStreet={onReturnStreet} onReturnHome={onReturnHome} onOpenLedger={onOpenLedger} onOpenBanquet={onOpenBanquet} onOpenPerson={onOpenPerson} />
+            </motion.section>}
 
             {view === 'journey' && <motion.section key="journey" id="atlas-panel-journey" role="tabpanel" aria-labelledby="atlas-tab-journey" className="journey-preview" {...pageMotion}>
               <header className="journey-title"><div><span className="eyebrow">行程确认 / 总纲附录 F 样纸</span><h3>县治 <i /> 东堤</h3></div><span>第{dayNames[state.day - 1]}日 · {period}<small>预演不推进</small></span></header>

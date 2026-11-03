@@ -1,8 +1,8 @@
 export type SectionId = 'today' | 'cases' | 'affairs' | 'people' | 'ledger' | 'life'
 export type SceneId = 'county' | 'river' | 'study'
 export type Period = '晨' | '午' | '暮' | '夜'
-export type DocMode = 'original' | 'reading' | 'compare'
-export type OverlayId = 'document' | 'intelligence' | 'plan' | 'banquet' | 'person' | 'summary' | 'goal' | 'evidence' | 'signing' | 'review' | 'world' | 'epilogue' | 'atlas' | null
+export type DocMode = 'dossier' | 'original' | 'reading' | 'compare'
+export type OverlayId = 'document' | 'intelligence' | 'plan' | 'banquet' | 'person' | 'summary' | 'goal' | 'evidence' | 'signing' | 'review' | 'world' | 'epilogue' | 'atlas' | 'location' | null
 
 export type OfficialActionId = 'endorse' | 'commissioner' | 'files' | 'citation' | 'impeach' | 'suppress'
 
