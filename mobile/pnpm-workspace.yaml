@@ -1,6 +1,0 @@
-allowBuilds:
-  '@shopify/react-native-skia': true
-
-overrides:
-  expo-sharing: 56.0.23
-  expo-image-manipulator: ~56.0.18
