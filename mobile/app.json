@@ -1,0 +1,21 @@
+{
+  "expo": {
+    "name": "观远·州县官员模拟器",
+    "slug": "meoo-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "scheme": "meoo",
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#ffffff"
+      }
+    },
+    "web": {},
+    "extra": {
+      "meooBuildId": "3069cae313ed140c1150be96bf8c23e6"
+    }
+  }
+}
