@@ -40,7 +40,7 @@ import { worldEvents, type WorldEvent } from './game/schedule'
 import { AnimatedNumber } from './components/AnimatedNumber'
 import { goals, people } from './data'
 import { streetStationOf, type CityLocationId, type StreetStationId } from './city'
-import { goalReckoningOf, officialAvailableOf, periods, useGuanyuanGame } from './game/useGame'
+import { goalReckoningOf, officialAvailableOf, periods, useGuanyuanGame, verdictOf } from './game/useGame'
 import { useNarrator } from './narrative/useNarrator'
 import { effectById } from './narrative/effects'
 import { findGeneratedEvent } from './narrative/store'
@@ -768,7 +768,7 @@ export default function App() {
         {overlay === 'review' && <OfficialReview key="review" state={state} onClose={() => setOverlay(null)} onAction={handleOfficial} />}
         {overlay === 'world' && currentEvent && <WorldEventCard key={`world-${currentEvent.id}`} event={currentEvent} onChoose={chooseEventOption} onLater={() => { narrator.dismiss(); setOverlay(null) }} currentDay={state.day} onLocateDay={locateWorldDay} generated={Boolean(generatedEvent && currentEvent.id === generatedEvent.id)} optionNotes={generatedNotes} />}
         {overlay === 'world' && !currentEvent && <NarrationCard key="narration" run={narrator.run} ready={narrator.ready} intent={narrationIntent} onIntent={setNarrationIntent} onAwait={() => narrator.awaitInk(narrationIntent)} onSkip={narrator.skip} onCancel={() => { narrator.cancel(); setOverlay(null) }} configSlot={<NarratorConfig defaultOpen={!narrator.ready} />} />}
-        {overlay === 'epilogue' && <EpilogueCard key="epilogue" state={state} onClose={() => setOverlay(null)} onOpenCausality={openCausality} onLocate={locateFromEpilogue} onOpenReviewGroup={focus => openDocumentAt(focus, 'epilogue')} onOpenStreet={() => openRumorTarget('street')} reviewOrigin={currentOrigin ?? undefined} onBackReviewOrigin={backToReviewOrigin} onOpenFolio={openFolio} />}
+        {overlay === 'epilogue' && <EpilogueCard key="epilogue" state={state} onClose={() => setOverlay(null)} onOpenCausality={openCausality} onLocate={locateFromEpilogue} onOpenReviewGroup={focus => openDocumentAt(focus, 'epilogue')} onOpenStreet={() => openRumorTarget('street')} reviewOrigin={currentOrigin ?? undefined} onBackReviewOrigin={backToReviewOrigin} onOpenFolio={openFolio} verdict={verdictOf(state)} onRestart={() => { game.resetGame(); narrator.cancel(); setPrologueDone(false); setOverlay(null); setActiveSection('today'); changeScene('county') }} />}
         {overlay === 'power' && <PowerFolio key="power" state={state} onClose={() => setOverlay(null)} handlers={powerHandlers} />}
         {overlay === 'rule' && <RuleBook key="rule" state={state} initialClause={ruleFocus} onClose={() => setOverlay(null)} />}
         {overlay === 'brief' && <BriefDraft key="brief" state={state} onClose={() => setOverlay(null)} onOpenPlan={openPlan} onOpenReview={() => setOverlay('review')} onOpenDossier={() => { openDocument('dossier'); focusOn('doc-kind-chain') }} />}

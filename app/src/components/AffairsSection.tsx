@@ -277,6 +277,7 @@ export function AffairsSection({ state, onOpenPlan, onOpenEvidence, onOpenReview
             <div className="task-idle">
               <p>尚未签押。阶段停在「{stage}」——{stage === '起' ? '先读呈文 再决定问谁' : stage === '查' ? '疑点已在手 可以预演调度' : '人已托定 只欠一道签押'}</p>
               <button className="primary-button" onClick={onOpenPlan}><Stamp size={16} />{stage === '谋' ? '回到委托预演' : '预演抢护调度'}<ArrowRight size={16} /></button>
+              {state.day >= 10 && <button className="primary-button epilogue-entry" onClick={onOpenEpilogue}><ScrollText size={16} />验收题销 · 章末尾声<ArrowRight size={16} /></button>}
             </div>
           )}
         </section>

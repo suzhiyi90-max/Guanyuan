@@ -2,6 +2,7 @@ import { useEffect, useState, type KeyboardEvent } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { ArrowRight, BookOpen, Check, ChevronDown, FileWarning, Printer, ScrollText, Stamp, X } from 'lucide-react'
 import { goalReckoningOf, type GameState } from '../game/useGame'
+import type { Verdict } from '../game/engine'
 import { AudienceEchoPanel, ImpressionSlips } from './PowerLedger'
 import { RuleChip } from './RuleBook'
 import { readView, useViewMemory } from '../viewMemory'
@@ -168,7 +169,7 @@ function deedsOf(state: GameState): Deed[] {
   return deeds
 }
 
-export function EpilogueCard({ state, onClose, onOpenCausality, onLocate, onOpenReviewGroup, onOpenStreet, reviewOrigin, onBackReviewOrigin, onOpenFolio }: { state: GameState, onClose: () => void, onOpenCausality?: () => void, onLocate?: (kind: LocateKind) => void, onOpenReviewGroup?: (focus: string) => void, onOpenStreet?: () => void, reviewOrigin?: ReviewOrigin, onBackReviewOrigin?: () => void, onOpenFolio?: (key: FolioKey) => void }) {
+export function EpilogueCard({ state, onClose, onOpenCausality, onLocate, onOpenReviewGroup, onOpenStreet, reviewOrigin, onBackReviewOrigin, onOpenFolio, verdict, onRestart }: { state: GameState, onClose: () => void, onOpenCausality?: () => void, onLocate?: (kind: LocateKind) => void, onOpenReviewGroup?: (focus: string) => void, onOpenStreet?: () => void, reviewOrigin?: ReviewOrigin, onBackReviewOrigin?: () => void, onOpenFolio?: (key: FolioKey) => void, verdict?: Verdict, onRestart?: () => void }) {
   const [tab, setTab] = useViewMemory<RecordTab>('epilogue-tab', 'citation')
   // FE-096：卷页题签只记「翻过哪几页」，会话内内存、刷新即散；不是数值条，也不写存档。
   const [visited, setVisited] = useViewMemory<string>('epilogue-visited', '')
@@ -398,6 +399,26 @@ export function EpilogueCard({ state, onClose, onOpenCausality, onLocate, onOpen
             <button className="icon-button" onClick={onClose} aria-label="收起考语与行状"><X size={20} /></button>
           </div>
         </header>
+
+        {verdict && (
+          <section className="verdict-band" data-held={verdict.dike.held ? 'true' : 'false'} data-settleable={verdict.settleable ? 'true' : 'false'} aria-label="本章结算印 · 只读投影">
+            <div className="verdict-seals">
+              <span className={`verdict-seal is-dike ${verdict.dike.held ? 'is-hold' : 'is-fail'}`}><b>{verdict.dike.grade}</b><small>堤</small></span>
+              <span className={`verdict-seal is-ledger ${verdict.ledger.paired ? 'is-hold' : 'is-fail'}`}><b>{verdict.ledger.paired ? '并置' : '未清'}</b><small>账</small></span>
+              <span className="verdict-seal is-goal"><b>{verdict.reckoning?.seal ?? '志'}</b><small>{verdict.reckoning?.title ?? '志向'}</small></span>
+            </div>
+            <div className="verdict-lines">
+              <p>{verdict.dike.symptom}</p>
+              <p>{verdict.ledger.note} · 留痕 {verdict.trace.count} 处 · 正式接触 {verdict.relations} 人</p>
+              <small>结算印只读既有事实（outcome / unlocked / completedActions / asked），不新增数值与判定。</small>
+            </div>
+            {onRestart && (
+              <button type="button" className="outline-button verdict-restart" onClick={onRestart}>
+                <Stamp size={14} aria-hidden="true" /><span>重开一局</span>
+              </button>
+            )}
+          </section>
+        )}
 
         <nav className="career-tabs" role="tablist" aria-label="章末文书分页" onKeyDown={handleTabKeys}>
           {tabs.map((item, index) => (

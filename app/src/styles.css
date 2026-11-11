@@ -6730,3 +6730,30 @@ html[data-read-motion='reduce'] .narration-inkline { mask-image: none; }
   .narrator-switch-track i { width: 20px; height: 20px; }
   .narrator-switch input:checked + .narrator-switch-track i { transform: translateX(20px); }
 }
+
+/* FE-160：章末结算印。只读投影带，三枚印 + 事实行 + 重开一局；不新增判定。 */
+.verdict-band { display: flex; align-items: center; gap: 16px; margin: 14px 0 4px; padding: 14px 16px; border: 1px solid #cbb693; background: linear-gradient(120deg, #f4ecdd, #efe3cd); }
+.verdict-seals { display: flex; gap: 8px; flex: 0 0 auto; }
+.verdict-seal { min-height: 52px; height: auto; padding: 6px 9px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; border: 1px solid #b7a68a; background: var(--paper-0); }
+.verdict-seal b { font: 600 14px var(--serif); letter-spacing: .04em; color: var(--ink-1); white-space: nowrap; }
+.verdict-seal small { font-size: 9px; color: var(--ink-3); letter-spacing: .14em; white-space: nowrap; }
+.verdict-seal.is-hold { border-color: var(--celadon); background: #eef0ea; }
+.verdict-seal.is-hold b { color: #3f5a49; }
+.verdict-seal.is-fail { border-color: #a33a2b66; background: #f6e6de; }
+.verdict-seal.is-fail b { color: var(--cinnabar-dark); }
+.verdict-seal.is-goal { border-color: var(--indigo); background: #e9ede8; }
+.verdict-seal.is-goal b { color: var(--indigo); }
+.verdict-lines { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.verdict-lines p { font-size: 11px; line-height: 1.7; color: var(--ink-2); }
+.verdict-lines small { font-size: 9px; color: var(--ink-3); letter-spacing: .04em; }
+.verdict-restart { flex: 0 0 auto; }
+@media (max-width: 700px) {
+  .verdict-band { flex-wrap: wrap; gap: 10px; padding: 12px; }
+  .verdict-seal { min-height: 46px; padding: 5px 7px; }
+  .verdict-lines { flex-basis: 100%; order: 3; }
+  .verdict-restart { margin-left: auto; }
+}
+@media print {
+  .verdict-band { border: 1px solid #999; background: #fff; }
+  .verdict-restart { display: none; }
+}
