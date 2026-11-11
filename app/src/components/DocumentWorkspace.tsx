@@ -1,9 +1,20 @@
-import { useState, type KeyboardEvent } from 'react'
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import { Check, ChevronLeft, ChevronRight, Columns2, FileText, FolderClosed, Link2, MapPin, PenLine, ScrollText, X } from 'lucide-react'
+import { Check, ChevronLeft, ChevronRight, Columns2, FileText, FolderClosed, Link2, MapPin, PenLine, Printer, ScrollText, X } from 'lucide-react'
 import { useOverlayDialog } from './Overlays'
 import { DossierFolio } from './DossierFolio'
 import { documentVersions } from '../data'
+import { reviewFocusOrder, reviewGroups, reviewGroupOf } from '../review'
+import { readView, useViewMemory, writeView } from '../viewMemory'
+import { FolioProgress, FolioSlip } from './FolioSlip'
+import { FolioIndex } from './FolioIndex'
+import { FolioHead } from './FolioHead'
+import { FolioFold } from './FolioFold'
+import { recordFolioVisit, type FolioKey } from '../folioIndex'
+import { originLabels, type ReviewOrigin } from '../reviewTrail'
+import { handleFolioReturnKey } from '../folioReturn'
+import { SurfaceColophon } from './SurfaceColophon'
+import { printSurface } from '../printSurface'
 import type { GameState } from '../game/useGame'
 import type { DocMode } from '../types'
 
@@ -19,6 +30,11 @@ interface Props {
   onOpenReview: () => void
   onOpenEvidence: () => void
   onOpenEpilogue: () => void
+  onOpenBrief?: () => void
+  focusHint?: string | null
+  reviewOrigin?: ReviewOrigin
+  onBackToOrigin?: () => void
+  onOpenFolio?: (key: FolioKey) => void
 }
 
 const compareRows = [
@@ -35,18 +51,35 @@ const docTabs = [
   { id: 'compare' as DocMode, label: '对勘', icon: Columns2 },
 ]
 
-const reviewOrder = compareRows.flatMap(row => [`${row.id}-initial`, `${row.id}-final`])
 const groupOf = (id: string) => id.replace(/-(initial|final)$/, '')
 
-export function DocumentWorkspace({ mode, onModeChange, selected, onToggle, onRemember, remembered, onClose, state, onOpenReview, onOpenEvidence, onOpenEpilogue }: Props) {
+export function DocumentWorkspace({ mode, onModeChange, selected, onToggle, onRemember, remembered, onClose, state, onOpenReview, onOpenEvidence, onOpenEpilogue, onOpenBrief, focusHint, reviewOrigin, onBackToOrigin, onOpenFolio }: Props) {
   const { initial, final } = documentVersions
   const reduceMotion = useReducedMotion()
   const dialogRef = useOverlayDialog<HTMLDivElement>()
-  const [focused, setFocused] = useState(selected[0] ?? 'cause-initial')
+  // FE-093：批阅焦点只存会话内；源选中时 focusHint 优先，旧记忆不能盖住新证据。
+  const [focused, setFocused] = useViewMemory<string>('document-focus', focusHint ?? selected[0] ?? 'cause-initial')
+  // FE-096：文书四视图与章末四页共用一套卷页题签；只记「翻过哪几个视图」，刷新即散。
+  const [visited, setVisited] = useViewMemory<string>('document-visited', '')
+  useEffect(() => {
+    const ids = readView('document-visited', '').split(',').filter(Boolean)
+    if (!ids.includes(mode)) setVisited([...ids, mode].join(','))
+  }, [mode, setVisited])
+  const modeIndex = Math.max(0, docTabs.findIndex(tab => tab.id === mode))
+  const visitedPages = docTabs.map((tab, index) => visited.split(',').includes(tab.id) ? index + 1 : 0).filter((n): n is number => n > 0)
+  // FE-100：本处页序只上报派生索引，不合并、不写回、不落盘。
+  useEffect(() => recordFolioVisit('document', visitedPages), [visited])
   const [pageDirection, setPageDirection] = useState(1)
+  const [seamLit, setSeamLit] = useState(false)
+  const [rulerArt, setRulerArt] = useState<'loading' | 'art' | 'plain'>('loading')
+  const rulerRef = useRef<HTMLElement | null>(null)
+  const rulerDragging = useRef(false)
   const focusedRow = compareRows.find(row => row.id === groupOf(focused)) ?? compareRows[0]
   const focusedVersion = focused.endsWith('-final') ? '定稿' : '初稿'
   const focusedGroupSelected = selected.some(id => groupOf(id) === focusedRow.id)
+  const focusedGroupIndex = Math.max(0, reviewGroups.findIndex(group => group.id === focusedRow.id))
+  useEffect(() => { if (focusHint) setFocused(focusHint) }, [focusHint, setFocused])
+  useEffect(() => { writeView('document-focus', focused) }, [focused])
 
   const changeMode = (nextMode: DocMode) => {
     if (nextMode === mode) return
@@ -65,15 +98,35 @@ export function DocumentWorkspace({ mode, onModeChange, selected, onToggle, onRe
   }
 
   const stepReview = (direction: number) => {
-    const current = reviewOrder.indexOf(focused)
-    const next = (current + direction + reviewOrder.length) % reviewOrder.length
-    setFocused(reviewOrder[next])
+    const current = reviewFocusOrder.indexOf(focused)
+    const next = (current + direction + reviewFocusOrder.length) % reviewFocusOrder.length
+    setFocused(reviewFocusOrder[next])
   }
 
   const handleReviewKey = (event: KeyboardEvent<HTMLDivElement>) => {
+    // FE-122：Alt + ↑ 回本卷卷首；既有 Alt + ←/→ 批阅步进一条不动，Escape 仍归 App 全局。
+    if (handleFolioReturnKey(event)) return
     if (mode === 'dossier' || !event.altKey || !['ArrowLeft', 'ArrowRight'].includes(event.key)) return
     event.preventDefault()
     stepReview(event.key === 'ArrowRight' ? 1 : -1)
+  }
+
+  // FE-093：批阅尺只换「在看哪一组」；点 / 拖 / 方向键都落在同一组目次上。
+  const setGroupFromY = (clientY: number) => {
+    const rect = rulerRef.current?.getBoundingClientRect()
+    if (!rect || rect.height <= 0) return
+    const ratio = Math.min(.999, Math.max(0, (clientY - rect.top) / rect.height))
+    const index = Math.floor(ratio * reviewGroups.length)
+    setFocused(`${reviewGroups[index].id}-initial`)
+  }
+  const handleRulerKey = (event: KeyboardEvent<HTMLElement>) => {
+    if (!['ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return
+    event.preventDefault()
+    const next = event.key === 'Home' ? 0
+      : event.key === 'End' ? reviewGroups.length - 1
+        : (focusedGroupIndex + (event.key === 'ArrowDown' ? 1 : -1) + reviewGroups.length) % reviewGroups.length
+    setFocused(`${reviewGroups[next].id}-initial`)
+    requestAnimationFrame(() => document.getElementById(`doc-ruler-${reviewGroups[next].id}`)?.focus())
   }
 
   const toggleEvidence = (id: string) => {
@@ -89,9 +142,9 @@ export function DocumentWorkspace({ mode, onModeChange, selected, onToggle, onRe
   ].filter(Boolean).join(' ')
 
   const pageMotion = {
-    initial: { opacity: 0, x: reduceMotion ? 0 : pageDirection * 18 },
-    animate: { opacity: 1, x: 0 },
-    exit: { opacity: 0, x: reduceMotion ? 0 : pageDirection * -12 },
+    initial: { opacity: 0, x: reduceMotion ? 0 : pageDirection * 18, rotateY: reduceMotion ? 0 : pageDirection * 7 },
+    animate: { opacity: 1, x: 0, rotateY: 0 },
+    exit: { opacity: 0, x: reduceMotion ? 0 : pageDirection * -12, rotateY: reduceMotion ? 0 : pageDirection * -5 },
     transition: { duration: reduceMotion ? 0 : .2, ease: 'easeOut' as const },
   }
 
@@ -108,6 +161,7 @@ export function DocumentWorkspace({ mode, onModeChange, selected, onToggle, onRe
               key={tab.id}
               id={`document-tab-${tab.id}`}
               className={mode === tab.id ? 'active' : ''}
+              data-sound="paper:tab"
               onClick={() => changeMode(tab.id)}
               onKeyDown={handleTabKey}
               role="tab"
@@ -118,27 +172,72 @@ export function DocumentWorkspace({ mode, onModeChange, selected, onToggle, onRe
             >
               {mode === tab.id && <motion.span className="document-tab-ink" layoutId="document-tab-ink" transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 420, damping: 34 }} />}
               <span className="document-tab-label"><tab.icon size={16} />{tab.label}</span>
+              <i className={`folio-tab-dot ${visited.includes(tab.id) ? 'is-read' : ''}`} aria-hidden="true" />
               {tab.id === 'compare' && <span className="tiny-dot" />}
             </motion.button>)}
           </div>
-          <button className="icon-button document-close" onClick={onClose} aria-label="收起文书"><X size={20} /></button>
+          <div className="document-head-actions">
+            <button className="icon-button document-print" onClick={() => printSurface('document')} aria-label="印此文书" title="印此页"><Printer size={18} /></button>
+            <button className="icon-button document-close" onClick={onClose} aria-label="收起文书"><X size={20} /></button>
+          </div>
         </header>
 
         <div className="document-meta">
           <span>第一日 · 辰时收件</span><span>河工书办呈</span><span>知县亲览</span>
           {mode !== 'dossier' && <div className="document-review-stepper" aria-label="批阅焦点，Alt 加左右方向键移证">
             <button onClick={() => stepReview(-1)} aria-label="上一处批阅" title="上一处（Alt+←）"><ChevronLeft size={13} /></button>
-            <span aria-live="polite"><b>{focusedRow.label}</b><small>{focusedVersion} · {focusedGroupSelected ? '已选' : '查验'}</small></span>
+            <span aria-live="polite"><b>{focusedRow.label}</b><small>{focusedVersion} · {focusedGroupSelected ? '已选' : '查验'}</small><em className="document-review-count">{focusedGroupIndex + 1}/{reviewGroups.length}</em></span>
             <button onClick={() => stepReview(1)} aria-label="下一处批阅" title="下一处（Alt+→）"><ChevronRight size={13} /></button>
           </div>}
+          {mode === 'original' && <button type="button" className="doc-seam-chip" aria-pressed={seamLit} onClick={() => setSeamLit(value => !value)}>存卷骑缝</button>}
+          {mode === 'original' && seamLit && <span className="doc-seam-note">只作归卷，不作判定的印信</span>}
           <span className="doc-status">{mode === 'dossier' ? '四类归卷' : '两版有改'}</span>
+          <FolioProgress index={modeIndex + 1} total={docTabs.length} label={docTabs[modeIndex].label} visited={visitedPages} active />
+          {reviewOrigin && <span className="doc-review-origin">来自 · {originLabels[reviewOrigin]}</span>}
+          {onBackToOrigin && <FolioSlip compact mark="来" label="回那处" detail={reviewOrigin ? originLabels[reviewOrigin] : undefined} onClick={onBackToOrigin} />}
         </div>
 
-        <div className="document-panel" id="document-panel" role="tabpanel" aria-labelledby={`document-tab-${mode}`} data-doc-mode={mode} data-review-group={focusedRow.id}>
+        <div className="document-folio-strip" data-folio-band="true">
+          <FolioHead label="文书四视图" index={modeIndex + 1} total={docTabs.length} visited={visitedPages} folioKey="document" compact />
+          <FolioIndex variant="inline" active="document" onOpen={onOpenFolio} />
+          <small>界面 · 只读投影</small>
+        </div>
+        <FolioFold active="document" onOpen={onOpenFolio} />
+
+        <div className="document-panel" id="document-panel" role="tabpanel" aria-labelledby={`document-tab-${mode}`} data-doc-mode={mode} data-review-group={focusedRow.id} data-focus-id="document-original" data-page-direction={pageDirection > 0 ? 'next' : 'prev'} data-seam-lit={seamLit ? 'true' : 'false'}>
+        <nav
+          ref={rulerRef}
+          className="document-margin"
+          aria-label={`批阅尺 · 当前 ${reviewGroupOf(focused).mark} ${reviewGroupOf(focused).label}`}
+          data-ruler={rulerArt}
+          data-ruler-ready={rulerArt !== 'loading' ? 'true' : 'false'}
+          data-doc-length={mode === 'compare' ? 'long' : 'short'}
+          data-ruler-index={focusedGroupIndex}
+          onPointerDown={event => {
+            if ((event.target as HTMLElement).closest('button')) return
+            if (event.button !== 0) return
+            rulerDragging.current = true
+            event.currentTarget.setPointerCapture(event.pointerId)
+            setGroupFromY(event.clientY)
+          }}
+          onPointerMove={event => { if (rulerDragging.current) setGroupFromY(event.clientY) }}
+          onPointerUp={() => { rulerDragging.current = false }}
+          onPointerCancel={() => { rulerDragging.current = false }}
+          onKeyDown={handleRulerKey}
+        >
+          <img className="document-ruler-art" src="/assets/review-ruler.png" alt="" aria-hidden="true" hidden={rulerArt !== 'art'} onLoad={() => setRulerArt('art')} onError={() => setRulerArt('plain')} />
+          <span className="document-ruler-ticks" aria-hidden="true" />
+          <span className="document-ruler-needle" style={{ top: `${((focusedGroupIndex + .5) / reviewGroups.length) * 100}%` }} aria-hidden="true" />
+          {reviewGroups.map(group => {
+            const active = groupOf(focused) === group.id
+            return <button key={group.id} id={`doc-ruler-${group.id}`} type="button" className={active ? 'is-current' : ''} aria-pressed={active} aria-label={`批阅尺 · ${group.mark} ${group.label}`} title={`批阅尺 · ${group.label}`} onClick={() => setFocused(`${group.id}-initial`)}><span>{group.mark}</span></button>
+          })}
+          {rulerArt === 'plain' && <span className="document-ruler-fallback" aria-hidden="true">素尺</span>}
+        </nav>
         <AnimatePresence mode="wait" initial={false}>
           {mode === 'dossier' && (
             <motion.div key="dossier" className="dossier-view" {...pageMotion}>
-              <DossierFolio state={state} onOpenDocument={changeMode} onOpenReview={onOpenReview} onOpenEvidence={onOpenEvidence} onOpenEpilogue={onOpenEpilogue} />
+              <DossierFolio state={state} onOpenDocument={changeMode} onOpenReview={onOpenReview} onOpenEvidence={onOpenEvidence} onOpenEpilogue={onOpenEpilogue} onOpenBrief={onOpenBrief} />
             </motion.div>
           )}
           {mode === 'original' && (
@@ -156,7 +255,7 @@ export function DocumentWorkspace({ mode, onModeChange, selected, onToggle, onRe
                   <motion.p key={focusedRow.id} initial={{ opacity: 0, y: reduceMotion ? 0 : 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: reduceMotion ? 0 : .16 }}>{focusedRow.note}</motion.p>
                 </AnimatePresence>
                 <div className="original-source-pin"><MapPin size={13} /><span>{focusedVersion} · {focusedGroupSelected ? '证据钉已选' : '只作查验焦点'}</span></div>
-                <button className="text-link" onClick={() => changeMode('compare')}>去看改动 <Columns2 size={14} /></button>
+                <button className="text-link" data-folio-mount="true" onClick={() => changeMode('compare')}>去看改动 <Columns2 size={14} /></button>
               </aside>
             </motion.div>
           )}
@@ -195,6 +294,8 @@ export function DocumentWorkspace({ mode, onModeChange, selected, onToggle, onRe
           )}
         </AnimatePresence>
         </div>
+
+        <SurfaceColophon surface="文书四视图" note="四视图同卷；回卷首只移焦点，不改页签与批阅焦点。" className="document-colophon" />
 
         <footer className={`document-footer ${mode === 'dossier' ? 'dossier-document-footer' : ''}`}>
           {mode === 'dossier' ? <>

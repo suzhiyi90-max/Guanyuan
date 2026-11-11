@@ -1,8 +1,12 @@
 import { useState, type KeyboardEvent } from 'react'
+import { KnowledgeLegend } from './KnowledgeLegend'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { ArrowRight, BookOpen, Clock3, Coins, Compass, FileText, Footprints, Home, Landmark, Map as MapIcon, MapPin, Mountain, PackageOpen, PenLine, Route as RouteIcon, ScrollText, Ship, Store, UserRound, Waves, X } from 'lucide-react'
 import { useOverlayDialog } from './Overlays'
+import { ScenePlate } from './ScenePlate'
 import { CityAtlas } from './CityAtlas'
+import { PlaceTrail } from './PlaceTrail'
+import type { PlaceId } from '../placeTrail'
 import type { LocationSceneId } from './LocationScene'
 import type { CityLocationId, MapKnowledge, StreetStationId } from '../city'
 import type { GameState } from '../game/useGame'
@@ -85,14 +89,16 @@ interface AtlasDrawerProps {
   onOpenBanquet: () => void
   onOpenPerson: (id: string) => void
   onOpenLocation: (id: LocationSceneId) => void
+  onOpenPlace?: (id: PlaceId) => void
 }
 
-export function AtlasDrawer({ state, period, scene, initialView = 'map', initialNode = 'river', initialCityLocation = 'county', initialStreetId, onClose, onGoRiver, onGoCounty, onGoStudy, onReturnStreet, onReturnHome, onOpenLedger, onOpenForeman, onOpenBanquet, onOpenPerson, onOpenLocation }: AtlasDrawerProps) {
+export function AtlasDrawer({ state, period, scene, initialView = 'map', initialNode = 'river', initialCityLocation = 'county', initialStreetId, onClose, onGoRiver, onGoCounty, onGoStudy, onReturnStreet, onReturnHome, onOpenLedger, onOpenForeman, onOpenBanquet, onOpenPerson, onOpenLocation, onOpenPlace }: AtlasDrawerProps) {
   const [view, setView] = useState<AtlasView>(initialView)
   const [selectedNode, setSelectedNode] = useState(initialNode)
   const [selectedRoute, setSelectedRoute] = useState<string | null>(null)
   const [journeyRoute, setJourneyRoute] = useState<'dike' | 'ferry'>('dike')
   const [unfolding, setUnfolding] = useState(false)
+  const [folded, setFolded] = useState(false)
   const reduceMotion = useReducedMotion()
   const dialogRef = useOverlayDialog<HTMLDivElement>()
   const activeNode = nodes.find(node => node.id === selectedNode) ?? nodes[1]
@@ -152,6 +158,7 @@ export function AtlasDrawer({ state, period, scene, initialView = 'map', initial
           <span className="atlas-preview-seal">M2<br />预览</span>
           <button className="icon-button" onClick={onClose} aria-label="收起舆图"><X size={20} /></button>
         </header>
+        <PlaceTrail current={scene} onOpen={onOpenPlace} />
         <div className="atlas-view-tabs" role="tablist" aria-label="舆图工作面" onKeyDown={handleViewKeys}>
           {viewTabs.map(tab => <button key={tab.id} id={`atlas-tab-${tab.id}`} role="tab" aria-selected={view === tab.id} aria-controls={`atlas-panel-${tab.id}`} tabIndex={view === tab.id ? 0 : -1} onClick={() => setView(tab.id)}>
             {view === tab.id && <motion.span className="atlas-tab-ink" layoutId="atlas-tab-ink" transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 400, damping: 34 }} aria-hidden="true" />}
@@ -162,16 +169,21 @@ export function AtlasDrawer({ state, period, scene, initialView = 'map', initial
         <div className="atlas-body">
           <AnimatePresence mode="wait" initial={false}>
             {view === 'map' && <motion.div key="map" id="atlas-panel-map" role="tabpanel" aria-labelledby="atlas-tab-map" className="atlas-map-layout" {...pageMotion}>
-              <section className="atlas-map-paper" aria-label="一县节点路段图" onKeyDown={handleNodeKeys}>
+              <section className="atlas-map-paper" data-folded={folded} aria-label="一县节点路段图" onKeyDown={handleNodeKeys} ref={node => { if (node) Array.from(node.querySelectorAll<HTMLButtonElement>('[data-node-id]')).forEach((el, index) => { el.tabIndex = index === 0 ? 0 : -1 }) }}>
                 <div className="atlas-map-inscription"><span>永济县舆图</span><small>官图抄样 · 旧补纸</small></div>
-                <svg className="atlas-ink-geography" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-                  <path className="atlas-river-line" d="M-5 79 Q18 88 35 74 T67 62 T105 45" />
-                  <path className="atlas-river-echo" d="M-5 82 Q18 91 35 77 T67 65 T105 48" />
-                  <path className="atlas-mountain-line" d="M4 24 l5-9 4 7 5-13 6 12 5-8 5 11 M66 18 l5-8 4 6 5-11 6 13 5-7 6 9" />
-                  <path className="atlas-mountain-echo" d="M6 27 l4-6 4 5 5-8 5 7 M69 22 l4-5 4 4 5-7 5 6" />
-                </svg>
+                <button className="atlas-fold-toggle" onClick={() => setFolded(value => !value)} aria-pressed={folded}>{folded ? '展卷' : '折页'}</button>
+                <ScenePlate id="county-map" className="atlas-art-plate" />
                 <svg className="atlas-route-network" viewBox="0 0 100 100" preserveAspectRatio="none">
-                  {routes.map(route => <g key={route.id} className={`atlas-route ${selectedRoute === route.id ? 'selected' : ''}`} role="button" tabIndex={0} aria-label={`查验路段 ${route.name}`} onClick={() => { setSelectedRoute(route.id); setView('map') }} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelectedRoute(route.id) } }}>
+                  {routes.map((route, routeIndex) => <g key={route.id} className={`atlas-route ${selectedRoute === route.id ? 'selected' : ''}`} role="button" tabIndex={selectedRoute === route.id || (!selectedRoute && routeIndex === 0) ? 0 : -1} aria-label={`查验路段 ${route.name}`} onClick={() => { setSelectedRoute(route.id); setView('map') }} onKeyDown={event => {
+                    if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelectedRoute(route.id); return }
+                    if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return
+                    event.preventDefault()
+                    const current = routes.findIndex(item => item.id === route.id)
+                    const backward = event.key === 'ArrowLeft' || event.key === 'ArrowUp'
+                    const next = event.key === 'Home' ? 0 : event.key === 'End' ? routes.length - 1 : (current + (backward ? -1 : 1) + routes.length) % routes.length
+                    setSelectedRoute(routes[next].id)
+                    requestAnimationFrame(() => dialogRef.current?.querySelectorAll<SVGGElement>('.atlas-route')[next]?.focus())
+                  }}>
                     <path className="atlas-route-hit" d={route.path} /><path className="atlas-route-ink" d={route.path} />
                     <text x={route.labelX} y={route.labelY}>{route.name}</text>
                   </g>)}
@@ -183,7 +195,7 @@ export function AtlasDrawer({ state, period, scene, initialView = 'map', initial
                   </button>
                 })}
                 <div className="atlas-fold atlas-fold-a" aria-hidden="true" /><div className="atlas-fold atlas-fold-b" aria-hidden="true" />
-                <div className="atlas-map-legend"><span><i className="known" />亲至</span><span><i className="seen" />见图</span><span><i className="heard" />听说</span><span><i className="unknown" />未详</span></div>
+                <KnowledgeLegend className="atlas-map-legend" note="只读认知档位 · 不改图" />
               </section>
 
               <aside className="atlas-inspector" aria-live="polite">
@@ -237,7 +249,7 @@ export function AtlasDrawer({ state, period, scene, initialView = 'map', initial
             </motion.section>}
 
             {view === 'arrival' && <motion.section key="arrival" id="atlas-panel-arrival" role="tabpanel" aria-labelledby="atlas-tab-arrival" className="arrival-preview" {...pageMotion}>
-              <div className="arrival-landscape" aria-hidden="true"><svg viewBox="0 0 800 210" preserveAspectRatio="none"><path d="M0 154 Q130 125 250 148 T520 137 T800 111" /><path d="M0 174 Q160 151 300 170 T590 151 T800 142" /><path d="M98 139 l18-61 15 50 17-77 21 82 M610 127 l18-48 17 37 19-63 24 65" /></svg><span>东堤堤口 / 抵达第一眼</span></div>
+              <div className="arrival-landscape"><ScenePlate id="arrival" className="arrival-art-plate" /><span>东堤堤口 / 抵达第一眼</span></div>
               <div className="arrival-content">
                 <header><div><span className="eyebrow">抵达样张 / 复用 M1 可玩场景</span><h3>{state.day >= 9 ? '堤口水痕未退，旧闸仍在。' : state.day >= 8 ? '雨线未歇，料垛压在坡下。' : '旧闸下风过堤，料垛在坡下。'}</h3></div><span className="arrival-date-seal">第{dayNames[state.day - 1]}日<br />{period}</span></header>
                 <div className="arrival-state-grid"><article><span>时辰</span><b>第{dayNames[state.day - 1]}日 · {period}</b><small>预演未推进</small></article><article><span>路费 / 身体</span><b>未结算</b><small>不制造变化</small></article><article><span>料账</span><b>{state.material.arrived} / {state.material.transit} / {state.material.unsent}</b><small>到场 / 在途 / 未发</small></article><article><span>案卷</span><b>{state.plan ? '抢护已发起' : '尚未签押'}</b><small>{state.probeKnown ? 'E-007 已有探挖记录' : '呈文两版仍可回查'}</small></article></div>

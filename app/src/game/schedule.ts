@@ -71,6 +71,21 @@ export const worldEvents: WorldEvent[] = [
       { id: 'wait', label: '守在县衙听回报', hint: '省时 但你看到的是别人写的现场' },
     ],
   },
+  // FE-156：M1 设计的单个家人事件（总纲 18.2 / 4.7「内宅会外溢」；门包 0.5–2 两/次归门房私账）。
+  // 镜头停在门外、只给请求/代价/选择，不做家人列表与家用账；拒绝（禁绝）必须给代价。
+  {
+    id: 'gate-gift',
+    day: 6,
+    title: '门房收门包',
+    scene: '县衙 · 内宅',
+    present: '门房 你',
+    known: '门包是门房私账 不入公库 但街面会把「门第难进」算到你头上',
+    body: '门房垂手来回话：近来投帖求见的人多，按旧例每帖收「门包」半两到二两，「不过是底下人的辛苦钱」。这事不入公账，却会传成你的官声。他站着，等你一句话。',
+    options: [
+      { id: 'allow', label: '照旧例放任门包', hint: '门房得辛苦钱 街面传「门第难进」· 不耗时段' },
+      { id: 'forbid', label: '禁绝门包 明令门房', hint: '门第清静 但门房怨望 失去门下耳目 · 不耗时段' },
+    ],
+  },
 ]
 
 export interface OutcomeFactor {
@@ -98,9 +113,12 @@ export function evaluateRiverTask(state: GameState): TaskOutcome | null {
   score += invest
   factors.push({ label: '投入', detail: `${plan.leaderName}工程${capability} · 夫役${plan.labor}人 → ${invest.toFixed(1)}`, tone: 'plus' })
 
-  const resource = plan.material / 8 + (plan.supervisor.includes('会勘') ? 0.5 : 0)
+  // FE-153：「仅工头监作 · 暂无会勘」字面含「会勘」，includes('会勘') 会误判给 +0.5；
+  // 与 power.ts hasSurvey / PlanDrawer draft 同口径，按有无「仅工头监作」判无会勘。
+  const hasSurvey = !plan.supervisor.includes('仅工头监作')
+  const resource = plan.material / 8 + (hasSurvey ? 0.5 : 0)
   score += resource
-  factors.push({ label: '资源', detail: `拨料${plan.material}垛${plan.supervisor.includes('会勘') ? ' · 会勘留痕 +0.5' : ' · 无会勘'} → ${resource.toFixed(1)}`, tone: 'plus' })
+  factors.push({ label: '资源', detail: `拨料${plan.material}垛${hasSurvey ? ' · 会勘留痕 +0.5' : ' · 无会勘'} → ${resource.toFixed(1)}`, tone: 'plus' })
 
   let resistance = 0
   if (!state.unlocked.includes('E-003')) {

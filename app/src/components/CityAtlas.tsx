@@ -1,4 +1,6 @@
+import { ScenePlate } from './ScenePlate'
 import { useState, type KeyboardEvent } from 'react'
+import { KnowledgeLegend } from './KnowledgeLegend'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { ArrowRight, BookOpen, Clock3, EyeOff, MapPin, ScrollText, UserRound, UsersRound } from 'lucide-react'
 import { cityLocationOf, cityLocations, streetStationOf, streetStations, type CityLocationId, type MapKnowledge, type StreetStationId } from '../city'
@@ -83,15 +85,9 @@ export function CityAtlas({ state, period, scene, initialLocation, initialStreet
 
   return (
     <div className="city-atlas" data-city-location-active={activeLocationId} data-street-active={activeStreetId ?? ''}>
-      <section className="city-map-paper" aria-label="县治城郭八处地点图" onKeyDown={handleLocationKeys}>
+      <section className="city-map-paper" aria-label="县治城郭八处地点图" onKeyDown={handleLocationKeys} ref={node => { if (node) Array.from(node.querySelectorAll<HTMLButtonElement>('.city-location-node')).forEach((el, index) => { el.tabIndex = index === 0 ? 0 : -1 }) }}>
         <div className="city-map-inscription"><span>永济县治</span><small>城郭抄样 · 地点索引</small></div>
-        <svg className="city-wall-ink" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-          <path className="city-wall-outer" d="M13 18 L43 8 L83 15 L91 48 L85 88 L48 94 L11 82 L7 45 Z" />
-          <path className="city-wall-inner" d="M16 21 L43 12 L79 18 L86 48 L80 84 L48 89 L16 78 L12 45 Z" />
-          <path className="city-street-ink" d="M50 12 L48 36 L39 61 L48 89 M16 45 L48 36 L76 28 M39 61 L24 82 M39 61 L66 55 L76 80 M24 32 L48 36" />
-          <path className="city-street-echo" d="M53 13 L51 36 L42 61 L51 88 M17 48 L48 40 L75 32 M42 64 L67 59" />
-          <path className="city-water-ink" d="M4 88 Q20 82 35 91 T70 93 T98 83" />
-        </svg>
+        <ScenePlate id="city-map" className="city-art-plate" />
         <div className="city-gate-caption" aria-hidden="true"><span>城门</span><i /><small>同城不记行程</small></div>
         {cityLocations.map(location => {
           const current = location.id === 'county' && scene === 'county' || location.id === 'study' && scene === 'study'
@@ -101,7 +97,7 @@ export function CityAtlas({ state, period, scene, initialLocation, initialStreet
             <span className="city-location-mark"><LocationIcon size={14} /></span><b>{location.name}</b><small>{current ? '此刻 · 亲至' : locationKnowledge}</small>
           </button>
         })}
-        <div className="city-map-legend"><span><i className="known" />亲至</span><span><i className="seen" />见图</span><span><i className="heard" />听说</span><small>地点可换 时辰不动</small></div>
+        <KnowledgeLegend className="city-map-legend" note="地点可换 时辰不动" />
       </section>
 
       <aside className="city-inspector" aria-live="polite">

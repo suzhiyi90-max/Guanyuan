@@ -1,7 +1,11 @@
-import { useState, type KeyboardEvent } from 'react'
+import { ScenePlate } from './ScenePlate'
+import { GateNote } from './StreetScene'
+import { useEffect, useState, type KeyboardEvent } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { ArrowLeft, ArrowRight, BookOpen, Home, Map as MapIcon, MapPin, Mountain, PackageOpen, Scale, Store, UserRound, X } from 'lucide-react'
 import { useOverlayDialog } from './Overlays'
+import { PlaceTrail } from './PlaceTrail'
+import { recordPlace, type PlaceId } from '../placeTrail'
 import type { GameState } from '../game/useGame'
 import type { Period } from '../types'
 
@@ -16,11 +20,13 @@ interface Props {
   onOpenEvidence: () => void
   onOpenPerson: (id: string) => void
   onOpenPlan: () => void
+  onOpenPlace?: (id: PlaceId) => void
 }
 const dayNames = ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十']
 
-export function SettlementScene({ initialLocation, state, period, onClose, onReturnAtlas, onOpenEvidence, onOpenPerson, onOpenPlan }: Props) {
+export function SettlementScene({ initialLocation, state, period, onClose, onReturnAtlas, onOpenEvidence, onOpenPerson, onOpenPlan, onOpenPlace }: Props) {
   const [location, setLocation] = useState(initialLocation)
+  useEffect(() => { recordPlace(initialLocation) }, [initialLocation])
   const [anchor, setAnchor] = useState<AnchorId>(initialLocation === 'town' ? 'market' : 'ancestral')
   const reduceMotion = useReducedMotion()
   const dialogRef = useOverlayDialog<HTMLDivElement>()
@@ -35,7 +41,7 @@ export function SettlementScene({ initialLocation, state, period, onClose, onRet
     { id: 'soil' as AnchorId, name: '堤边土源', note: '取土与会勘', icon: Mountain, x: 64, y: 68 },
   ]
   const active = anchors.find(item => item.id === anchor) ?? anchors[0]
-  const changeLocation = (next: SettlementSceneId) => { setLocation(next); setAnchor(next === 'town' ? 'market' : 'ancestral') }
+  const changeLocation = (next: SettlementSceneId) => { recordPlace(next); setLocation(next); setAnchor(next === 'town' ? 'market' : 'ancestral') }
   const handleKeys = (event: KeyboardEvent<HTMLDivElement>) => {
     if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return
     const target = (event.target as HTMLElement).closest<HTMLElement>('[data-settlement-anchor]')
@@ -52,27 +58,11 @@ export function SettlementScene({ initialLocation, state, period, onClose, onRet
     <motion.section className="overlay-backdrop location-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: reduceMotion ? 0 : .18 }} onMouseDown={event => { if (event.target === event.currentTarget) onClose() }}>
       <motion.div ref={dialogRef} className={`location-scene settlement-scene location-${location}`} role="dialog" aria-modal="true" aria-labelledby="settlement-title" tabIndex={-1} layoutId="overlay-paper" data-period={period} data-location={location} initial={{ opacity: 0, y: reduceMotion ? 0 : 24 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: reduceMotion ? 0 : 14 }} transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 230, damping: 27 }}>
         <header className="location-head"><div><span className="eyebrow">具体场景 / 镇与庄 · M2 样张</span><h2 id="settlement-title">{town ? '青石镇' : '桑家庄'}</h2></div><div className="location-switch"><button className={town ? 'active' : ''} aria-pressed={town} onClick={() => changeLocation('town')}><Store size={14} />青石镇</button><button className={!town ? 'active' : ''} aria-pressed={!town} onClick={() => changeLocation('manor')}><Home size={14} />桑家庄</button></div><button className="icon-button" onClick={onClose} aria-label="收起镇庄场景"><X size={20} /></button></header>
+        <PlaceTrail variant="line" current={location} limit={3} onOpen={onOpenPlace} />
         <div className="location-layout">
           <section className="location-stage" onKeyDown={handleKeys} aria-label="镇庄地点锚点">
             <AnimatePresence mode="wait" initial={false}><motion.div key={location} className="location-art" initial={{ opacity: 0, clipPath: reduceMotion ? 'inset(0)' : 'inset(0 0 0 8%)' }} animate={{ opacity: 1, clipPath: 'inset(0)' }} exit={{ opacity: 0 }} transition={{ duration: reduceMotion ? 0 : .34 }}>
-              {town ? <svg className="location-art-svg" viewBox="0 0 800 560" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-                <path className="art-mountain" d="M0 205 L100 137 175 190 270 105 350 184 450 120 560 190 670 122 800 180 800 0 0 0Z" />
-                <path className="art-bank" d="M0 350 Q200 300 400 340 T800 312 L800 560 0 560Z" />
-                <path className="art-station-roof" d="M68 285 L190 200 318 285Z M94 284 L94 449 M287 284 L287 449 M77 449 L303 449 M124 317 L257 317" />
-                <path className="art-stable" d="M455 290 L583 207 714 290Z M478 289 L478 444 M689 289 L689 444 M460 444 L707 444 M512 327 L652 327" />
-                <path className="art-road" d="M0 481 Q205 430 405 470 T800 429 M0 522 Q215 468 420 508 T800 467" />
-                <path className="art-flag" d="M145 413 L145 319 M146 323 L223 336 207 375 146 365 M536 408 L536 318 M537 322 L604 333 591 367 537 359" />
-                <path className="art-reeds" d="M359 441 l4-102 M378 448 l-7-83 M399 443 l8-94" />
-              </svg> : <svg className="location-art-svg" viewBox="0 0 800 560" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-                <path className="art-mountain" d="M0 213 L95 143 180 195 265 106 360 190 460 121 565 187 670 110 800 180 800 0 0 0Z" />
-                <path className="art-bank" d="M0 345 Q190 304 390 340 T800 305 L800 560 0 560Z" />
-                <path className="art-station-roof" d="M104 293 L254 190 415 293Z M134 291 L134 450 M383 291 L383 450 M112 450 L402 450 M170 326 L349 326" />
-                <path className="art-station-gate" d="M230 450 L230 340 Q257 306 287 340 L287 450 M247 450 L247 359 Q258 344 272 359 L272 450" />
-                <path className="art-horse" d="M544 429 l-12-92 13-33 21-9 18 15-3 24-17 12 9 83 M532 338 l-24-18 M584 341 l25-17" />
-                <path className="art-water" d="M0 474 Q180 443 360 476 T800 447 M0 516 Q190 486 380 514 T800 490" />
-                <path className="art-reeds" d="M664 428 l-8-96 M680 432 l14-84 M704 427 l-3-105 M55 442 l-9-76 M72 446 l12-91" />
-                <path className="art-flag" d="M443 402 L443 251 M444 258 L506 273 492 310 444 297" />
-              </svg>}
+              <ScenePlate id={town ? 'town' : 'manor'} className="location-art-plate" />
               <div className="location-light" aria-hidden="true" />
               <div className="location-caption"><span>第{dayNames[state.day - 1]}日 · {period}</span><h3>{town ? '粮行招幌静着，旧欠仍须凭票。' : '祠外坟图有界，取土不可空言。'}</h3><p>{town ? '不生成粮价、牙行账或营业状态' : '不生成宗族秘密、地亩或取土结果'}</p></div>
               {anchors.map(item => <button key={item.id} data-settlement-anchor={item.id} className={`location-anchor ${anchor === item.id ? 'selected' : ''}`} style={{ left: `${item.x}%`, top: `${item.y}%` }} aria-pressed={anchor === item.id} onClick={() => setAnchor(item.id)}><span><item.icon size={17} /></span><div><b>{item.name}</b><small>{item.note}</small></div><i /></button>)}
@@ -80,6 +70,7 @@ export function SettlementScene({ initialLocation, state, period, onClose, onRet
           </section>
           <aside className="location-paper"><AnimatePresence mode="wait" initial={false}><motion.section key={anchor} className="location-inspector" initial={{ opacity: 0, x: reduceMotion ? 0 : 9 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: reduceMotion ? 0 : -6 }} transition={{ duration: reduceMotion ? 0 : .18 }}>
             <header><span>地点查验 / {active.name}</span><active.icon size={19} /></header><div className="location-inspector-title"><active.icon size={24} /><div><small>{active.note}</small><h3>{active.name}</h3></div></div>
+            <GateNote place={town ? 'town' : 'manor'} />
             {anchor === 'market' && <>
               <p>{state.unlocked.includes('E-003') ? '粮商旧欠票据已经取得，可与库账和借领状并置；同一笔三百不重复记成六百。' : '粮行与旧欠只保留已知名目。未取得 E-003 前，不显示票据全文。'}</p>
               <div className="location-source-card"><PackageOpen size={16} /><div><b>{state.unlocked.includes('E-003') ? 'E-003 · 旧欠票据在卷' : '阮裕丰 · 粮行经手人'}</b><small>{state.unlocked.includes('E-003') ? '回证据板并置' : '可回原人物卷问旧欠与料源'}</small></div></div>

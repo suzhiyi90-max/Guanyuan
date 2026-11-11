@@ -2,6 +2,8 @@ import { useState, type KeyboardEvent } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { ArrowRight, Check, FileSearch, FileWarning, Landmark, LockKeyhole, ScrollText, Stamp, X } from 'lucide-react'
 import { useOverlayDialog } from './Overlays'
+import { EntitlementSheet } from './PowerLedger'
+import { RuleChip } from './RuleBook'
 import type { GameState } from '../game/useGame'
 import type { OfficialActionId } from '../types'
 
@@ -25,6 +27,12 @@ const actions: ActionSpec[] = [
 ]
 
 function citationOf(state: GameState): string {
+  // 与 S-10 同一口径：验收已下时以结果为先，避免同一局两处考语不一致。
+  if (state.outcome) {
+    if (state.outcome.grade === '合龙') return '才具开展 河工尚能集事'
+    if (state.outcome.grade === '合式') return '办事勤勉 调度未纯'
+    return '抢护未固 担当与工法俱须再议'
+  }
   if (state.plan && state.officialActions.includes('commissioner')) return '才具开展 河工尚能集事'
   if (state.plan) return '办事勤勉 调度未纯'
   return '到任伊始 河工未固'
@@ -76,6 +84,8 @@ export function OfficialReview({ state, onClose, onAction }: { state: GameState,
           <button className="icon-button" onClick={onClose} aria-label="收起来文"><X size={20} /></button>
         </header>
 
+        <EntitlementSheet state={state} context="review" variant="strip" />
+
         <div className="review-body">
           <section className="review-letter">
             <div className="review-paper-route" aria-label="文书流转：府札到县卷，再候回文"><span>府札</span><i /><span>县卷</span><i /><span>回文</span></div>
@@ -91,10 +101,11 @@ export function OfficialReview({ state, onClose, onAction }: { state: GameState,
             <div className="review-boundary">
               <LockKeyhole size={14} />
               <span>他不能批银 · 不能改委河厅 · 不能直接革职</span>
+              <RuleChip clause="power-seat" compact label="依 6.7.2" />
             </div>
           </section>
 
-          <section className="review-actions">
+          <section className="review-actions" data-focus-id="review-actions">
             <header className="review-actions-head"><div><span className="eyebrow">批答六法</span><h2>先查验 再落字</h2></div><span>已入卷 {done.length} / 6</span></header>
             <ol className="review-correspondence" aria-label="当前回文流程" data-stage={isDone ? 'archived' : 'review'}>
               <li className="is-done"><span>收</span><div><b>收文</b><small>府札在案</small></div></li>
@@ -130,6 +141,12 @@ export function OfficialReview({ state, onClose, onAction }: { state: GameState,
                 <motion.article key={action.id} className={`action-card ${isDone ? 'is-done' : ''} ${action.danger ? 'is-danger' : ''}`} data-archive-state={isDone ? '朱印入卷' : '墨稿待落'} initial={{ opacity: 0, x: reduceMotion ? 0 : 12, rotateY: reduceMotion ? 0 : -2 }} animate={{ opacity: 1, x: 0, rotateY: 0 }} exit={{ opacity: 0, x: reduceMotion ? 0 : -8 }} transition={{ duration: reduceMotion ? 0 : .18, ease: 'easeOut' }}>
                   <div className="action-paper-kicker"><span>回文查验 / {action.name}</span><b>{isDone ? '朱印入卷' : '墨稿待落'}</b></div>
                   <header><h3>{action.name}</h3><span>{isDone ? '已行' : action.cost}</span></header>
+                  {action.danger && <div className="pw-risk-strip" aria-label="越权留痕预览">
+                    <i className="pw-risk-seam" aria-hidden="true">骑缝</i>
+                    <div><b>{action.id === 'impeach' ? '揭参 · 朱印封发' : '压案 · 匣底存案'}</b><span>{action.id === 'impeach' ? '清名与刻名并至 · 县里再无回旋' : '幕友已见 · 日后被提起时无从分辩'}</span></div>
+                    <em>{action.id === 'impeach' ? '合法但代价高' : '可而该不该'}</em>
+                    <div className="pw-risk-marks">{action.id === 'impeach' ? <><i>朱印封发</i><i>骑缝</i></> : <><i>匣底</i><i>幕友见证</i></>}</div>
+                  </div>}
                   <dl>
                     <div><dt>能</dt><dd>{action.can}</dd></div>
                     <div><dt>否</dt><dd>{action.cannot}</dd></div>

@@ -1,7 +1,10 @@
-import { useState, type KeyboardEvent } from 'react'
+import { ScenePlate } from './ScenePlate'
+import { useEffect, useState, type KeyboardEvent } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { ArrowLeft, ArrowRight, BookOpen, FileText, Footprints, Landmark, Link2, Map as MapIcon, PackageOpen, Ship, Stamp, UsersRound, Waves, X } from 'lucide-react'
 import { useOverlayDialog } from './Overlays'
+import { PlaceTrail } from './PlaceTrail'
+import { recordPlace, type PlaceId } from '../placeTrail'
 import type { GameState } from '../game/useGame'
 import type { Period } from '../types'
 
@@ -17,12 +20,14 @@ interface Props {
   onOpenLedger: () => void
   onOpenIntelligence: () => void
   onOpenReview: () => void
+  onOpenPlace?: (id: PlaceId) => void
 }
 
 const dayNames = ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十']
 
-export function LocationScene({ initialLocation, state, period, onClose, onReturnAtlas, onOpenLedger, onOpenIntelligence, onOpenReview }: Props) {
+export function LocationScene({ initialLocation, state, period, onClose, onReturnAtlas, onOpenLedger, onOpenIntelligence, onOpenReview, onOpenPlace }: Props) {
   const [location, setLocation] = useState<LocationSceneId>(initialLocation)
+  useEffect(() => { recordPlace(initialLocation) }, [initialLocation])
   const [anchor, setAnchor] = useState<AnchorId>(initialLocation === 'ferry' ? 'boat' : 'register')
   const reduceMotion = useReducedMotion()
   const dialogRef = useOverlayDialog<HTMLDivElement>()
@@ -39,6 +44,7 @@ export function LocationScene({ initialLocation, state, period, onClose, onRetur
   const active = anchors.find(item => item.id === anchor) ?? anchors[0]
 
   const changeLocation = (next: LocationSceneId) => {
+    recordPlace(next)
     setLocation(next)
     setAnchor(next === 'ferry' ? 'boat' : 'register')
   }
@@ -62,29 +68,13 @@ export function LocationScene({ initialLocation, state, period, onClose, onRetur
           <div className="location-switch" aria-label="切换场景样张"><button className={ferry ? 'active' : ''} aria-pressed={ferry} onClick={() => changeLocation('ferry')}><Ship size={14} />渡口</button><button className={!ferry ? 'active' : ''} aria-pressed={!ferry} onClick={() => changeLocation('station')}><Landmark size={14} />驿铺</button></div>
           <button className="icon-button" onClick={onClose} aria-label="收起地点场景"><X size={20} /></button>
         </header>
+        <PlaceTrail variant="line" current={location} limit={3} onOpen={onOpenPlace} />
 
         <div className="location-layout">
           <section className="location-stage" onKeyDown={handleKeys} aria-label={`${ferry ? '河湾渡口' : '北驿铺'}地点锚点`}>
             <AnimatePresence mode="wait" initial={false}>
               <motion.div key={location} className="location-art" initial={{ opacity: 0, clipPath: reduceMotion ? 'inset(0)' : 'inset(0 0 0 8%)' }} animate={{ opacity: 1, clipPath: 'inset(0)' }} exit={{ opacity: 0 }} transition={{ duration: reduceMotion ? 0 : .34 }}>
-                {ferry ? <svg className="location-art-svg" viewBox="0 0 800 560" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-                  <path className="art-mountain" d="M0 205 L85 128 143 182 224 82 310 176 386 112 470 190 560 96 650 175 725 115 800 180 800 0 0 0Z" />
-                  <path className="art-bank" d="M0 290 Q180 248 350 285 T800 244 L800 560 0 560Z" />
-                  <path className="art-water" d="M0 338 Q150 312 310 344 T800 312 M0 390 Q170 355 330 392 T800 366 M0 455 Q190 420 390 454 T800 432 M0 505 Q180 475 370 505 T800 482" />
-                  <path className="art-dock" d="M66 348 L310 402 294 430 48 374Z M92 367 L73 448 M152 382 L137 462 M224 399 L212 474" />
-                  <path className="art-boat" d="M400 342 Q492 366 593 334 L566 390 Q485 417 421 382Z M444 340 L463 280 537 280 558 343 M457 281 Q496 237 541 281 M495 280 L495 211 M495 215 L557 257 495 257" />
-                  <path className="art-pavilion" d="M99 273 L160 232 224 273Z M117 274 L117 345 M205 274 L205 363 M104 345 L216 365" />
-                  <path className="art-reeds" d="M712 413 l-8-87 M724 421 l13-104 M740 426 l-2-79 M54 477 l-12-92 M68 480 l9-78" />
-                </svg> : <svg className="location-art-svg" viewBox="0 0 800 560" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-                  <path className="art-mountain" d="M0 208 L96 142 170 190 256 105 350 188 440 125 548 190 650 117 736 174 800 130 800 0 0 0Z" />
-                  <path className="art-bank" d="M0 336 Q210 290 420 330 T800 302 L800 560 0 560Z" />
-                  <path className="art-station-roof" d="M213 231 L395 133 594 231Z M253 230 L253 429 M548 230 L548 429 M223 430 L581 430 M282 257 L518 257" />
-                  <path className="art-station-gate" d="M358 430 L358 292 Q400 255 443 292 L443 430 M377 430 L377 321 Q400 299 424 321 L424 430" />
-                  <path className="art-stable" d="M573 320 L665 263 754 320Z M589 319 L589 443 M735 319 L735 443 M609 349 L714 349 M609 391 L714 391" />
-                  <path className="art-horse" d="M631 423 q8-46 35-54 l24 12 15-15 12 5-7 22-19 8-5 34-11 0-4-27-18 2-5 25-11 0Z" />
-                  <path className="art-road" d="M0 500 Q260 430 400 449 T800 414 M0 535 Q270 465 410 484 T800 449" />
-                  <path className="art-flag" d="M193 425 L193 184 M194 190 L263 205 246 251 194 238" />
-                </svg>}
+                <ScenePlate id={ferry ? 'ferry' : 'station'} className="location-art-plate" />
                 <div className="location-light" aria-hidden="true" />
                 {ferry && state.day >= 8 && <div className="location-rain" aria-hidden="true">{Array.from({ length: 10 }, (_, index) => <i key={index} style={{ left: `${index * 10 + 4}%` }} />)}</div>}
                 <div className="location-caption"><span>第{dayNames[state.day - 1]}日 · {period}</span><h3>{ferry ? '水过埠头，船期尚未有凭。' : '驿门半掩，号簿尚未调阅。'}</h3><p>{ferry ? state.day >= 8 ? '雨线入河 · 只投影既有日程' : '水面平静 · 不补写船家口供' : '不生成驿马、信件或过境人物'}</p></div>

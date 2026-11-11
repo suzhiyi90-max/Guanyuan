@@ -1,10 +1,11 @@
 import { useState, type KeyboardEvent } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import { ArrowUpRight, Check, ChevronDown, FileText, HelpCircle, Link2, LockKeyhole, ScrollText, X } from 'lucide-react'
+import { ArrowUpRight, Check, ChevronDown, FileText, HelpCircle, Link2, LockKeyhole, Printer, ScrollText, X } from 'lucide-react'
 import { useOverlayDialog } from './Overlays'
 import { ledgerRows } from '../data'
 import type { GameState } from '../game/useGame'
 import type { ClueSource } from '../types'
+import { printSurface } from '../printSurface'
 
 interface Props {
   state: GameState
@@ -63,11 +64,14 @@ export function EvidenceBoard({ state, onClose, onOpenSource }: Props) {
       <motion.div ref={dialogRef} className="evidence-board" role="dialog" aria-modal="true" aria-labelledby="evidence-title" tabIndex={-1} layoutId="overlay-paper" initial={{ y: reduceMotion ? 0 : 26, opacity: 0, rotate: reduceMotion ? 0 : .3 }} animate={{ y: 0, opacity: 1, rotate: 0 }} exit={{ y: reduceMotion ? 0 : 16, opacity: 0 }} transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 230, damping: 27 }} data-source-focus={activeSource ?? 'none'}>
         <header className="evidence-head">
           <div><span className="eyebrow">并置 / 只呈现矛盾 不公布真相</span><h2 id="evidence-title">同一笔三百两</h2></div>
-          <button className="icon-button" onClick={onClose} aria-label="收起并置"><X size={20} /></button>
+          <div className="evidence-head-actions">
+            <button className="icon-button" onClick={() => printSurface('evidence')} aria-label="印此证据链" title="印此页"><Printer size={18} /></button>
+            <button className="icon-button" onClick={onClose} aria-label="收起并置"><X size={20} /></button>
+          </div>
         </header>
 
         <div className="evidence-scroll">
-          <div className="chain-strip" onKeyDown={handleChainKey} aria-label="证据钉，方向键移证">
+          <div className="chain-strip" data-focus-id="evidence-chain" onKeyDown={handleChainKey} aria-label="证据钉，方向键移证">
             {chain.map((item, index) => {
               const unlocked = state.unlocked.includes(item.id)
               const row = ledgerRows.find(r => r.id === item.id)
@@ -81,6 +85,7 @@ export function EvidenceBoard({ state, onClose, onOpenSource }: Props) {
                     <p>{unlocked ? item.role : row?.source ?? '尚未接触'}</p>
                     <footer>{unlocked ? <><Check size={12} />{isOpen ? '查验中' : '已取得 · 点开查验'}</> : <><LockKeyhole size={12} />未接触</>}</footer>
                   </motion.button>
+                  <details className="chain-source-pin"><summary>来源钉 · 只读</summary><p>{unlocked ? row?.source ?? item.role : '尚未接触 · 不补写来源'}</p></details>
                   {index < chain.length - 1 && <div className={`chain-link ${state.unlocked.includes(chain[index + 1].id) && unlocked ? 'is-lit' : ''}`}><Link2 size={14} /></div>}
                 </motion.div>
               )
@@ -112,7 +117,7 @@ export function EvidenceBoard({ state, onClose, onOpenSource }: Props) {
 
           <section className="chain-questions">
             <h3><HelpCircle size={15} />并置之后 可以拿去问人的话</h3>
-            {visibleQuestions.length === 0 ? <p className="chain-empty">先把库房账册与借领状并置 问题才会长出来</p> : visibleQuestions.map((q, index) => (
+            {visibleQuestions.length === 0 ? <p className="chain-empty empty-slip" data-empty-slip="true">先把库房账册与借领状并置 问题才会长出来</p> : visibleQuestions.map((q, index) => (
               <motion.article key={q.text} initial={{ opacity: 0, y: reduceMotion ? 0 : 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: reduceMotion ? 0 : .18, delay: reduceMotion ? 0 : .08 + index * .05 }}>
                 <span>问 {String(index + 1).padStart(2, '0')}</span><p>{q.text}</p>
                 <button className="text-link" aria-label={`回查问题 ${index + 1} 所据账证`} onClick={() => onOpenSource('ledger', q.needs.filter(id => ledgerRows.some(row => row.id === id)))}>查所据<ArrowUpRight size={13} /></button>
@@ -123,7 +128,7 @@ export function EvidenceBoard({ state, onClose, onOpenSource }: Props) {
 
           <section className="comparison-list">
             <h3><ScrollText size={15} />你正式并置过的疑点 <b>{state.comparisons.length}</b></h3>
-            {state.comparisons.length === 0 ? <p className="chain-empty">到呈文「对勘」或账房选两处 疑点会在这里留下可追问的形式</p> : state.comparisons.map((item, index) => {
+            {state.comparisons.length === 0 ? <p className="chain-empty empty-slip" data-empty-slip="true">到呈文「对勘」或账房选两处 疑点会在这里留下可追问的形式</p> : state.comparisons.map((item, index) => {
               const isLinked = activeComparison === item.id || Boolean(activeSource && item.refs.includes(activeSource))
               return (
                 <motion.article key={item.id} className={`comparison-card ${isLinked ? 'is-source-linked' : ''}`} data-comparison-id={item.id} initial={{ opacity: 0, y: reduceMotion ? 0 : 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: reduceMotion ? 0 : .18, delay: reduceMotion ? 0 : index * .045 }} onMouseEnter={() => { setActiveComparison(item.id); setFocusedSource(null) }} onMouseLeave={() => setActiveComparison(current => current === item.id ? null : current)} onFocusCapture={() => { setActiveComparison(item.id); setFocusedSource(null) }} onBlurCapture={() => setActiveComparison(current => current === item.id ? null : current)}>

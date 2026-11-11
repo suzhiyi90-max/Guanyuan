@@ -1,9 +1,38 @@
-import { useState, type KeyboardEvent } from 'react'
+import { useEffect, useState, type KeyboardEvent } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { ArrowRight, BookOpen, Check, ChevronDown, FileWarning, Printer, ScrollText, Stamp, X } from 'lucide-react'
 import { goalReckoningOf, type GameState } from '../game/useGame'
+import { AudienceEchoPanel, ImpressionSlips } from './PowerLedger'
+import { RuleChip } from './RuleBook'
+import { readView, useViewMemory } from '../viewMemory'
+import { ScenePlate } from './ScenePlate'
+import { ReadAcross } from './ReadAcross'
+import { LastReviewChip } from './LastReviewChip'
+import { RumorTrail } from './RumorTrail'
+import { FolioProgress, FolioSlip } from './FolioSlip'
+import { FolioIndex } from './FolioIndex'
+import { FolioHead } from './FolioHead'
+import { FolioFold } from './FolioFold'
+import { recordFolioVisit, type FolioKey } from '../folioIndex'
+import type { ReviewOrigin } from '../reviewTrail'
+import { handleFolioReturnKey } from '../folioReturn'
+import { printSurface } from '../printSurface'
+import { SurfaceColophon } from './SurfaceColophon'
 
 type RecordTab = 'citation' | 'deeds' | 'reckoning' | 'legacy'
+
+export type LocateKind = 'document' | 'evidence' | 'affairs' | 'review' | 'gift' | 'intel' | 'ledger' | 'causality'
+
+const locateLabels: Record<LocateKind, string> = {
+  document: '回案卷',
+  evidence: '回证据',
+  affairs: '回事务盘',
+  review: '回上宪',
+  gift: '回礼簿',
+  intel: '回情报台账',
+  ledger: '回账房',
+  causality: '回因果纸',
+}
 
 interface Deed {
   id: string
@@ -12,6 +41,7 @@ interface Deed {
   summary: string
   source: string
   detail: string
+  target: LocateKind
 }
 
 const tabs: Array<{ id: RecordTab; label: string; short: string }> = [
@@ -50,6 +80,7 @@ function deedsOf(state: GameState): Deed[] {
       summary: '收东堤渗水呈文一件 河工案由此起',
       source: '县衙到任簿 / 东堤呈文',
       detail: '到任即收险工呈文 后续问人 对勘 签押与验收均由此案展开',
+      target: 'document',
     },
   ]
 
@@ -61,6 +92,7 @@ function deedsOf(state: GameState): Deed[] {
       summary: '改动与疑点入册 未凭版本差异直接定罪',
       source: state.comparisons.find(item => item.source === 'document')?.refs.join(' / ') ?? '东堤呈文两版',
       detail: state.comparisons.find(item => item.source === 'document')?.question ?? '两版呈文已并置 改动依据仍待经手人说明',
+      target: 'document',
     })
   }
   if (state.unlocked.includes('E-002')) {
@@ -71,6 +103,7 @@ function deedsOf(state: GameState): Deed[] {
       summary: '三百两有了借领名目 旧欠与损耗可以互核',
       source: 'E-002 主簿借领状',
       detail: '借领状只证明账上另有一个名目 是否与粮商旧欠同属一笔 仍须并置判断',
+      target: 'evidence',
     })
   }
   if (state.asked.length > 0) {
@@ -81,6 +114,7 @@ function deedsOf(state: GameState): Deed[] {
       summary: `正式接触 ${state.asked.length} 人 各自说法分别入册`,
       source: '人情接触记录 / 情报台账',
       detail: '接触不等于相信 每份说法仍保留来源 未把传闻直接写成结论',
+      target: 'intel',
     })
   }
   state.giftEntries.forEach((entry, index) => {
@@ -91,6 +125,7 @@ function deedsOf(state: GameState): Deed[] {
       summary: entry,
       source: '礼簿 / 私囊账',
       detail: '应酬与私囊同记 不因礼数完成便删去另一本账的代价',
+      target: 'gift',
     })
   })
   if (state.probeKnown) {
@@ -101,6 +136,7 @@ function deedsOf(state: GameState): Deed[] {
       summary: '探挖见淘空三尺 工法不再只凭书办一面之词',
       source: 'E-007 探挖记录',
       detail: '十日窗口只能抢护 拆修仍须汛后另案 现场所见没有扩大写成已根治',
+      target: 'evidence',
     })
   }
   if (state.plan) {
@@ -111,11 +147,12 @@ function deedsOf(state: GameState): Deed[] {
       summary: `${state.plan.leaderName}主办 拨料${state.plan.material}垛 夫役${state.plan.labor}人`,
       source: '东堤抢护签押底稿',
       detail: `${state.plan.supervisor} 保正具结 夫食二十五两 发起与完成分别记录`,
+      target: 'affairs',
     })
   }
   state.officialActions.forEach(action => {
     const deed = officialDeeds[action]
-    if (deed) deeds.push({ id: `official-${action}`, when: '上宪来文后', source: '知府审查卷', ...deed })
+    if (deed) deeds.push({ id: `official-${action}`, when: '上宪来文后', source: '知府审查卷', target: 'review', ...deed })
   })
   if (state.outcome) {
     deeds.push({
@@ -125,14 +162,31 @@ function deedsOf(state: GameState): Deed[] {
       summary: state.outcome.symptom,
       source: '东堤抢护题销册',
       detail: state.outcome.factors.map(factor => factor.detail).join('；'),
+      target: 'causality',
     })
   }
   return deeds
 }
 
-export function EpilogueCard({ state, onClose }: { state: GameState, onClose: () => void }) {
-  const [tab, setTab] = useState<RecordTab>('citation')
+export function EpilogueCard({ state, onClose, onOpenCausality, onLocate, onOpenReviewGroup, onOpenStreet, reviewOrigin, onBackReviewOrigin, onOpenFolio }: { state: GameState, onClose: () => void, onOpenCausality?: () => void, onLocate?: (kind: LocateKind) => void, onOpenReviewGroup?: (focus: string) => void, onOpenStreet?: () => void, reviewOrigin?: ReviewOrigin, onBackReviewOrigin?: () => void, onOpenFolio?: (key: FolioKey) => void }) {
+  const [tab, setTab] = useViewMemory<RecordTab>('epilogue-tab', 'citation')
+  // FE-096：卷页题签只记「翻过哪几页」，会话内内存、刷新即散；不是数值条，也不写存档。
+  const [visited, setVisited] = useViewMemory<string>('epilogue-visited', '')
+  useEffect(() => {
+    const ids = readView('epilogue-visited', '').split(',').filter(Boolean)
+    if (!ids.includes(tab)) setVisited([...ids, tab].join(','))
+  }, [tab, setVisited])
+  const visitedPages = tabs.map((item, index) => visited.split(',').includes(item.id) ? index + 1 : 0).filter((n): n is number => n > 0)
+  // FE-100：只把本处已翻页序上报给派生的合卷索引，不写回 viewMemory、不落盘。
+  useEffect(() => recordFolioVisit('epilogue', visitedPages), [visited])
+  const [sealOpen, setSealOpen] = useState(false)
+  const [ghostOn, setGhostOn] = useState(true)
+  const [cornerOpen, setCornerOpen] = useState(false)
+  // FE-129：印全卷只在打印期间把四页并到 DOM，屏上隐藏、afterprint 即撤，不写存档。
+  const [printAll, setPrintAll] = useState(false)
   const [openDeed, setOpenDeed] = useState<string | null>('arrival')
+  const pageMeta = tabs.find(item => item.id === tab) ?? tabs[0]
+  useEffect(() => setCornerOpen(false), [tab])
   const outcome = state.outcome
   const reckoning = goalReckoningOf(state)
   const deeds = deedsOf(state)
@@ -169,11 +223,11 @@ export function EpilogueCard({ state, onClose }: { state: GameState, onClose: ()
     { id: '年', text: '年力未载 无据不填', note: '本册不造年龄 不预拟驱策' },
   ]
 
-  const facts = [
-    state.plan ? `第${state.plan.day}日签押 ${state.plan.leaderName}主办` : '本任未签押抢护',
-    state.probeKnown ? 'E-007 闸底淘空三尺已亲见' : '闸底尚未亲勘',
-    state.officialActions.includes('commissioner') ? 'E-008 委员覆勘已入卷' : '委员覆勘未入卷',
-    outcome ? `第${outcome.day}日验收 ${outcome.grade}` : '验收结果尚未入册',
+  const facts: Array<{ text: string, target: LocateKind }> = [
+    { text: state.plan ? `第${state.plan.day}日签押 ${state.plan.leaderName}主办` : '本任未签押抢护', target: 'affairs' },
+    { text: state.probeKnown ? 'E-007 闸底淘空三尺已亲见' : '闸底尚未亲勘', target: 'evidence' },
+    { text: state.officialActions.includes('commissioner') ? 'E-008 委员覆勘已入卷' : '委员覆勘未入卷', target: 'review' },
+    { text: outcome ? `第${outcome.day}日验收 ${outcome.grade}` : '验收结果尚未入册', target: 'causality' },
   ]
   const reputation = Array.from(new Set([
     outcome && ['合龙', '合式'].includes(outcome.grade) ? '河工可靠' : null,
@@ -188,48 +242,10 @@ export function EpilogueCard({ state, onClose }: { state: GameState, onClose: ()
   ].filter((item): item is string => Boolean(item)))).slice(0, 5)
   if (reputation.length === 0) reputation.push('到任日浅 风评未立')
 
-  const handleTabKeys = (event: KeyboardEvent<HTMLElement>) => {
-    if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') return
-    event.preventDefault()
-    const direction = event.key === 'ArrowRight' ? 1 : -1
-    const next = (tabIndex + direction + tabs.length) % tabs.length
-    setTab(tabs[next].id)
-    event.currentTarget.querySelectorAll<HTMLButtonElement>('button')[next]?.focus()
-  }
-
-  const goNext = () => {
-    if (tabIndex === tabs.length - 1) onClose()
-    else setTab(tabs[tabIndex + 1].id)
-  }
-
-  return (
-    <motion.section className="overlay-backdrop epilogue-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} role="dialog" aria-modal="true" aria-label="第一章考语与行状" onMouseDown={event => { if (event.target === event.currentTarget) onClose() }}>
-      <motion.article className="epilogue-paper career-record" initial={{ y: 30, opacity: 0, rotateX: -3 }} animate={{ y: 0, opacity: 1, rotateX: 0 }} exit={{ y: 20, opacity: 0, rotateX: 2 }} transition={{ type: 'spring', stiffness: 220, damping: 27 }}>
-        <header className="career-head">
-          <div className="career-heading">
-            <span className="eyebrow">永济县知县 · 第一章行状 / 第十日</span>
-            <h2>一任如何，要看做过什么。</h2>
-            <p>考语不评分 行状不补写 每一句都能回到案卷</p>
-          </div>
-          <div className="career-head-actions">
-            <button className="outline-button record-print" onClick={() => window.print()}><Printer size={15} />印此页</button>
-            <button className="icon-button" onClick={onClose} aria-label="收起考语与行状"><X size={20} /></button>
-          </div>
-        </header>
-
-        <nav className="career-tabs" role="tablist" aria-label="章末文书分页" onKeyDown={handleTabKeys}>
-          {tabs.map((item, index) => (
-            <button key={item.id} role="tab" id={`career-tab-${item.id}`} aria-selected={tab === item.id} aria-controls={`career-panel-${item.id}`} tabIndex={tab === item.id ? 0 : -1} className={tab === item.id ? 'active' : ''} onClick={() => setTab(item.id)}>
-              <span>0{index + 1}</span><b>{item.label}</b><small>{item.short}</small>
-              {tab === item.id && <motion.i className="career-tab-ink" layoutId="career-tab-ink" transition={{ type: 'spring', stiffness: 380, damping: 32 }} />}
-            </button>
-          ))}
-        </nav>
-
-        <div className="career-body">
-          <AnimatePresence mode="wait" initial={false}>
-            <motion.div key={tab} className="career-page" id={`career-panel-${tab}`} role="tabpanel" aria-labelledby={`career-tab-${tab}`} initial={{ opacity: 0, x: 22, clipPath: 'inset(0 0 0 10%)' }} animate={{ opacity: 1, x: 0, clipPath: 'inset(0 0 0 0%)' }} exit={{ opacity: 0, x: -14, clipPath: 'inset(0 10% 0 0)' }} transition={{ duration: .26, ease: [0.22, 1, 0.36, 1] }}>
-              {tab === 'citation' && (
+  // FE-129：四页正文抽成 renderRecordPage：当前页与「印全卷」共用同一份内容，不改判定与文案。
+  const renderRecordPage = (pageId: RecordTab) => (
+    <>
+              {pageId === 'citation' && (
                 <section className="citation-sheet">
                   <div className="citation-kicker"><span>C-16 考语纸</span><i>{state.officialActions.includes('citation') ? '已拟入册' : '章末拟稿'}</i></div>
                   <div className="four-grades">
@@ -249,7 +265,7 @@ export function EpilogueCard({ state, onClose }: { state: GameState, onClose: ()
                   <div className="citation-evidence-grid">
                     <section className="citation-facts">
                       <h3><BookOpen size={16} />实迹所据</h3>
-                      {facts.map((fact, index) => <motion.p key={fact} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: .25 + index * .05 }}><span>{String(index + 1).padStart(2, '0')}</span>{fact}</motion.p>)}
+                      {facts.map((fact, index) => <motion.p key={fact.text} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: .25 + index * .05 }}><span>{String(index + 1).padStart(2, '0')}</span>{fact.text}{onLocate && <FolioSlip className="career-locate" compact label={locateLabels[fact.target]} onClick={() => onLocate(fact.target)} />}</motion.p>)}
                     </section>
                     <aside className="reputation-block">
                       <h3>风评入册</h3>
@@ -257,10 +273,12 @@ export function EpilogueCard({ state, onClose }: { state: GameState, onClose: ()
                       <p>风评是标签 不是数值 同一人的清与刻可以同时存在</p>
                     </aside>
                   </div>
+
+                  <ImpressionSlips state={state} />
                 </section>
               )}
 
-              {tab === 'deeds' && (
+              {pageId === 'deeds' && (
                 <section className="deeds-layout">
                   <aside className="deeds-summary">
                     <span className="eyebrow">行状 / 实迹编年</span>
@@ -281,7 +299,7 @@ export function EpilogueCard({ state, onClose }: { state: GameState, onClose: ()
                             <motion.span className="deed-chevron" animate={{ rotate: expanded ? 180 : 0 }}><ChevronDown size={17} /></motion.span>
                           </button>
                           <AnimatePresence initial={false}>
-                            {expanded && <motion.div id={`deed-${deed.id}`} className="deed-detail" initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ height: { duration: .25 }, opacity: { duration: .18 } }}><div><span>据 · {deed.source}</span><p>{deed.detail}</p></div></motion.div>}
+                            {expanded && <motion.div id={`deed-${deed.id}`} className="deed-detail" initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ height: { duration: .25 }, opacity: { duration: .18 } }}><div><span>据 · {deed.source}</span><p>{deed.detail}</p>{onLocate && <FolioSlip className="career-locate" compact label={locateLabels[deed.target]} onClick={() => onLocate(deed.target)} />}</div></motion.div>}
                           </AnimatePresence>
                         </motion.article>
                       )
@@ -290,7 +308,7 @@ export function EpilogueCard({ state, onClose }: { state: GameState, onClose: ()
                 </section>
               )}
 
-              {tab === 'reckoning' && (
+              {pageId === 'reckoning' && (
                 <section className="reckoning-page">
                   <header className="page-inscription"><span>章首立志 / 章末对账</span><h3>当初想要的，后来剩下什么</h3><p>只对账 不评分 志向会被公事 人情与时间改写</p></header>
                   <div className="reckoning-columns">
@@ -305,6 +323,8 @@ export function EpilogueCard({ state, onClose }: { state: GameState, onClose: ()
                         <div className="closing-facts"><span>主办 {state.plan.leaderName}</span><span>拨料 {state.plan.material} 垛</span><span>夫役 {state.plan.labor} 人</span><span>夫食 25 两</span></div>
                         {outcome && <div className={`closing-grade grade-${outcome.grade}`}><span>验收</span><b>{outcome.grade}</b><p>{outcome.symptom}</p></div>}
                         <div className="closing-factors">{outcome?.factors.map(factor => <p key={factor.label + factor.detail} className={`tone-${factor.tone}`}><i>{factor.tone === 'plus' ? '得' : '失'}</i>{factor.detail}</p>)}</div>
+                        {outcome && onOpenCausality && <button className="text-link closing-causal-link" onClick={onOpenCausality}>展开因果纸 · 得失与回查<ArrowRight size={12} /></button>}
+                        {onLocate && <div className="closing-locates"><FolioSlip compact label="回事务盘" onClick={() => onLocate('affairs')} /><FolioSlip compact label="回卷宗" onClick={() => onLocate('document')} /></div>}
                       </> : <p className="chain-empty">未发起抢护 题销册上无工可题 只有渗水与十日的记录</p>}
                       <p className="closing-citation">考语 · {citation}</p>
                     </section>
@@ -312,14 +332,15 @@ export function EpilogueCard({ state, onClose }: { state: GameState, onClose: ()
                 </section>
               )}
 
-              {tab === 'legacy' && (
+              {pageId === 'legacy' && (
                 <section className="legacy-page">
                   <header className="page-inscription"><span>第一章终 / 世界不终</span><h3>册子合上以后，账还在走</h3><p>考语入册之日 县衙照旧开门 人也各自记得你做过什么</p></header>
-                  <div className="legacy-ledger">
-                    <article><span>风评仍在</span><p>{state.log.rumor}</p></article>
-                    <article><span>私囊余数</span><b>{state.privateFunds}<small>两</small></b><p>礼簿另有 {state.giftEntries.length} 笔 不因章末而清零</p></article>
-                    <article><span>未结疑点</span><b>{state.clues.length}<small>条</small></b><p>来源与接触记录仍留台账 可在日后翻出</p></article>
-                  </div>
+                  <AudienceEchoPanel state={state} focus="outcome" />
+
+                  <div className="legacy-plate"><ScenePlate id="chapter-close" className="legacy-art-plate" /><span>册子合上以后，县衙照旧开门</span></div>
+                  <RumorTrail variant="page" current="epilogue" rumor={state.log.rumor} onOpen={target => target === 'intel' ? onLocate?.('intel') : onOpenStreet?.()} />
+                  <div className="legacy-review-row"><LastReviewChip onOpen={focus => onOpenReviewGroup?.(focus)} origin={reviewOrigin ?? undefined} onBack={onBackReviewOrigin} /></div>
+                  <ReadAcross state={state} variant="page" onOpen={target => onLocate?.(target)} folioVisited={visitedPages} />
                   {failed ? (
                     <section className="closing-retreat">
                       <h3><FileWarning size={16} />失败不是终局 三条退路</h3>
@@ -335,13 +356,107 @@ export function EpilogueCard({ state, onClose }: { state: GameState, onClose: ()
                   <div className="legacy-colophon"><ScrollText size={18} /><p>第一章 · 河工案卷终<br /><span>只记已经发生事 不预写身后名</span></p></div>
                 </section>
               )}
+    </>
+  )
+  const handleTabKeys = (event: KeyboardEvent<HTMLElement>) => {
+    if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') return
+    event.preventDefault()
+    const direction = event.key === 'ArrowRight' ? 1 : -1
+    const next = (tabIndex + direction + tabs.length) % tabs.length
+    setTab(tabs[next].id)
+    event.currentTarget.querySelectorAll<HTMLButtonElement>('button')[next]?.focus()
+  }
+
+  const goNext = () => {
+    if (tabIndex === tabs.length - 1) onClose()
+    else setTab(tabs[tabIndex + 1].id)
+  }
+  const printWholeVolume = () => {
+    setPrintAll(true)
+    const finish = () => setPrintAll(false)
+    window.addEventListener('afterprint', finish, { once: true })
+    window.setTimeout(() => {
+      printSurface('epilogue-all')
+      window.setTimeout(finish, 1600)
+    }, 900)
+  }
+
+  return (
+    <motion.section className="overlay-backdrop epilogue-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} role="dialog" aria-modal="true" aria-label="第一章考语与行状" onMouseDown={event => { if (event.target === event.currentTarget) onClose() }}>
+      <motion.article className="epilogue-paper career-record" data-volume="closed" initial={{ y: 30, opacity: 0, rotateX: -3 }} animate={{ y: 0, opacity: 1, rotateX: 0 }} exit={{ y: 20, opacity: 0, rotateX: 2 }} transition={{ type: 'spring', stiffness: 220, damping: 27 }} onKeyDown={event => { handleFolioReturnKey(event) }}>
+        <header className="career-head">
+          <div className="career-heading">
+            <span className="eyebrow">永济县知县 · 第一章行状 / 第十日</span>
+            <h2>一任如何，要看做过什么。</h2>
+            <p>考语不评分 行状不补写 每一句都能回到案卷</p>
+            <FolioHead label="章末四页" title="第一章 · 行状" index={tabIndex + 1} total={tabs.length} visited={visitedPages} folioKey="epilogue" variant="grand" showBorrow />
+          </div>
+          <div className="career-head-actions">
+            <RuleChip clause="ledger-cause" compact label="依 10.5" />
+            <button className="outline-button record-print" onClick={() => printSurface('epilogue')}><Printer size={15} />印此页</button>
+            <button className="outline-button record-print-all" onClick={printWholeVolume} title="四页同卷 · 一次印成"><BookOpen size={15} />印全卷</button>
+            <button className="icon-button" onClick={onClose} aria-label="收起考语与行状"><X size={20} /></button>
+          </div>
+        </header>
+
+        <nav className="career-tabs" role="tablist" aria-label="章末文书分页" onKeyDown={handleTabKeys}>
+          {tabs.map((item, index) => (
+            <button key={item.id} role="tab" id={`career-tab-${item.id}`} aria-selected={tab === item.id} aria-controls={`career-panel-${item.id}`} tabIndex={tab === item.id ? 0 : -1} className={tab === item.id ? 'active' : ''} data-sound="page:turn" onClick={() => setTab(item.id)}>
+              <span>0{index + 1}</span><b>{item.label}</b><small>{item.short}</small>
+              <i className={`folio-tab-dot ${visited.includes(item.id) ? 'is-read' : ''}`} aria-hidden="true" />
+              {tab === item.id && <motion.i className="career-tab-ink" layoutId="career-tab-ink" transition={{ type: 'spring', stiffness: 380, damping: 32 }} />}
+            </button>
+          ))}
+        </nav>
+
+        <div className="career-body">
+          <nav className={`career-spine ${sealOpen ? 'is-verifying' : ''}`} aria-label="章末页序脊">
+            <button type="button" className="career-spine-seal" aria-expanded={sealOpen} aria-controls="career-seam-slip" aria-label="骑缝半印 · 点开验印" title="骑缝半印 · 点开验印" onClick={() => setSealOpen(value => !value)} />
+            <div className="career-spine-tabs">
+              {tabs.map((item, index) => <button key={item.id} type="button" className={tab === item.id ? 'is-current' : ''} tabIndex={-1} aria-pressed={tab === item.id} aria-controls={`career-panel-${item.id}`} aria-label={`第${index + 1}页 · ${item.label}`} data-sound="page:turn" onClick={() => setTab(item.id)}>
+                <i>{String(index + 1).padStart(2, '0')}</i><span>{item.label}</span>
+                <em className={`folio-tab-dot ${visited.includes(item.id) ? 'is-read' : ''}`} aria-hidden="true" />
+              </button>)}
+            </div>
+            <span className="career-spine-note">骑缝 · 装帧，不作印信</span>
+            <i className="career-spine-end" aria-hidden="true" />
+          </nav>
+          <div className="career-pages" data-seam-ghost={ghostOn ? 'true' : 'false'}>
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div key={tab} className="career-page" id={`career-panel-${tab}`} role="tabpanel" aria-labelledby={`career-tab-${tab}`} data-folio={tab} initial={{ opacity: 0, x: 22, clipPath: 'inset(0 0 0 10%)' }} animate={{ opacity: 1, x: 0, clipPath: 'inset(0 0 0 0%)' }} exit={{ opacity: 0, x: -14, clipPath: 'inset(0 10% 0 0)' }} transition={{ duration: .26, ease: [0.22, 1, 0.36, 1] }}>
+              <button type="button" className="career-folio-corner" data-folio-mount="true" aria-expanded={cornerOpen} aria-controls="career-corner-slip" onClick={() => setCornerOpen(value => !value)}>{pageMeta.label} · 卷页</button>
+              {cornerOpen && <div className="career-corner-slip" id="career-corner-slip" data-folio-mount="true" role="note">
+                <header><span>第 {tabIndex + 1} 页 · {pageMeta.label}</span><button type="button" onClick={() => setCornerOpen(false)} aria-label="折回页角"><X size={11} /></button></header>
+                <p>{pageMeta.short}</p>
+                <small>页角折签 · 只作页序，不写文书</small>
+              </div>}
+              {renderRecordPage(tab)}
+              <SurfaceColophon surface="章末四页" note="四页同卷；回卷首只移焦点，不改页签与所读页序。" className="career-colophon" />
             </motion.div>
           </AnimatePresence>
+          </div>
+          {printAll && <div className="career-print-stack" aria-hidden="true">
+            {tabs.map(item => (
+              <div className="career-print-sheet" key={item.id} data-print-page={item.id}>
+                <span className="career-print-sheet-head">第 {tabs.findIndex(entry => entry.id === item.id) + 1} 页 · {item.label}</span>
+                {renderRecordPage(item.id)}
+              </div>
+            ))}
+          </div>}
         </div>
 
-        <footer className="career-foot">
-          <span>第一章 · {tabs[tabIndex].label} / 共 {tabs.length} 页</span>
-          <div className="career-page-dots" aria-hidden="true">{tabs.map(item => <i key={item.id} className={item.id === tab ? 'active' : ''} />)}</div>
+        <footer className="career-foot" data-folio-band="true">
+          {sealOpen
+            ? <div className="career-seam-slip" id="career-seam-slip" role="note">
+              <span>验印 · 骑缝</span>
+              <p>四页同装一脊；半印只作装帧，不作印信、不表判定。</p>
+              <button type="button" className="career-ghost-toggle" aria-pressed={ghostOn} onClick={() => setGhostOn(value => !value)}>透印 · {ghostOn ? '开' : '关'}</button>
+              <button type="button" className="career-seam-close" onClick={() => setSealOpen(false)} aria-label="收起验印"><X size={12} /></button>
+            </div>
+            : <FolioProgress index={tabIndex + 1} total={tabs.length} label={tabs[tabIndex].label} visited={visitedPages} active />}
+          <FolioIndex variant="inline" active="epilogue" onOpen={onOpenFolio} />
+          <FolioFold active="epilogue" onOpen={onOpenFolio} />
+          <div className="career-page-dots" aria-hidden="true"><em>骑缝</em>{tabs.map(item => <i key={item.id} className={item.id === tab ? 'active' : ''} />)}</div>
           <button className="primary-button" onClick={goNext}>{tabIndex === tabs.length - 1 ? '合上册子 回到案头' : `续读 ${tabs[tabIndex + 1].label}`}<ArrowRight size={16} /></button>
         </footer>
       </motion.article>

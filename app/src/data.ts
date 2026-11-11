@@ -137,6 +137,9 @@ export const documentVersions = {
   },
 }
 
+/** M1 三数：只作既有账面的同源投影，不在这里做任何折算或判定。 */
+export const ledgerThree = { book: 4500, actual: 4200, gap: 300 } as const
+
 export const ledgerRows = [
   { id: 'E-001', title: '库房账册', type: '已接触', amount: '300 两', text: '河工银四千五百两领出；实收入河工专账四千二百两。三百两记“运输损耗”，未附运输凭证。', source: '主簿掌管 · 库房调阅', unlocked: true },
   { id: 'E-002', title: '主簿借领状', type: '未接触', amount: '300 两', text: '主簿借领三百两，垫付上年夫役工食。用途有记录，程序有瑕，是否挪移仍须上级定性。', source: '夜书房细查旧册可得', unlocked: false },

@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { people } from '../data'
 import { evaluateRiverTask, materialAfterArrival, worldEvents, type TaskOutcome } from './schedule'
 import type { Clue, Comparison, GameLog, OfficialActionId, Period, RiverPlan, TaskStage, ToastMessage } from '../types'
+import { applyGeneratedOption } from '../narrative/effects'
+import type { GeneratedEvent } from '../narrative/types'
 
 export const periods: Period[] = ['晨', '午', '暮', '夜']
 const SAVE_KEY = 'guanyuan.save.v1'
@@ -496,7 +498,24 @@ export function useGuanyuanGame() {
         }
         return { ...base, log: { ...base.log, rumor: '你在县衙听回报 现场如何 全看写的人怎样落笔' } }
       }
+      if (eventId === 'gate-gift') {
+        // 内宅会外溢：门包不入公账，只走风评（log.rumor 喂考语/回声）；禁绝给拒绝的代价（门房怨望失耳目）。
+        if (optionId === 'forbid') {
+          return { ...base, log: { ...base.log, done: '禁绝门包 明令门房不得私收', rumor: '门房被断了辛苦钱 怨望散值 门第清静却少了门下耳目' } }
+        }
+        return { ...base, log: { ...base.log, rumor: '门房照旧收门包 街面传县衙门第难进 求见先问门包' } }
+      }
       return base
+    })
+  }, [])
+
+  // FE-157：生成事件走本地效果目录结算。模型只给措辞与 effect id，数值与判定一条不由它写。
+  // 只追加既有 handledEvents 字段，不新增存档字段、不改存档结构。
+  const resolveGeneratedEvent = useCallback((event: GeneratedEvent, optionId: string) => {
+    setState(current => {
+      if (current.handledEvents.includes(event.id)) return current
+      const base: GameState = { ...current, handledEvents: [...current.handledEvents, event.id], pendingEvent: null }
+      return applyGeneratedOption(base, event, optionId)
     })
   }, [])
 
@@ -523,6 +542,7 @@ export function useGuanyuanGame() {
     chooseBanquet,
     continueNextDay,
     resolveWorldOption,
+    resolveGeneratedEvent,
     resetGame,
   }
 }

@@ -1,9 +1,13 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { KeyboardEvent } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { ArrowLeft, ArrowRight, CalendarClock, Check, CircleDollarSign, Coins, FileSearch, Flag, Landmark, Layers, Link2, LockKeyhole, PackageOpen, Plus, RotateCcw, ScrollText, Stamp, UsersRound, Waves, X } from 'lucide-react'
 import { nextCheckpointOf, periods, taskProgressOf, taskStageOf, type GameState } from '../game/useGame'
+import { worldEvents } from '../game/schedule'
 import { OfficeBoard } from './OfficeBoard'
+import { AudienceEchoPanel, RiskStrip } from './PowerLedger'
+import { RuleChip } from './RuleBook'
+import { useViewMemory } from '../viewMemory'
 import type { SectionId, TaskStage } from '../types'
 
 const stages: Array<{ id: TaskStage; label: string; hint: string }> = [
@@ -55,21 +59,44 @@ interface Props {
   onOpenEpilogue: () => void
   onNavigate: (section: SectionId) => void
   onGoRiver: () => void
+  onOpenCausality?: () => void
+  onOpenBrief?: () => void
+  clockRequest?: { day: number, version: number } | null
+  onOpenWorld?: () => void
 }
 
-export function AffairsSection({ state, onOpenPlan, onOpenEvidence, onOpenReview, onOpenEpilogue, onNavigate, onGoRiver }: Props) {
+export function AffairsSection({ state, onOpenPlan, onOpenEvidence, onOpenReview, onOpenEpilogue, onNavigate, onGoRiver, onOpenCausality, onOpenBrief, clockRequest, onOpenWorld }: Props) {
   const stage = taskStageOf(state)
+  const [checkpointOpen, setCheckpointOpen] = useState(false)
   const progress = taskProgressOf(state)
   const checkpoint = nextCheckpointOf(state)
   const stageIndex = stages.findIndex(item => item.id === stage)
   const plan = state.plan
   const evidenceCount = state.unlocked.filter(id => ['E-001', 'E-002', 'E-003'].includes(id)).length
   const [inspectedStage, setInspectedStage] = useState<TaskStage | null>(null)
+  // FE-138（C-148）：阶段轨五节点单一 Tab 停靠 + 方向键巡览；只移焦点，不改 inspected 与 stageIndex。
+  const stageRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    const nodes = Array.from(stageRef.current?.querySelectorAll<HTMLButtonElement>('.stage-node') ?? [])
+    nodes.forEach((node, index) => { node.tabIndex = index === 0 ? 0 : -1 })
+  }, [stage, inspectedStage])
+  const handleStageKeys = (event: KeyboardEvent) => {
+    const nodes = Array.from(stageRef.current?.querySelectorAll<HTMLButtonElement>('.stage-node') ?? [])
+    if (nodes.length < 2) return
+    const index = nodes.indexOf(event.target as HTMLButtonElement)
+    if (index < 0) return
+    if (!['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp', 'Home', 'End'].includes(event.key)) return
+    event.preventDefault()
+    const step = event.key === 'ArrowRight' || event.key === 'ArrowDown' ? 1 : -1
+    const next = event.key === 'Home' ? 0 : event.key === 'End' ? nodes.length - 1 : (index + step + nodes.length) % nodes.length
+    nodes[next].focus()
+  }
   const inspected = stages.find(item => item.id === (inspectedStage ?? stage)) ?? stages[0]
   const inspectedIndex = stages.findIndex(item => item.id === inspected.id)
   const inspectionState = inspectedIndex < stageIndex ? '已经走过' : inspectedIndex === stageIndex ? '当前所在' : '尚未到此'
   const reduceMotion = useReducedMotion()
-  const [view, setView] = useState<AffairsView>('tasks')
+  // FE-090：事务盘三视图只存会话内记忆，离开再回不丢页签；事件日深链仍强制回「在办」。
+  const [view, setView] = useViewMemory<AffairsView>('affairs-view', 'tasks')
   const [selectedTokenId, setSelectedTokenId] = useState(policyTokens[0].id)
   const [tokenBack, setTokenBack] = useState(false)
   const [comparedTokens, setComparedTokens] = useState<string[]>([])
@@ -82,6 +109,20 @@ export function AffairsSection({ state, onOpenPlan, onOpenEvidence, onOpenReview
   const elapsedPeriods = plan ? Math.max(0, (state.day - plan.day) * 4 + state.periodIndex - planPeriodIndex) : 0
   const outcomePeriod = state.outcome && plan ? (state.outcome.day - plan.day) * 4 - planPeriodIndex : -1
   useEffect(() => setInspectedClockDay(state.day), [state.day])
+  // FE-065：事件卡深链只换查验日，不改日程、不推进时段、不写存档。
+  useEffect(() => {
+    if (!clockRequest) return
+    setInspectedClockDay(clockRequest.day)
+    setView('tasks')
+  }, [clockRequest, setView])
+  const inspectedClockEvent = worldEvents.find(item => item.day === inspectedClockDay) ?? null
+  const inspectedClockEventState = inspectedClockEvent
+    ? state.pendingEvent === inspectedClockEvent.id
+      ? '待决'
+      : state.handledEvents.includes(inspectedClockEvent.id)
+        ? '已处理'
+        : inspectedClockDay > state.day ? '未到' : '公开日程'
+    : null
 
   const selectToken = (id: string) => {
     setSelectedTokenId(id)
@@ -121,11 +162,11 @@ export function AffairsSection({ state, onOpenPlan, onOpenEvidence, onOpenReview
           <h1>发起不是办成。</h1>
           <p>抢护有自己的日程 人情与账目也是 这里只看进度与检查点 不替你宣布结果</p>
         </div>
-        <div className="section-stat"><b>{state.day}</b><span>第 {state.day} 日 / 洪峰第九日</span></div>
+        <div className="section-stat" data-focus-id="affairs-clock"><b>{state.day}</b><span>第 {state.day} 日 / 洪峰第九日</span></div>
       </header>
 
       <div className="section-subtabs affairs-view-tabs" role="tablist" aria-label="事务工作面" onKeyDown={handleViewKeys}>
-        {affairsViews.map(item => <button key={item.id} id={`affairs-tab-${item.id}`} role="tab" aria-selected={view === item.id} aria-controls={`affairs-panel-${item.id}`} tabIndex={view === item.id ? 0 : -1} onClick={() => setView(item.id)}>
+        {affairsViews.map(item => <button key={item.id} id={`affairs-tab-${item.id}`} role="tab" aria-selected={view === item.id} aria-controls={`affairs-panel-${item.id}`} tabIndex={view === item.id ? 0 : -1} data-sound="tab:affairs" onClick={() => setView(item.id)}>
           {view === item.id && <motion.span className="section-subtab-ink" layoutId="affairs-view-ink" transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 410, damping: 35 }} aria-hidden="true" />}
           <span>{item.label}</span><small>{item.note}</small>
         </button>)}
@@ -135,6 +176,7 @@ export function AffairsSection({ state, onOpenPlan, onOpenEvidence, onOpenReview
         {view === 'tasks' ? <motion.div key="tasks" id="affairs-panel-tasks" role="tabpanel" aria-labelledby="affairs-tab-tasks" className="affairs-view-panel" initial={{ opacity: 0, x: reduceMotion ? 0 : -16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: reduceMotion ? 0 : 12 }} transition={{ duration: reduceMotion ? 0 : .22 }}>
       <div className="affairs-layout">
         <section className="task-board">
+          <span className="affairs-base-note">任务板底纸 · 待补专图（暂借素纸）</span>
           <header className="task-board-head">
             <div>
               <span className="eyebrow">案 001 · 东堤险工</span>
@@ -143,7 +185,7 @@ export function AffairsSection({ state, onOpenPlan, onOpenEvidence, onOpenReview
             <span className={`task-state ${plan ? 'is-running' : ''}`}>{plan ? '执行中' : '未发起'}</span>
           </header>
 
-          <div className="stage-track" aria-label={`当前阶段 ${stage}`}>
+          <div className="stage-track" ref={stageRef} onKeyDown={handleStageKeys} aria-label={`当前阶段 ${stage}`}>
             {stages.map((item, index) => {
               const selected = inspected.id === item.id
               return (
@@ -186,7 +228,8 @@ export function AffairsSection({ state, onOpenPlan, onOpenEvidence, onOpenReview
                   const passed = offset < elapsedPeriods
                   const current = offset === elapsedPeriods && !state.outcome
                   const outcome = offset === outcomePeriod
-                  return <span key={offset} className={`${passed ? 'passed' : ''} ${current ? 'current' : ''} ${outcome ? 'is-outcome' : ''}`} title={`第${day}日${period}`}><i /><small>{period}</small>{offset % 4 === 0 && <b>第{day}日</b>}{outcome && <em>验</em>}</span>
+                  const eventDay = offset % 4 === 0 && worldEvents.some(item => item.day === day)
+                  return <span key={offset} className={`${passed ? 'passed' : ''} ${current ? 'current' : ''} ${outcome ? 'is-outcome' : ''}`} title={`第${day}日${period}`}><i /><small>{period}</small>{offset % 4 === 0 && <b>第{day}日</b>}{outcome && <em>验</em>}{eventDay && <u className="duration-event" aria-hidden="true" />}</span>
                 })}</div>
                 <footer><span>发起占用本时段</span><span>后续由执行人与日程推进</span><span>验收以原结果为准</span></footer>
               </section>
@@ -201,21 +244,31 @@ export function AffairsSection({ state, onOpenPlan, onOpenEvidence, onOpenReview
                 <article><Flag size={16} /><div><span>夫役</span><b>{plan.labor} 人</b><small>堡夫二十 河兵五 余者雇募</small></div></article>
                 <article><Coins size={16} /><div><span>夫食</span><b>25 两</b><small>保正具结已入发起文书</small></div></article>
               </div>
-              <div className="task-checkpoint">
+              {plan.supervisor.includes('仅工头监作') && <RiskStrip verdict="可而该不该" title="无会勘签押" detail="保固与赔补由签押人独担 · 县丞未在委牌上留名" />}
+              <button className="task-checkpoint" data-checkpoint="true" onClick={() => setCheckpointOpen(value => !value)} aria-expanded={checkpointOpen}>
                 <CalendarClock size={17} />
                 <div><span>下一检查点 · {checkpoint.when}</span><p>{checkpoint.label}</p></div>
-              </div>
+                <small>{checkpointOpen ? '收起' : '回查'}</small>
+              </button>
+              {checkpointOpen && <motion.div className="task-checkpoint-detail" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0 }} transition={{ duration: reduceMotion ? 0 : .18 }}>
+                <span>检查点回查 · 只读</span>
+                <p>长动作按自身日程推进。此处只回看下一检查点与已入卷事实，不耗时段、不改阶段、不写存档。</p>
+                <small>{state.outcome ? `第${state.outcome.day}日已有验收 · ${state.outcome.grade}` : '尚无验收 · 检查点依既有日程呈现'}</small>
+              </motion.div>}
               {state.outcome && (
                 <motion.div className={`task-outcome grade-${state.outcome.grade}`} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
                   <div className="outcome-head"><span>第{state.outcome.day}日 验收</span><b>{state.outcome.grade}</b></div>
                   <p>{state.outcome.symptom}</p>
                   <div className="outcome-factors">
-                    {state.outcome.factors.map(f => <p key={f.label + f.detail} className={`tone-${f.tone}`}><i>{f.label}</i>{f.detail}</p>)}
+                    {state.outcome.factors.slice(0, 3).map(f => <p key={f.label + f.detail} className={`tone-${f.tone}`}><i>{f.label}</i>{f.detail}</p>)}
+                    {state.outcome.factors.length > 3 && <p className="outcome-more"><i>余</i>另有 {state.outcome.factors.length - 3} 条得失在因果纸</p>}
                   </div>
+                  {onOpenCausality && <button className="text-link outcome-causal-link" onClick={onOpenCausality}>展开因果纸 · 得失与回查<ArrowRight size={13} /></button>}
                 </motion.div>
               )}
               <div className="task-actions">
                 <button className="outline-button" onClick={onGoRiver}><Waves size={16} />去东堤看现场<ArrowRight size={15} /></button>
+                {onOpenBrief && <button className="text-link" onClick={onOpenBrief}><ScrollText size={14} />拟详文 · 三日内补报</button>}
                 <button className="text-link" onClick={onOpenPlan}><Stamp size={14} />回看签押底稿</button>
               </div>
               {state.day >= 10 && <button className="primary-button epilogue-entry" onClick={onOpenEpilogue}><ScrollText size={16} />验收题销 · 章末尾声<ArrowRight size={16} /></button>}
@@ -253,14 +306,15 @@ export function AffairsSection({ state, onOpenPlan, onOpenEvidence, onOpenReview
             </button>
           </section>
 
-          <section className="world-clock">
-            <header><h3>十日世界时钟</h3><span>若你不管 世界也会变</span></header>
+          <section className="world-clock" data-focus-id="world-clock">
+            <header><h3>十日世界时钟</h3><RuleChip clause="time-long" compact label="依 9.1" /></header>
             <div className="world-day-rail" role="group" aria-label="点选十日日程查验">{clockDays.map(day => {
               const selected = day === inspectedClockDay
               const current = day === state.day
-              const hasEvent = worldClock.some(item => item.day === day)
+              const dayEvent = worldEvents.find(item => item.day === day)
+              const hasEvent = Boolean(dayEvent)
               const hasTrace = plan?.day === day || state.outcome?.day === day || state.clues.some(clue => clue.day === day)
-              return <button type="button" key={day} className={`${selected ? 'selected' : ''} ${current ? 'current' : ''} ${day < state.day ? 'passed' : ''}`} aria-pressed={selected} aria-current={current ? 'date' : undefined} onClick={() => setInspectedClockDay(day)} aria-label={`查验第${day}日`}>
+              return <button type="button" key={day} className={`${selected ? 'selected' : ''} ${current ? 'current' : ''} ${day < state.day ? 'passed' : ''}`} aria-pressed={selected} aria-current={current ? 'date' : undefined} onClick={() => setInspectedClockDay(day)} aria-label={`查验第${day}日${dayEvent ? ` · ${dayEvent.title}` : ''}`}>
                 {selected && <motion.span className="world-day-ink" layoutId="world-day-ink" transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 400, damping: 34 }} aria-hidden="true" />}
                 <span>{String(day).padStart(2, '0')}</span><i className={hasEvent ? 'has-event' : hasTrace ? 'has-trace' : ''} />
               </button>
@@ -270,6 +324,12 @@ export function AffairsSection({ state, onOpenPlan, onOpenEvidence, onOpenReview
               <motion.article className="world-day-inspector" key={inspectedClockDay} initial={{ opacity: 0, y: reduceMotion ? 0 : 7 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: reduceMotion ? 0 : -5 }} transition={{ duration: reduceMotion ? 0 : .18 }} aria-live="polite">
                 <header><span>第{inspectedClockDay}日 · 日程查验</span><b>{clockState}</b></header>
                 {selectedWorldClock ? <><h4>{selectedWorldClock.label}</h4><p>{selectedWorldClock.detail}</p><small>{selectedWorldClock.when} · 公开世界时钟</small></> : <><h4>无公开日程节点</h4><p>这一天没有额外世界时钟说明，不补写事件。</p></>}
+                {inspectedClockEvent && <div className="world-day-event" data-event-state={inspectedClockEventState}>
+                  <header><span>世界事件 · {inspectedClockEventState}</span><b>{inspectedClockEvent.title}</b></header>
+                  {state.pendingEvent === inspectedClockEvent.id && onOpenWorld
+                    ? <button type="button" className="text-link" onClick={onOpenWorld}>展开事件卡 · 尚待回话<ArrowRight size={12} /></button>
+                    : <small>{inspectedClockEventState === '已处理' ? '已入卷 · 只回看公开日程 不重放选项' : inspectedClockEventState === '未到' ? '公开日程预告 · 不提前生成本局事件' : '公开日程 · 本局尚未回话'}</small>}
+                </div>}
                 <div className="world-day-traces">
                   {plan?.day === inspectedClockDay && <span>抢护 · 第{plan.day}日{plan.period}签押</span>}
                   {clockClues.length > 0 && <span>疑点 · 当日留下 {clockClues.length} 条</span>}
@@ -279,6 +339,8 @@ export function AffairsSection({ state, onOpenPlan, onOpenEvidence, onOpenReview
               </motion.article>
             </AnimatePresence>
           </section>
+
+          <AudienceEchoPanel state={state} focus="plan" variant="stack" />
         </aside>
       </div>
         </motion.div> : view === 'tokens' ? <motion.div key="tokens" id="affairs-panel-tokens" role="tabpanel" aria-labelledby="affairs-tab-tokens" className="affairs-view-panel policy-panel" initial={{ opacity: 0, x: reduceMotion ? 0 : 18 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: reduceMotion ? 0 : -12 }} transition={{ duration: reduceMotion ? 0 : .24 }}>
@@ -340,7 +402,7 @@ export function AffairsSection({ state, onOpenPlan, onOpenEvidence, onOpenReview
                   <button onClick={() => toggleComparedToken(id)} aria-label={`移出${item.name}`}><X size={14} /></button>
                 </div>
               </motion.article>
-            })}</AnimatePresence></div> : <div className="policy-compare-empty">从木牌架抽取一牌 再收入并置<br /><span>这里只核对先后与代价 不合成增益</span></div>}
+            })}</AnimatePresence></div> : <div className="policy-compare-empty empty-slip" data-empty-slip="true">从木牌架抽取一牌 再收入并置<br /><span>这里只核对先后与代价 不合成增益</span></div>}
             <footer><Stamp size={14} /><span>预览不打牌 不耗时段 不发起政令 不写入事务存档</span></footer>
           </section>
         </motion.div> : <motion.div key="offices" id="affairs-panel-offices" role="tabpanel" aria-labelledby="affairs-tab-offices" className="affairs-view-panel" initial={{ opacity: 0, x: reduceMotion ? 0 : 14 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: reduceMotion ? 0 : -10 }} transition={{ duration: reduceMotion ? 0 : .2 }}>

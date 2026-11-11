@@ -1,8 +1,10 @@
 import { useRef, useState, type KeyboardEvent } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import { Archive, ArrowRight, BookOpen, Check, CircleDashed, Files, Link2, LockKeyhole, ScrollText, Stamp } from 'lucide-react'
+import { Archive, ArrowRight, BookOpen, Check, CircleDashed, Files, Link2, LockKeyhole, Printer, ScrollText, Stamp } from 'lucide-react'
 import type { GameState } from '../game/useGame'
 import type { DocMode, OfficialActionId } from '../types'
+import { printSurface } from '../printSurface'
+import { DocumentKindChain } from './DocumentKindChain'
 
 type EntryId = 'document' | 'review' | 'evidence' | 'outcome'
 
@@ -12,6 +14,7 @@ interface Props {
   onOpenReview: () => void
   onOpenEvidence: () => void
   onOpenEpilogue: () => void
+  onOpenBrief?: () => void
 }
 
 const actionNames: Record<OfficialActionId, string> = {
@@ -20,7 +23,7 @@ const actionNames: Record<OfficialActionId, string> = {
 
 const entryOrder: EntryId[] = ['document', 'review', 'evidence', 'outcome']
 
-export function DossierFolio({ state, onOpenDocument, onOpenReview, onOpenEvidence, onOpenEpilogue }: Props) {
+export function DossierFolio({ state, onOpenDocument, onOpenReview, onOpenEvidence, onOpenEpilogue, onOpenBrief }: Props) {
   const [selected, setSelected] = useState<EntryId>('document')
   const reduceMotion = useReducedMotion()
   const rootRef = useRef<HTMLDivElement>(null)
@@ -63,15 +66,20 @@ export function DossierFolio({ state, onOpenDocument, onOpenReview, onOpenEviden
 
   return (
     <div ref={rootRef} className="dossier-folio" onKeyDown={handleKeys} data-dossier-entry={selected}>
-      <section className="dossier-cover" aria-label="东堤河工卷宗封面">
+      <section className="dossier-cover" data-casefolder="true" aria-label="东堤河工卷宗封面">
+        <div className="dossier-binding" aria-hidden="true"><i /><i /><b /></div>
         <div className="dossier-spine"><span>河工字</span><b>001</b></div>
         <div className="dossier-cover-body">
           <span className="eyebrow">永济县署 / 河工卷宗</span>
-          <h3>东堤<br />渗水案</h3>
+          <div className="dossier-title-slip"><h3>东堤<br />渗水案</h3></div>
           <p>呈文有版本 批答有来去<br />疑点有附纸 末端不预写</p>
-          <div className="dossier-cover-register"><span>在卷四类</span><b>{1 + Number(doneActions.length > 0) + Number(state.comparisons.length > 0) + Number(Boolean(state.outcome))} / 4</b></div>
+          <span className="dossier-cover-note" aria-hidden="true">封面布面 · 待补专图（暂借素面）</span>
+          <div className="dossier-cover-register">
+            <span>在卷四类</span>
+            <span className="dossier-cover-marks" aria-hidden="true">{entries.map(entry => <i key={entry.id} className={entry.available ? 'is-in' : ''}>{entry.index}</i>)}</span>
+            <b>{1 + Number(doneActions.length > 0) + Number(state.comparisons.length > 0) + Number(Boolean(state.outcome))} / 4</b>
+          </div>
           <span className="dossier-cover-seal">县署<br />存卷</span>
-          <div className="dossier-binding" aria-hidden="true"><i /><i /><b /></div>
         </div>
         <footer><Archive size={14} /><span>只作归卷与回查 不新增文书事实</span></footer>
       </section>
@@ -85,7 +93,7 @@ export function DossierFolio({ state, onOpenDocument, onOpenReview, onOpenEviden
 
         <div className="dossier-workspace">
           <section className="dossier-registry" aria-label="卷宗目录">
-            <header><span>卷内目录</span><small>方向键移签</small></header>
+            <header><span>卷内目录</span><span className="dossier-registry-tools"><small>方向键移签</small><button type="button" className="dossier-registry-print" onClick={() => printSurface('dossier-registry')} aria-label="印卷内目录" title="印目录"><Printer size={12} aria-hidden="true" />印目录</button></span></header>
             {entries.map(entry => <button key={entry.id} data-entry-id={entry.id} className={`${selected === entry.id ? 'selected' : ''} ${!entry.available ? 'is-empty' : ''}`} aria-pressed={selected === entry.id} onClick={() => select(entry.id)}>
               <span className="dossier-entry-index">{entry.index}</span>
               <div><small>{entry.type}</small><h4>{entry.title}</h4><p>{entry.ref}</p></div>
@@ -117,12 +125,14 @@ export function DossierFolio({ state, onOpenDocument, onOpenReview, onOpenEviden
                 <div className="dossier-inspector-actions">
                   <button className="primary-button" disabled={!active.available} onClick={openActive}>{selected === 'document' ? '回呈文批阅' : selected === 'review' ? '回上宪来文' : selected === 'evidence' ? '回证据并置' : '回考语行状'}<ArrowRight size={14} /></button>
                   {selected === 'document' && <button className="text-link" onClick={() => onOpenDocument('compare')}>直接回对勘 <ArrowRight size={12} /></button>}
+                  {onOpenBrief && <button className="text-link" onClick={onOpenBrief}>据卷拟稿 · 详文/禀帖/揭 <ArrowRight size={12} /></button>}
                 </div>
               </motion.section>
             </AnimatePresence>
             <footer><LockKeyhole size={12} /><span>目录只读原状态 · 回查不耗时 · 不写存档</span></footer>
           </aside>
         </div>
+        <DocumentKindChain state={state} onOpenBrief={onOpenBrief} onOpenReview={onOpenReview} onOpenDocument={onOpenDocument} />
       </div>
     </div>
   )

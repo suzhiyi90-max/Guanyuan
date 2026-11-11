@@ -4,6 +4,8 @@ import { ArrowRight, BookOpen, Check, Coins, Link2, LockKeyhole, ScrollText } fr
 import { DrawerFrame } from './Overlays'
 import { Portrait } from './Portrait'
 import { RadarChart } from './RadarChart'
+import { GrowthPreview } from './GrowthPreview'
+import { NameCard } from './NameCard'
 import { capabilityKeys, capabilityTitleOf, needKeys, revealDepthOf, sharedHistoryOf, specialtyOf, topNeedsOf } from '../game/people'
 import type { GameState } from '../game/useGame'
 import type { Person } from '../types'
@@ -46,6 +48,7 @@ export function PersonPanel({ person, state, onClose, onAsk }: { person: Person,
   return (
     <DrawerFrame title={`${person.name} · ${person.role}`} eyebrow={person.rank} onClose={onClose} className="person-drawer">
       <div className="drawer-scroll">
+        <NameCard person={person} state={state} />
         <div className="panel-hero">
           <Portrait person={person} silhouette={!known} size={96} />
           <div className="panel-hero-text">
@@ -149,6 +152,7 @@ export function PersonPanel({ person, state, onClose, onAsk }: { person: Person,
           </>
         )}
       </div>
+      <GrowthPreview state={state} variant="slip" person={person} />
       <footer className="drawer-footer">
         <button className="primary-button" onClick={ask}>{asked ? <><Check size={16} />复述口供 · 0 费</> : <>正式问 {person.role} · 1 时段<ArrowRight size={17} /></>}</button>
         <small>{asked ? '重复已得口供不再推进时间，也不会产生新证据。' : '一次社交动作包含同场景的一轮交谈。'}</small>
