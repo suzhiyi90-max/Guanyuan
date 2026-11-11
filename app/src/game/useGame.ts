@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { people } from '../data'
-import { evaluateRiverTask, materialAfterArrival, worldEvents, type TaskOutcome } from './schedule'
+import { type TaskOutcome } from './schedule'
+import { advanceDay, advancePeriod, goalReckoningOf, periods, resolveWorldOptionPure, spendAction, verdictOf } from './engine'
 import type { Clue, Comparison, GameLog, OfficialActionId, Period, RiverPlan, TaskStage, ToastMessage } from '../types'
 import { applyGeneratedOption } from '../narrative/effects'
 import type { GeneratedEvent } from '../narrative/types'
 
-export const periods: Period[] = ['晨', '午', '暮', '夜']
+export { periods, goalReckoningOf, verdictOf }
+export type { ReckoningRow, GoalReckoning, Verdict } from './engine'
 const SAVE_KEY = 'guanyuan.save.v1'
 
 export interface GameState {
@@ -102,80 +104,6 @@ export function nextCheckpointOf(state: GameState): { when: string; label: strin
   return { when: '第十日', label: '汛后验收题销，抢护始末入考语' }
 }
 
-export interface ReckoningRow {
-  tone: '进' | '改' | '缺'
-  text: string
-}
-
-export interface GoalReckoning {
-  goalId: string
-  title: string
-  seal: string
-  rows: ReckoningRow[]
-}
-
-export function goalReckoningOf(state: GameState): GoalReckoning | null {
-  if (!state.goalId) return null
-  const rows: ReckoningRow[] = []
-  const askedCount = state.asked.length
-  const banquet = state.giftEntries[0] ?? ''
-
-  if (state.goalId === 'achievement') {
-    rows.push(state.plan
-      ? { tone: '进', text: `抢护已签押发起 ${state.plan.leaderName}主办 料${state.plan.material}垛夫${state.plan.labor}人 可入考语的实事有了起笔` }
-      : { tone: '缺', text: '东堤仍未有着落 案上只有两版呈文' })
-    rows.push(state.probeKnown
-      ? { tone: '进', text: '闸底淘空三尺已亲见 工法不再只听书办一面之词' }
-      : { tone: '改', text: '闸底尚未亲勘 工法仍须托人之言' })
-    if (state.officialActions.includes('commissioner')) rows.push({ tone: '进', text: '委员覆勘已至 闸底淘空复核在卷 考语里「河工」二字有着落' })
-  }
-
-  if (state.goalId === 'integrity') {
-    rows.push(state.unlocked.includes('E-002')
-      ? { tone: '进', text: '主簿借领状已在手 三百两有了第一个可追的名目' }
-      : { tone: '缺', text: '三百两仍只记作运输损耗 未出名目' })
-    rows.push(state.unlocked.includes('E-003')
-      ? { tone: '进', text: '粮商旧欠票据已到 可与借领状并置 同一笔账渐清' }
-      : { tone: '改', text: '旧欠只听传闻 尚未见到票据' })
-    if (banquet.includes('亲赴')) rows.push({ tone: '改', text: '接风宴亲赴二十两 清名已沾应酬' })
-    if (banquet.includes('闭门查旧册')) rows.push({ tone: '进', text: '桑宅之宴未赴 夜里查的是旧册' })
-    if (state.officialActions.includes('impeach')) rows.push({ tone: '改', text: '揭参已上 清名与刻名并至 这句考语日后会被人翻出来' })
-    if (state.officialActions.includes('suppress')) rows.push({ tone: '改', text: '上宪来文被压进匣底 清静一时 把柄却在人手里' })
-  }
-
-  if (state.goalId === 'network') {
-    rows.push(askedCount > 0
-      ? { tone: '进', text: `已正式接触 ${askedCount} 人 说法各自入台账 人情有了落点` }
-      : { tone: '缺', text: '尚未正式问人 人情仍停在名帖上' })
-    rows.push(state.asked.includes('xiancheng')
-      ? { tone: '进', text: '县丞这条线已接上 会勘与移会有人可托' }
-      : { tone: '改', text: '县丞尚未深谈 会勘仍缺一个肯签押的人' })
-    if (banquet.includes('代往')) rows.push({ tone: '进', text: '县丞代赴桑宅 县衙礼数未失 他记下这份托付' })
-    if (banquet.includes('闭门查旧册')) rows.push({ tone: '改', text: '桑宅面上无光 士绅这条线须另找补偿' })
-    if (state.officialActions.includes('files')) rows.push({ tone: '改', text: '调卷传询之后 书办与主簿各自把你记成了一笔账' })
-  }
-
-  if (state.goalId === 'survival') {
-    rows.push(state.completedActions.includes('doc-remembered')
-      ? { tone: '进', text: '两版对勘已入卷 日后被问起来有据可引' }
-      : { tone: '缺', text: '呈文改动尚未并置 口说无凭' })
-    rows.push(state.plan
-      ? { tone: '进', text: '抢护以会勘与保正具结留痕 责任不独在知县一人' }
-      : { tone: '改', text: '尚未签押 也无会勘留痕 堤若出事无从分说' })
-    if (state.completedActions.includes('ledger-remembered')) rows.push({ tone: '进', text: '三百两只并置不先定罪 账目这一层没有授人以柄' })
-    if (state.officialActions.includes('commissioner')) rows.push({ tone: '进', text: '覆勘留痕已备 上宪之前亦有说辞 不是独自担着' })
-  }
-
-  const meta = {
-    achievement: { title: '政绩', seal: '堤' },
-    integrity: { title: '清名', seal: '清' },
-    network: { title: '关系', seal: '和' },
-    survival: { title: '自保', seal: '慎' },
-  }[state.goalId] ?? { title: '志向', seal: '志' }
-
-  return { goalId: state.goalId, ...meta, rows: rows.slice(0, 3) }
-}
-
 export function useGuanyuanGame() {
   const [state, setState] = useState<GameState>(() => loadSave() ?? initialState)
   const [toast, setToast] = useState<ToastMessage | null>(null)
@@ -204,16 +132,6 @@ export function useGuanyuanGame() {
   const setGoal = useCallback((goalId: string) => {
     setState(current => ({ ...current, goalId }))
   }, [])
-
-  const advancePeriod = (current: GameState): GameState => {
-    if (current.periodIndex < 3) return { ...current, periodIndex: current.periodIndex + 1 }
-    return { ...current, periodIndex: 0, day: Math.min(10, current.day + 1) }
-  }
-
-  const spendAction = (current: GameState, key: string): GameState | null => {
-    if (current.completedActions.includes(key)) return null
-    return advancePeriod({ ...current, completedActions: [...current.completedActions, key] })
-  }
 
   const rememberDocument = useCallback((selected: string[]) => {
     let result: 'ok' | 'need-more' | 'done' = 'ok'
@@ -426,87 +344,11 @@ export function useGuanyuanGame() {
   }, [])
 
   const continueNextDay = useCallback(() => {
-    setState(current => {
-      const day = Math.min(10, current.day + 1)
-      let next: GameState = { ...current, day, periodIndex: 0 }
-
-      if (day === 2 && next.material.transit > 0) {
-        next = { ...next, material: { arrived: next.material.arrived + next.material.transit, transit: 0, unsent: next.material.unsent } }
-      }
-      if (next.plan && !next.outcome && day >= next.plan.day + 3) {
-        next = { ...next, outcome: evaluateRiverTask(next) }
-      }
-
-      const rumors: Record<number, string> = {
-        2: '在途十垛到岸 粮商等着县衙一句「如数」',
-        3: '主簿开始重新誊册 他要先定一个说法',
-        5: '委员到县 先听的是主簿与书办',
-        8: '上游暴雨 东堤昼夜巡守 街上开始搬沙袋',
-        9: '洪峰过境 县里人人自危',
-        10: '验收题销 这一任的第一笔考语将落',
-      }
-      if (rumors[day]) next = { ...next, log: { ...next.log, rumor: rumors[day] } }
-
-      const event = worldEvents.find(e => e.day === day && !current.handledEvents.includes(e.id))
-      if (event) next = { ...next, pendingEvent: event.id }
-      return next
-    })
+    setState(advanceDay)
   }, [])
 
   const resolveWorldOption = useCallback((eventId: string, optionId: string) => {
-    setState(current => {
-      const base: GameState = { ...current, handledEvents: [...current.handledEvents, eventId], pendingEvent: null }
-      if (eventId === 'material-arrival') {
-        if (optionId === 'weigh') {
-          const weighed = materialAfterArrival(base, true)
-          return { ...weighed, log: { ...weighed.log, done: '料场复秤 在途十垛实收八垛半 虚松两垛入账', stuck: '虚松之垛与书办「如数收讫」须对质' } }
-        }
-        return { ...base, log: { ...base.log, rumor: '十垛记作如数收讫 无人再提虚松' } }
-      }
-      if (eventId === 'zhubu-visit') {
-        if (optionId === 'confront') {
-          return {
-            ...base,
-            clues: [...base.clues, { id: `C-${base.clues.length + 1}`, text: '主簿当堂改口：先称「借领与旧欠并非一事」，并置后无言。口径已录，日后再难翻供。', source: 'ledger' as const, refs: ['E-002', 'E-003'], day: base.day }],
-            log: { ...base.log, done: '以借领状与旧欠并置 主簿当堂无言', stuck: '三百两名义已定 谁划去「损耗」一栏仍待上宪' },
-          }
-        }
-        return { ...base, log: { ...base.log, rumor: '主簿重誊旧册 借领状那一页不见了' } }
-      }
-      if (eventId === 'commissioner-arrival') {
-        if (optionId === 'inspect') {
-          if (base.officialActions.includes('commissioner')) {
-            return { ...base, log: { ...base.log, done: '委员二次赴堤 仍认定闸底淘空 抢护合式与否有公论' } }
-          }
-          return {
-            ...base,
-            officialRead: true,
-            officialActions: [...base.officialActions, 'commissioner'],
-            unlocked: [...new Set([...base.unlocked, 'E-008'])],
-            log: { ...base.log, done: '委员赴东堤覆勘 勘报与你探挖相合', stuck: '闸底淘空已复核 抢护合式与否候委员定论', rumor: '委员到县 主簿先把旧册锁进了库房' },
-          }
-        }
-        return { ...base, log: { ...base.log, rumor: '委员只看了县呈 未置一词 定性仍悬着' } }
-      }
-      if (eventId === 'storm') {
-        if (optionId === 'inspect') {
-          return {
-            ...base,
-            clues: [...base.clues, { id: `C-${base.clues.length + 1}`, text: '暴雨现场：水漫旧闸基石，培土之外须有人昼夜巡守；若只看回报，会以为抢护已成。', source: 'river' as const, refs: ['E-008'], day: base.day }],
-            log: { ...base.log, done: '暴雨中亲赴东堤 水漫旧闸基石', stuck: '洪峰提前 抢护合式与否即见分晓' },
-          }
-        }
-        return { ...base, log: { ...base.log, rumor: '你在县衙听回报 现场如何 全看写的人怎样落笔' } }
-      }
-      if (eventId === 'gate-gift') {
-        // 内宅会外溢：门包不入公账，只走风评（log.rumor 喂考语/回声）；禁绝给拒绝的代价（门房怨望失耳目）。
-        if (optionId === 'forbid') {
-          return { ...base, log: { ...base.log, done: '禁绝门包 明令门房不得私收', rumor: '门房被断了辛苦钱 怨望散值 门第清静却少了门下耳目' } }
-        }
-        return { ...base, log: { ...base.log, rumor: '门房照旧收门包 街面传县衙门第难进 求见先问门包' } }
-      }
-      return base
-    })
+    setState(current => resolveWorldOptionPure(current, eventId, optionId))
   }, [])
 
   // FE-157：生成事件走本地效果目录结算。模型只给措辞与 effect id，数值与判定一条不由它写。
