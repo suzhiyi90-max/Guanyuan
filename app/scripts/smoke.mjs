@@ -659,7 +659,7 @@ try {
   await click('.archive-module:has-text("历史与公文")')
   await settle(250)
   await page.waitForFunction(() => (document.querySelector('.archive-title')?.textContent ?? '').includes('历史与公文'), null, { timeout: 4000 })
-  check('档案人物身份保持expert', await page.locator('.person-archive').getAttribute('data-person-id') === 'liangshang', `id=${await page.locator('.person-archive').getAttribute('data-person-id')}`)
+  check('档案人物身份保持liangshang', await page.locator('.person-archive').getAttribute('data-person-id') === 'liangshang', `id=${await page.locator('.person-archive').getAttribute('data-person-id')}`)
   await shot('98-archive-evidence-before-1440')
   const archiveEvidenceLinks = page.locator('.archive-chips .is-link')
   const archiveEvidenceLabels = await archiveEvidenceLinks.allInnerTexts()
@@ -669,7 +669,7 @@ try {
   if (hasE003ArchiveRef) {
     await archiveEvidenceLinks.first().click()
     await page.waitForSelector('.evidence-board', { state: 'visible' })
-    check('人物档案回查沿用原证据板并定位E-008', await page.locator('.evidence-board').getAttribute('data-source-focus') === 'E-003' && await page.locator('[data-evidence-origin-ref="E-003"]').isVisible())
+    check('人物档案回查沿用原证据板并定位E-003', await page.locator('.evidence-board').getAttribute('data-source-focus') === 'E-003' && await page.locator('[data-evidence-origin-ref="E-003"]').isVisible())
     await shot('96-archive-evidence-focus-1440')
     await click('.return-chip')
     await page.waitForSelector('.person-archive', { state: 'visible' })
