@@ -29,7 +29,7 @@ const chainQuestions = [
 ]
 
 export function EvidenceBoard({ state, onClose, onOpenSource, initialRef = null }: Props) {
-  const [expanded, setExpanded] = useState<string | null>(null)
+  const [expanded, setExpanded] = useState<string | null>(initialRef && chain.some(item => item.id === initialRef) ? initialRef : null)
   const [focusedSource, setFocusedSource] = useState<string | null>(initialRef)
   const [activeComparison, setActiveComparison] = useState<string | null>(null)
   const unlockedChain = chain.filter(item => state.unlocked.includes(item.id))
