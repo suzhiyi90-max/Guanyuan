@@ -288,6 +288,13 @@ const gen = (effect: string) => ({ kind: 'generated' as const, event: genEvent(e
   eq('生成结算清pending保持', r.state.pendingEvent, null)
 }
 
+/* G1.7-B：正式委员覆勘命令的解锁效果由命令层原子返回。 */
+{
+  const result = executeCommand(base({ day: 2 }), { kind: 'official', key: 'commissioner' })
+  ok('委员覆勘命令可结算', !result.rejected, result.rejected ?? '')
+  ok('委员覆勘命令解锁E-008', result.state.unlocked.includes('E-008'))
+}
+
 /* G1.7-A：AI 生成事件不得抢占正式 pendingEvent，也不得清空无关待决事件。 */
 {
   const s = base({ day: 2, pendingEvent: 'material-arrival' })
