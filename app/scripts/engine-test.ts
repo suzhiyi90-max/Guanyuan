@@ -287,5 +287,24 @@ const gen = (effect: string) => ({ kind: 'generated' as const, event: genEvent(e
   eq('生成结算清pending保持', r.state.pendingEvent, null)
 }
 
+/* G1.7-A：AI 生成事件不得抢占正式 pendingEvent，也不得清空无关待决事件。 */
+{
+  const s = base({ day: 2, pendingEvent: 'material-arrival' })
+  const ai = executeCommand(s, gen('log-done'))
+  ok('正式事件待决时拒绝AI', ai.rejected === 'world-event-pending', ai.rejected ?? '')
+  ok('拒绝AI保留原state引用', ai.state === s)
+  eq('拒绝AI保留正式pendingEvent', ai.state.pendingEvent, 'material-arrival')
+  const world = executeCommand(s, { kind: 'event', eventId: 'material-arrival', optionId: 'weigh' })
+  ok('AI被拒后正式事件仍可结算', !world.rejected, world.rejected ?? '')
+  eq('正式事件结算后清pending', world.state.pendingEvent, null)
+  ok('正式事件结算记handled', world.state.handledEvents.includes('material-arrival'))
+}
+{
+  const s = base({ day: 2, pendingEvent: null })
+  const ai = executeCommand(s, gen('log-done'))
+  ok('无正式待决时AI正常结算', !ai.rejected, ai.rejected ?? '')
+  eq('AI结算不改pendingEvent', ai.state.pendingEvent, null)
+}
+
 console.log(`\nengine ${pass}/${pass + fail} PASS`)
 process.exit(fail ? 1 : 0)
