@@ -674,6 +674,7 @@ try {
     await shot('96-archive-evidence-focus-1440')
     await click('.return-chip')
     await page.waitForSelector('.person-archive', { state: 'visible' })
+    await settle(350) // 等返回转场完全落定，再截取稳定的原人物档案画面。
     check('E-008回查返回原人物历史子页', (await page.locator('.archive-title').innerText()).includes('历史与公文') && (await page.locator('.archive-crumb b').innerText()).includes('顾逢源'))
     await shot('97-archive-evidence-return-1440')
   } else {
