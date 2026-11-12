@@ -21,6 +21,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
@@ -35,6 +37,9 @@ jobs:
         run: npm run test:engine
       - name: Review index integrity
         run: npm run check:docs
+      - name: Patch whitespace integrity
+        working-directory: .
+        run: git diff --check d6f08f84525e319981684071cf6f6c6cbc64feea...HEAD
       - name: Production build
         run: npm run build
       - name: Start Vite
