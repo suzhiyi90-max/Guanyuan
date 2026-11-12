@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { people } from '../data'
 import { type TaskOutcome } from './schedule'
-import { advanceDay, advancePeriod, goalReckoningOf, periods, resolveWorldOptionPure, spendAction, verdictOf } from './engine'
+import { advanceDay, advancePeriod, goalReckoningOf, officialAvailableOf, periods, spendAction, verdictOf } from './engine'
 import type { Clue, Comparison, GameLog, OfficialActionId, Period, RiverPlan, TaskStage, ToastMessage } from '../types'
-import { applyGeneratedOption } from '../narrative/effects'
+import { executeCommand } from './commands'
 import type { GeneratedEvent } from '../narrative/types'
 
-export { periods, goalReckoningOf, verdictOf }
+export { periods, goalReckoningOf, verdictOf, officialAvailableOf }
 export type { ReckoningRow, GoalReckoning, Verdict } from './engine'
 const SAVE_KEY = 'guanyuan.save.v1'
 
@@ -68,10 +68,6 @@ function loadSave(): GameState | null {
   } catch {
     return null
   }
-}
-
-export function officialAvailableOf(state: GameState): boolean {
-  return state.day >= 2 || state.periodIndex >= 2
 }
 
 export function taskStageOf(state: GameState): TaskStage {
@@ -299,48 +295,19 @@ export function useGuanyuanGame() {
     return accepted
   }, [])
 
+  // FE-161：三入口统一「组装 command → executeCommand」；UI 只提示，不持有结算。
+  // 返回契约 'ok' | 'repeated' 保持不变（rejected 一律映射为 repeated）。
   const runOfficialAction = useCallback((key: OfficialActionId) => {
-    let repeated = false
+    let rejected = false
     setState(current => {
-      if (current.officialActions.includes(key)) {
-        repeated = true
+      const result = executeCommand(current, { kind: 'official', key })
+      if (result.rejected) {
+        rejected = true
         return current
       }
-      const base = { ...current, officialRead: true, officialActions: [...current.officialActions, key] }
-      if (key === 'endorse') {
-        return { ...base, log: { ...current.log, rumor: '知府批「查」字已到县 书办忙着把初稿抽出去' } }
-      }
-      if (key === 'suppress') {
-        return { ...base, log: { ...current.log, rumor: '你把上宪来文压在匣底 幕友看见了 却没说话' } }
-      }
-      if (key === 'citation') {
-        return { ...base, log: { ...current.log, rumor: '幕友把实迹拟成考语 一句话会在册子里留很多年' } }
-      }
-      const spent = spendAction(base, `official-${key}`)
-      if (!spent) {
-        repeated = true
-        return current
-      }
-      if (key === 'commissioner') {
-        return {
-          ...spent,
-          unlocked: [...new Set([...spent.unlocked, 'E-008'])],
-          log: { ...spent.log, done: '请委员覆勘东堤 勘报与你探挖相合', stuck: '闸底淘空已复核 抢护合式与否候委员定论', rumor: '委员到县 主簿先把旧册锁进了库房' },
-        }
-      }
-      if (key === 'files') {
-        return {
-          ...spent,
-          unlocked: [...new Set([...spent.unlocked, 'E-004'])],
-          log: { ...spent.log, done: '调河厅旧修造册并传询书办 旧工料数在册', stuck: '修造册与今次拨料须逐垛对核 书办口径已录', rumor: '书办被传询一次 见人便说「年久册乱」' },
-        }
-      }
-      return {
-        ...spent,
-        log: { ...spent.log, done: '具揭参劾书办失察 稿已封发', stuck: '揭参已上 县衙上下各寻退路', rumor: '有人说你刻 有人说你清 委员尚未表态' },
-      }
+      return result.state
     })
-    return repeated ? 'repeated' : 'ok'
+    return rejected ? 'repeated' : 'ok'
   }, [])
 
   const continueNextDay = useCallback(() => {
@@ -348,16 +315,18 @@ export function useGuanyuanGame() {
   }, [])
 
   const resolveWorldOption = useCallback((eventId: string, optionId: string) => {
-    setState(current => resolveWorldOptionPure(current, eventId, optionId))
+    setState(current => {
+      const result = executeCommand(current, { kind: 'event', eventId, optionId })
+      return result.rejected ? current : result.state
+    })
   }, [])
 
-  // FE-157：生成事件走本地效果目录结算。模型只给措辞与 effect id，数值与判定一条不由它写。
-  // 只追加既有 handledEvents 字段，不新增存档字段、不改存档结构。
+  // FE-157 / FE-161 / FE-162：生成事件走同一命令层。模型只给措辞与 effect id，
+  // 成本与判定全在本地；只借既有 handledEvents 记已决，不新增存档字段、不改存档结构。
   const resolveGeneratedEvent = useCallback((event: GeneratedEvent, optionId: string) => {
     setState(current => {
-      if (current.handledEvents.includes(event.id)) return current
-      const base: GameState = { ...current, handledEvents: [...current.handledEvents, event.id], pendingEvent: null }
-      return applyGeneratedOption(base, event, optionId)
+      const result = executeCommand(current, { kind: 'generated', event, optionId })
+      return result.rejected ? current : result.state
     })
   }, [])
 

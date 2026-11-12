@@ -3,7 +3,9 @@
  * 只断言既有语义，不引入新数值；任何一条红即代表抽取改变了行为。
  */
 import { advanceDay, advancePeriod, goalReckoningOf, resolveWorldOptionPure, spendAction, verdictOf } from '../src/game/engine'
+import { executeCommand } from '../src/game/commands'
 import type { GameState } from '../src/game/useGame'
+import type { GeneratedEvent } from '../src/narrative/types'
 
 let pass = 0
 let fail = 0
@@ -77,6 +79,213 @@ eq('无志向null', goalReckoningOf(base()), null)
 /* 纯函数性 */
 { const s = base({ day: 2 }); const a = advanceDay(s); const b = advanceDay(s); eq('同入同出', a, b); eq('不改入参', s.day, 2) }
 { const s = base(); const a = resolveWorldOptionPure(s, 'gate-gift', 'forbid'); resolveWorldOptionPure(s, 'gate-gift', 'forbid'); eq('结算不改入参', s.handledEvents, []); ok('返回新对象', a !== s) }
+
+/* --- FE-161 统一命令层：入口成本一致性（改前红：AI 入口不耗时段 vs UI 入口 +1） --- */
+
+/** 生成事件夹具：与 schema.ts 产出同形（id 以 ai- 开头、两选项、origin:'ai'）。 */
+function genEvent(effect: string, over: Partial<GeneratedEvent> = {}): GeneratedEvent {
+  return {
+    id: `ai-1-${effect}`, day: 1, title: '夹具事件', scene: '县衙 · 签押房', present: '你 书办', known: '夹具已知',
+    body: '夹具正文，只为结算路径而设，不入任何存档与文案。',
+    options: [
+      { id: 'jia', label: '甲案', hint: '本地口径', effect, result: '模型落笔句·甲', refs: [] },
+      { id: 'yi', label: '乙案', hint: '本地口径', effect: 'log-rumor', result: '模型落笔句·乙', refs: [] },
+    ],
+    origin: 'ai', seed: 1, createdAt: 0, profileId: 'pf-test', mood: '平',
+    ...over,
+  }
+}
+const gen = (effect: string) => ({ kind: 'generated' as const, event: genEvent(effect), optionId: 'jia' })
+
+/* 入口一致性对照：同一 base，AI 入口与 UI 入口执行同一业务，periodIndex 必须一致 */
+{
+  const s = base({ day: 2, plan })
+  const ui = executeCommand(s, { kind: 'official', key: 'commissioner' })
+  const ai = executeCommand(s, gen('official-commissioner'))
+  ok('AI commissioner 无拒绝', !ai.rejected, ai.rejected ?? '')
+  eq('AI/UI commissioner 时段一致', ai.state.periodIndex, ui.state.periodIndex)
+  eq('AI/UI commissioner 业务字段一致', {
+    officialActions: ai.state.officialActions, unlocked: ai.state.unlocked, officialRead: ai.state.officialRead,
+    completedActions: ai.state.completedActions, day: ai.state.day,
+  }, {
+    officialActions: ui.state.officialActions, unlocked: ui.state.unlocked, officialRead: ui.state.officialRead,
+    completedActions: ui.state.completedActions, day: ui.state.day,
+  })
+}
+{
+  const s = base({ day: 2, plan })
+  const ai = executeCommand(s, gen('unlock-e008'))
+  const ui = executeCommand(s, { kind: 'official', key: 'commissioner' })
+  ok('AI unlock 无拒绝', !ai.rejected, ai.rejected ?? '')
+  eq('AI unlock-e008 耗一段', ai.state.periodIndex, s.periodIndex + 1)
+  eq('AI unlock 时段与 UI 一致', ai.state.periodIndex, ui.state.periodIndex)
+  ok('AI unlock 凭据入卷', ai.state.unlocked.includes('E-008'))
+  eq('AI unlock 落笔句入done', ai.state.log.done, '模型落笔句·甲')
+}
+/* 重复执行同一 official 命令：第二次 rejected 且 state 不变（引用原样） */
+{
+  const s = base({ day: 2 })
+  const first = executeCommand(s, { kind: 'official', key: 'commissioner' })
+  const second = executeCommand(first.state, { kind: 'official', key: 'commissioner' })
+  ok('official 重复 rejected', second.rejected === 'repeated', second.rejected ?? '')
+  ok('official 重复 state 原样', second.state === first.state)
+}
+/* AI 入口幂等与跨入口共享 */
+{
+  const s = base({ day: 2, plan })
+  const first = executeCommand(s, gen('unlock-e008'))
+  const second = executeCommand(first.state, gen('unlock-e008'))
+  ok('AI unlock 重复 rejected', Boolean(second.rejected), second.rejected ?? '')
+  ok('AI unlock 重复 state 原样', second.state === first.state)
+}
+{
+  const s = base({ day: 2, plan })
+  const ui = executeCommand(s, { kind: 'official', key: 'commissioner' })
+  const ai = executeCommand(ui.state, gen('official-commissioner'))
+  ok('UI 已行后 AI 同令 rejected', Boolean(ai.rejected), ai.rejected ?? '')
+  ok('跨入口拒绝 state 原样', ai.state === ui.state)
+  const aiFirst = executeCommand(s, gen('official-commissioner'))
+  const uiAfter = executeCommand(aiFirst.state, { kind: 'official', key: 'commissioner' })
+  ok('AI 已行后 UI 同令 rejected', uiAfter.rejected === 'repeated', uiAfter.rejected ?? '')
+}
+/* 前置不满足：无 plan 时 unlock-e008 → rejected */
+{
+  const s = base({ day: 2 })
+  const r = executeCommand(s, gen('unlock-e008'))
+  ok('无 plan unlock rejected', Boolean(r.rejected), r.rejected ?? '')
+  ok('无 plan state 原样', r.state === s)
+}
+/* 越权 effect id → rejected，不静默降级为风闻 */
+{
+  const s = base({ day: 2 })
+  const r = executeCommand(s, gen('give-gold'))
+  ok('越权效果 rejected', r.rejected === 'unknown-effect', r.rejected ?? '')
+  ok('越权 state 原样', r.state === s)
+  eq('越权不静默落风闻', r.state.log.rumor, s.log.rumor)
+}
+/* 不可用效果（officialAvailable 未满足）→ rejected */
+{
+  const s = base({ day: 1, periodIndex: 0 })
+  const r = executeCommand(s, gen('official-commissioner'))
+  ok('未开上宪 AI 批答 rejected', Boolean(r.rejected), r.rejected ?? '')
+  ok('未开上宪 state 原样', r.state === s)
+}
+/* 纯叙述类 cost:none —— 不耗时段，只记 log / clue */
+{
+  const s = base({ day: 2 })
+  for (const effect of ['log-done', 'log-rumor', 'log-stuck', 'clue-document', 'clue-ledger', 'clue-river']) {
+    const r = executeCommand(s, gen(effect))
+    ok(`${effect} 无拒绝`, !r.rejected, r.rejected ?? '')
+    eq(`${effect} 不耗时段`, r.state.periodIndex, s.periodIndex)
+    eq(`${effect} 记已决`, r.state.handledEvents, [`ai-1-${effect}`])
+  }
+  const clue = executeCommand(s, gen('clue-document'))
+  eq('clue 立疑点', clue.state.clues.length, 1)
+  eq('clue 来源', clue.state.clues[0].source, 'document')
+  eq('clue 文本为落笔句', clue.state.clues[0].text, '模型落笔句·甲')
+}
+/* 保行为：批/压/考三法既有即不耗段；调卷/揭参耗段 */
+{
+  const s = base({ day: 2 })
+  for (const key of ['endorse', 'suppress', 'citation'] as const) {
+    const r = executeCommand(s, { kind: 'official', key })
+    eq(`${key} 不耗时段（既有）`, r.state.periodIndex, s.periodIndex)
+  }
+  for (const key of ['files', 'impeach'] as const) {
+    const r = executeCommand(s, { kind: 'official', key })
+    eq(`${key} 耗一段（既有）`, r.state.periodIndex, s.periodIndex + 1)
+  }
+}
+
+/* --- FE-162 事件结算幂等与合法性（改前红：重复结算重复立疑点、无前置校验） --- */
+
+/* 同一世界事件提交两次：第二次 rejected，clues 与 handledEvents 不增 */
+{
+  const s = base({ day: 2, pendingEvent: 'material-arrival' })
+  const first = executeCommand(s, { kind: 'event', eventId: 'material-arrival', optionId: 'weigh' })
+  ok('世界事件首结无拒绝', !first.rejected, first.rejected ?? '')
+  eq('首结立疑点', first.state.clues.length, 1)
+  eq('首结清pending', first.state.pendingEvent, null)
+  eq('首结记handled', first.state.handledEvents, ['material-arrival'])
+  const second = executeCommand(first.state, { kind: 'event', eventId: 'material-arrival', optionId: 'weigh' })
+  ok('重复结算 rejected', Boolean(second.rejected), second.rejected ?? '')
+  eq('重复结算疑点不增', second.state.clues.length, 1)
+  eq('重复结算handled不增', second.state.handledEvents, ['material-arrival'])
+  ok('重复结算 state 原样（原子）', second.state === first.state)
+}
+/* 错误 optionId → rejected，不得落入默认分支 */
+{
+  const s = base({ day: 2, pendingEvent: 'material-arrival' })
+  const r = executeCommand(s, { kind: 'event', eventId: 'material-arrival', optionId: 'nope' })
+  ok('错误option rejected', Boolean(r.rejected), r.rejected ?? '')
+  ok('错误option state 原样', r.state === s)
+}
+/* pendingEvent 不匹配 → rejected */
+{
+  const s = base({ day: 2 })
+  const r = executeCommand(s, { kind: 'event', eventId: 'material-arrival', optionId: 'weigh' })
+  ok('无pending rejected', Boolean(r.rejected), r.rejected ?? '')
+  ok('无pending state 原样', r.state === s)
+  const other = base({ day: 3, pendingEvent: 'zhubu-visit' })
+  const r2 = executeCommand(other, { kind: 'event', eventId: 'material-arrival', optionId: 'weigh' })
+  ok('pending不匹配 rejected', Boolean(r2.rejected), r2.rejected ?? '')
+  ok('pending不匹配 state 原样', r2.state === other)
+}
+/* 未知 eventId → rejected，不得只记 handled */
+{
+  const s = base({ pendingEvent: 'nope' })
+  const r = executeCommand(s, { kind: 'event', eventId: 'nope', optionId: 'x' })
+  ok('未知事件 rejected', Boolean(r.rejected), r.rejected ?? '')
+  ok('未知事件 state 原样', r.state === s)
+}
+/* 世界事件结算不耗时段（既有口径保持） */
+{
+  const s = base({ day: 2, pendingEvent: 'material-arrival' })
+  const r = executeCommand(s, { kind: 'event', eventId: 'material-arrival', optionId: 'weigh' })
+  eq('世界事件不耗时段', r.state.periodIndex, s.periodIndex)
+}
+/* 委员到县事件走命令层：既有语义（得 E-008、不耗段）保持 */
+{
+  const s = base({ day: 5, pendingEvent: 'commissioner-arrival' })
+  const r = executeCommand(s, { kind: 'event', eventId: 'commissioner-arrival', optionId: 'inspect' })
+  ok('委员事件无拒绝', !r.rejected, r.rejected ?? '')
+  ok('委员事件解锁E-008', r.state.unlocked.includes('E-008'))
+  ok('委员事件记official', r.state.officialActions.includes('commissioner'))
+  eq('委员事件不耗时段（既有）', r.state.periodIndex, s.periodIndex)
+}
+/* 生成事件同口径幂等：同事件提交两次，第二次 rejected、clues 与 handledEvents 不增 */
+{
+  const s = base({ day: 2 })
+  const first = executeCommand(s, gen('clue-document'))
+  ok('生成首结无拒绝', !first.rejected, first.rejected ?? '')
+  eq('生成首结立疑点', first.state.clues.length, 1)
+  const second = executeCommand(first.state, gen('clue-document'))
+  ok('生成重复 rejected', Boolean(second.rejected), second.rejected ?? '')
+  eq('生成重复疑点不增', second.state.clues.length, 1)
+  eq('生成重复handled不增', second.state.handledEvents.length, 1)
+  ok('生成重复 state 原样（原子）', second.state === first.state)
+}
+/* 生成事件错误 optionId → rejected */
+{
+  const s = base({ day: 2 })
+  const r = executeCommand(s, { kind: 'generated', event: genEvent('log-done'), optionId: 'nope' })
+  ok('生成错误option rejected', r.rejected === 'unknown-option', r.rejected ?? '')
+  ok('生成错误option state 原样', r.state === s)
+}
+/* 生成事件不得借非 ai- id 绕过 pendingEvent 校验 */
+{
+  const s = base({ day: 2 })
+  const r = executeCommand(s, { kind: 'generated', event: genEvent('log-done', { id: 'material-arrival' }), optionId: 'jia' })
+  ok('非ai前缀 rejected', r.rejected === 'not-generated', r.rejected ?? '')
+  ok('非ai前缀 state 原样', r.state === s)
+}
+/* 生成事件放行「无 pendingEvent」形态 */
+{
+  const s = base({ day: 2, pendingEvent: null })
+  const r = executeCommand(s, gen('log-done'))
+  ok('生成无pending放行', !r.rejected, r.rejected ?? '')
+  eq('生成结算清pending保持', r.state.pendingEvent, null)
+}
 
 console.log(`\nengine ${pass}/${pass + fail} PASS`)
 process.exit(fail ? 1 : 0)

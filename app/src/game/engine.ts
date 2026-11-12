@@ -10,6 +10,11 @@ import { evaluateRiverTask, materialAfterArrival, worldEvents, type TaskOutcome 
 
 export const periods: Period[] = ['晨', '午', '暮', '夜']
 
+/** FE-161：自 useGame 原样移入纯引擎（口径一字未改），命令层与 UI 共用单源，避免另算一套可用性。 */
+export function officialAvailableOf(state: GameState): boolean {
+  return state.day >= 2 || state.periodIndex >= 2
+}
+
 export function advancePeriod(current: GameState): GameState {
   if (current.periodIndex < 3) return { ...current, periodIndex: current.periodIndex + 1 }
   return { ...current, periodIndex: 0, day: Math.min(10, current.day + 1) }
