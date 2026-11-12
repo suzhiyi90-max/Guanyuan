@@ -11,7 +11,7 @@ const check = (name, ok, extra = '') => {
   console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${extra ? ` — ${extra}` : ''}`)
 }
 
-const browser = await chromium.launch({ channel: 'chrome', headless: true })
+const browser = await chromium.launch({ headless: true })
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 })
 page.on('pageerror', err => check(`运行时错误 ${err.message}`, false))
 
@@ -241,6 +241,19 @@ try {
   await click('.collection-open-person')
   await settle(400)
   check('图鉴人物卷沿用原人物回查接口', await page.locator('.side-drawer').isVisible() && (await page.locator('.panel-name').innerText()).includes('顾逢源'))
+  await click('.archive-entry')
+  await page.waitForSelector('.person-archive', { state: 'visible' })
+  check('人物档案打开综合主页', (await page.locator('.archive-title').innerText()).includes('全貌'))
+  await click('.archive-module:has-text("历史与公文")')
+  await settle(250)
+  check('人物档案历史公文子页可达', (await page.locator('.archive-title').innerText()).includes('历史与公文'))
+  const archiveButtons = await page.locator('.person-archive button').allInnerTexts()
+  check('人物档案不提供交谈请托委托等行动入口', !archiveButtons.some(label => /交谈|请托|委托|问话|送礼|升堂/.test(label)))
+  await click('.archive-back')
+  check('人物档案子页返回综合主页', (await page.locator('.archive-title').innerText()).includes('全貌'))
+  await click('.archive-back')
+  await settle(250)
+  check('人物档案退出后保留原人物卷', await page.locator('.archive-entry').isVisible() && (await page.locator('.panel-name').innerText()).includes('顾逢源'))
   await click('.drawer-header .icon-button')
   await settle(300)
   await click('.collection-book-toggle')
