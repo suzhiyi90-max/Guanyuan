@@ -1,14 +1,15 @@
-import { useState, type KeyboardEvent } from 'react'
+import { useEffect, useState, type KeyboardEvent } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import { ArrowRight, BookOpen, Check, Coins, Link2, LockKeyhole, ScrollText } from 'lucide-react'
+import { Archive, ArrowRight, BookOpen, Check, Coins, Link2, LockKeyhole, ScrollText } from 'lucide-react'
 import { DrawerFrame } from './Overlays'
 import { Portrait } from './Portrait'
 import { RadarChart } from './RadarChart'
 import { GrowthPreview } from './GrowthPreview'
 import { NameCard } from './NameCard'
-import { capabilityKeys, capabilityTitleOf, needKeys, revealDepthOf, sharedHistoryOf, specialtyOf, topNeedsOf } from '../game/people'
+import { PersonArchive, type ArchivePage } from './PersonArchive'
+import { capabilityKeys, capabilityTitleOf, needKeys, personPresenceOf, revealDepthOf, sharedHistoryOf, specialtyOf, topNeedsOf } from '../game/people'
 import type { GameState } from '../game/useGame'
-import type { Person } from '../types'
+import type { Person, SceneId } from '../types'
 
 type PersonFolio = 'profile' | 'questions' | 'history'
 
@@ -18,14 +19,31 @@ const folios: Array<{ id: PersonFolio; label: string }> = [
   { id: 'history', label: '行状' },
 ]
 
-export function PersonPanel({ person, state, onClose, onAsk }: { person: Person, state: GameState, onClose: () => void, onAsk: () => void }) {
+export function PersonPanel({ person, state, onClose, onAsk, archivePage, onArchivePage, onOpenPerson, onOpenEvidence, onOpenIntel, onGoScene }: {
+  person: Person, state: GameState, onClose: () => void, onAsk: () => void,
+  // FE-164/165 additive 可选参：全貌档案模式（C-162）。不传时行为与旧版完全一致。
+  archivePage?: ArchivePage | null,
+  onArchivePage?: (page: ArchivePage | null) => void,
+  onOpenPerson?: (id: string) => void,
+  onOpenEvidence?: (ref: string) => void,
+  onOpenIntel?: () => void,
+  onGoScene?: (scene: SceneId) => void,
+}) {
   const [folio, setFolio] = useState<PersonFolio>('profile')
+  const [innerArchive, setInnerArchive] = useState<ArchivePage | null>(null)
+  const archive = archivePage !== undefined ? archivePage : innerArchive
+  const setArchive = (page: ArchivePage | null) => {
+    if (onArchivePage) onArchivePage(page)
+    else setInnerArchive(page)
+  }
+  useEffect(() => { setInnerArchive(null) }, [person.id])
   const reduceMotion = useReducedMotion()
   const depth = revealDepthOf(person.id, state)
   const known = depth !== '闻名'
   const asked = state.asked.includes(person.id)
   const specialty = specialtyOf(person)
   const history = sharedHistoryOf(person.id, state)
+  const presence = personPresenceOf(state, person.id)
 
   const onFolioKey = (event: KeyboardEvent<HTMLDivElement>) => {
     const current = folios.findIndex(item => item.id === folio)
@@ -59,6 +77,27 @@ export function PersonPanel({ person, state, onClose, onAsk }: { person: Person,
           </div>
         </div>
 
+        <button type="button" className="archive-entry" onClick={() => setArchive('home')}>
+          <Archive size={15} />
+          <span>开全貌档案<small>综合主页 + 深入子页 · 只读 · 不耗时段</small></span>
+          <ArrowRight size={15} />
+        </button>
+
+        {archive && (
+          <PersonArchive
+            person={person}
+            state={state}
+            page={archive}
+            onPage={page => setArchive(page)}
+            onExit={() => setArchive(null)}
+            onOpenPerson={onOpenPerson}
+            onOpenEvidence={onOpenEvidence}
+            onOpenIntel={onOpenIntel}
+          />
+        )}
+
+        {!archive && (
+          <>
         <motion.section className={`contact-route depth-${depth}`} aria-label="与知县的真实接触路径" initial={{ opacity: 0, y: reduceMotion ? 0 : 7 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: reduceMotion ? 0 : .22 }}>
           <header><span><Link2 size={13} />接触路径</span><b>{depth}</b></header>
           {history.length ? <ol>{history.slice(0, 2).map((row, index) => <li key={row}><span>{String(index + 1).padStart(2, '0')}</span><p>{row}</p></li>)}</ol> : <p className="contact-route-empty">尚未正式接触 · 只保留公开名录与闻名记录</p>}
@@ -151,12 +190,25 @@ export function PersonPanel({ person, state, onClose, onAsk }: { person: Person,
             </div>
           </>
         )}
+          </>
+        )}
       </div>
-      <GrowthPreview state={state} variant="slip" person={person} />
-      <footer className="drawer-footer">
-        <button className="primary-button" onClick={ask}>{asked ? <><Check size={16} />复述口供 · 0 费</> : <>正式问 {person.role} · 1 时段<ArrowRight size={17} /></>}</button>
-        <small>{asked ? '重复已得口供不再推进时间，也不会产生新证据。' : '一次社交动作包含同场景的一轮交谈。'}</small>
-      </footer>
+      {!archive && <GrowthPreview state={state} variant="slip" person={person} />}
+      {archive ? (
+        <footer className="drawer-footer archive-footer">
+          <small>档案只读 · 交谈 / 请托 / 委托等互动请回当前场景发起</small>
+          {presence && onGoScene && (
+            <button type="button" className="outline-button" onClick={() => onGoScene(presence.scene)}>
+              回到{presence.scene === 'county' ? '县衙' : presence.scene === 'river' ? '东堤' : '夜书房'} · 只导航不行动
+            </button>
+          )}
+        </footer>
+      ) : (
+        <footer className="drawer-footer">
+          <button className="primary-button" onClick={ask}>{asked ? <><Check size={16} />复述口供 · 0 费</> : <>正式问 {person.role} · 1 时段<ArrowRight size={17} /></>}</button>
+          <small>{asked ? '重复已得口供不再推进时间，也不会产生新证据。' : '一次社交动作包含同场景的一轮交谈。'}</small>
+        </footer>
+      )}
     </DrawerFrame>
   )
 }

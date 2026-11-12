@@ -9,6 +9,7 @@ import { SettlementScene } from './components/SettlementScene'
 import { DocumentWorkspace } from './components/DocumentWorkspace'
 import { BanquetModal, DaySummary, DrawerFrame, GoalPrologue, IntelligenceDrawer, PlanDrawer } from './components/Overlays'
 import { PersonPanel } from './components/PersonPanel'
+import type { ArchivePage } from './components/PersonArchive'
 import { LedgerSection, LifeSection, PeopleSection, TodayAside } from './components/Sections'
 import { AffairsSection } from './components/AffairsSection'
 import { EvidenceBoard } from './components/EvidenceBoard'
@@ -115,6 +116,8 @@ export default function App() {
   const [selectedCompare, setSelectedCompare] = useState<string[]>([])
   const [selectedLedger, setSelectedLedger] = useState<string[]>([])
   const [selectedPersonId, setSelectedPersonId] = useState('expert')
+  // FE-164/165：全貌档案页状态 lifted 到 App，回跳（captureSpot/returnToSpot）回来时不丢子页上下文。
+  const [personArchive, setPersonArchive] = useState<ArchivePage | null>(null)
   const [atlasEntry, setAtlasEntry] = useState<{ view: AtlasView, location: CityLocationId, node?: string, streetId?: StreetStationId }>({ view: 'map', location: 'county' })
   const [locationScene, setLocationScene] = useState<LocationSceneId>('ferry')
   const [ruleFocus, setRuleFocus] = useState<string | undefined>(undefined)
@@ -362,6 +365,7 @@ export default function App() {
 
   const openPerson = (id: string) => {
     setSelectedPersonId(id)
+    setPersonArchive(null)
     setOverlay('person')
   }
 
@@ -764,7 +768,7 @@ export default function App() {
         {overlay === 'intelligence' && <IntelligenceDrawer key="intel" clues={state.clues} asked={state.asked} onClose={() => setOverlay(null)} onOpenSource={openSource} onOpenEvidence={() => setOverlay('evidence')} state={state} readAcrossJump={readAcrossJump} onOpenLastReview={focus => openDocumentAt(focus, 'intel')} onOpenRumor={openRumorTarget} reviewOrigin={currentOrigin ?? undefined} onBackReviewOrigin={backToReviewOrigin} />}
         {overlay === 'evidence' && <EvidenceBoard key="evidence" state={state} onClose={() => setOverlay(null)} onOpenSource={openSource} />}
         {overlay === 'banquet' && <BanquetModal key="banquet" period={period} onClose={() => setOverlay(null)} onChoose={handleBanquet} />}
-        {overlay === 'person' && <PersonPanel key="person" person={selectedPerson} state={state} onClose={() => setOverlay(null)} onAsk={handleAsk} />}
+        {overlay === 'person' && <PersonPanel key="person" person={selectedPerson} state={state} onClose={() => setOverlay(null)} onAsk={handleAsk} archivePage={personArchive} onArchivePage={setPersonArchive} onOpenPerson={id => { setSelectedPersonId(id); setPersonArchive('home') }} onOpenEvidence={ref => { setReturnSpot(captureSpot('人物档案', `${selectedPerson.name} · 历史与公文 · ${ref}`)); setOverlay('evidence'); focusOn('evidence-chain') }} onOpenIntel={() => { setReturnSpot(captureSpot('人物档案', `${selectedPerson.name} · 全貌档案`)); setOverlay('intelligence'); focusOn('intel-drawer') }} onGoScene={scene => { setOverlay(null); setActiveSection('today'); changeScene(scene) }} />}
         {overlay === 'review' && <OfficialReview key="review" state={state} onClose={() => setOverlay(null)} onAction={handleOfficial} />}
         {overlay === 'world' && currentEvent && <WorldEventCard key={`world-${currentEvent.id}`} event={currentEvent} onChoose={chooseEventOption} onLater={() => { narrator.dismiss(); setOverlay(null) }} currentDay={state.day} onLocateDay={locateWorldDay} generated={Boolean(generatedEvent && currentEvent.id === generatedEvent.id)} optionNotes={generatedNotes} />}
         {overlay === 'world' && !currentEvent && <NarrationCard key="narration" run={narrator.run} ready={narrator.ready} intent={narrationIntent} onIntent={setNarrationIntent} onAwait={() => narrator.awaitInk(narrationIntent)} onSkip={narrator.skip} onCancel={() => { narrator.cancel(); setOverlay(null) }} configSlot={<NarratorConfig defaultOpen={!narrator.ready} />} />}

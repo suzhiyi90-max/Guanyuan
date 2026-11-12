@@ -1,5 +1,8 @@
 import type { GameState } from './useGame'
-import type { Person, RevealDepth } from '../types'
+import type { Person, RevealDepth, SceneId } from '../types'
+import { people } from '../data'
+import { presentPeopleOf } from './presence'
+import { worldEvents } from './schedule'
 
 export const capabilityKeys = ['行政', '财政', '工程', '司法', '交涉'] as const
 export const needKeys = ['仕途', '家族', '财富', '名声', '安全', '安逸'] as const
@@ -57,4 +60,38 @@ export function sharedHistoryOf(personId: string, state: GameState): string[] {
   if ((personId === 'liangshang' || personId === 'gentry') && state.giftEntries.some(e => e.includes('亲赴'))) rows.push('桑宅接风宴上 旧欠与坟图都摆到了桌面')
   if (state.asked.includes(personId)) rows.push('你正式问了他一回 说法已入情报台账')
   return rows.slice(0, 3)
+}
+
+/* --- FE-164 人物全貌档案只读投影（C-162）：不新增事实，只聚合既有权威数据 --- */
+
+const archiveScenes: SceneId[] = ['county', 'river', 'study']
+
+/** 当前时段此人在哪处场景（当值表 × 公开日程）；不在场返回 null。零费读取。 */
+export function personPresenceOf(state: GameState, personId: string): { scene: SceneId; reason: string } | null {
+  const period = (['晨', '午', '暮', '夜'] as const)[state.periodIndex] ?? '晨'
+  for (const scene of archiveScenes) {
+    const hit = presentPeopleOf(state, scene, period).find(item => item.person.id === personId)
+    if (hit) return { scene, reason: hit.reason }
+  }
+  return null
+}
+
+/** 此人相关的既有凭据号（作者已写定的解锁语义）；展示前须按 state.unlocked 过认知闸。 */
+export function personEvidenceIdsOf(personId: string): string[] {
+  const map: Record<string, string[]> = {
+    zhubu: ['E-002'],
+    liangshang: ['E-003'],
+    foreman: ['E-007'],
+    expert: ['E-008'],
+  }
+  return map[personId] ?? []
+}
+
+/** 公开日程里与此人相关的安排（今日与未来）；只读作者写定的 worldEvents.present，不推断私下行踪。 */
+export function personScheduleOf(state: GameState, personId: string): Array<{ day: number; title: string; when: '今日' | '未来' }> {
+  const person = people.find(item => item.id === personId)
+  if (!person) return []
+  return worldEvents
+    .filter(event => event.day >= state.day && (event.present.includes(person.name) || event.present.includes(person.role)))
+    .map(event => ({ day: event.day, title: event.title, when: event.day === state.day ? '今日' as const : '未来' as const }))
 }

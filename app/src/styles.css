@@ -6757,3 +6757,96 @@ html[data-read-motion='reduce'] .narration-inkline { mask-image: none; }
   .verdict-band { border: 1px solid #999; background: #fff; }
   .verdict-restart { display: none; }
 }
+
+/* --- FE-164 / FE-165 人物全貌档案（C-162 · 界面 · 投影 / 只读）---
+   明亮官府档案美学：米白宣纸底、灰青淡墨辅、朱砂只作印记与已确认；
+   肖像 / 身份 / 关键数据均衡；主页总览 + 子页深入；窄屏纵向分组不缩密集表格。 */
+.archive-entry { display: flex; align-items: center; gap: 10px; width: calc(100% - 50px); margin: 14px 25px 0; padding: 10px 14px; text-align: left; background: var(--paper-1); border: 1px solid #d0c2ac; border-left: 2px solid var(--cinnabar); color: var(--ink-1); cursor: pointer; transition: border-color .16s, transform .16s; }
+.archive-entry:hover { border-color: var(--cinnabar); transform: translateY(-1px); }
+.archive-entry > span { flex: 1; display: flex; flex-direction: column; gap: 2px; font-size: 12px; font-weight: 700; }
+.archive-entry small { font-size: 9px; font-weight: 400; color: var(--ink-3); letter-spacing: .04em; }
+.archive-entry:focus-visible, .archive-back:focus-visible, .archive-module:focus-visible, .archive-node:focus-visible, .archive-chip.is-link:focus-visible { outline: 2px solid var(--cinnabar); outline-offset: 2px; }
+.person-archive { padding: 16px 25px 22px; }
+.archive-head { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; padding-bottom: 10px; border-bottom: 1px solid #d8cab2; }
+.archive-back { display: inline-flex; align-items: center; gap: 5px; border: 1px solid #c9b99d; background: var(--paper-0); color: var(--ink-2); font-size: 10.5px; padding: 5px 10px; cursor: pointer; }
+.archive-back:hover { color: var(--cinnabar); border-color: var(--cinnabar); }
+.archive-crumb { display: inline-flex; align-items: center; gap: 6px; font-size: 10px; color: var(--ink-3); }
+.archive-crumb span { display: inline-flex; align-items: center; gap: 4px; }
+.archive-crumb b { color: var(--ink-1); font-size: 11px; }
+.archive-crumb i { font-style: normal; color: #c9b99d; }
+.archive-readonly { margin-left: auto; font-size: 9px; color: var(--ink-3); letter-spacing: .05em; }
+.archive-title { margin: 14px 0 12px; font-size: 17px; font-weight: 800; color: var(--ink-0); letter-spacing: .02em; border-left: 3px solid var(--cinnabar); padding-left: 10px; }
+.archive-title:focus { outline: none; }
+.archive-title small { display: block; margin-top: 3px; font-size: 10px; font-weight: 400; color: var(--ink-3); }
+.archive-identity { display: flex; gap: 16px; align-items: flex-start; padding: 14px; background: var(--paper-0); border: 1px solid #ddd0b8; }
+.archive-identity .portrait, .archive-identity img { flex: 0 0 auto; border: 1px solid #c9b99d; background: var(--paper-1); }
+.archive-identity-text { flex: 1; min-width: 0; }
+.archive-name { font-size: 19px; font-weight: 800; color: var(--ink-0); }
+.archive-name small { margin-left: 8px; font-size: 10.5px; font-weight: 400; color: var(--ink-3); }
+.archive-tags { display: flex; flex-wrap: wrap; gap: 6px; margin: 7px 0 8px; align-items: center; }
+.archive-origin { font-size: 10.5px; color: var(--ink-2); line-height: 1.6; }
+.archive-brief { margin-top: 6px; font-size: 11px; color: var(--ink-1); line-height: 1.65; border-top: 1px dashed #d8cab2; padding-top: 6px; }
+.archive-presence { margin-top: 4px; font-size: 9.5px; color: var(--indigo); }
+.archive-chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border: 1px solid #c9b99d; background: var(--paper-0); font-size: 9.5px; color: var(--ink-2); }
+.archive-chip.is-on { border-color: #a33a2b88; color: var(--cinnabar-dark); background: #a33a2b0d; }
+.archive-chip.is-link { cursor: pointer; }
+.archive-chip.is-link:hover { border-color: var(--cinnabar); color: var(--cinnabar); }
+.archive-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.archive-questions { margin: 14px 0; padding: 12px 14px; background: var(--paper-0); border: 1px solid #ddd0b8; border-top: 2px solid var(--cinnabar); }
+.archive-questions h3 { font-size: 12px; font-weight: 800; color: var(--ink-0); margin-bottom: 8px; }
+.archive-questions h3 small { margin-left: 6px; font-size: 9px; font-weight: 400; color: var(--ink-3); }
+.archive-questions article { display: flex; gap: 10px; padding: 7px 0; border-top: 1px dashed #e2d6bf; }
+.archive-questions article:first-of-type { border-top: 0; }
+.archive-questions h4 { font-size: 11px; color: var(--ink-1); }
+.archive-questions h4 span { margin-left: 6px; font-weight: 400; color: var(--ink-2); }
+.archive-questions p { margin-top: 3px; font-size: 10px; color: var(--ink-2); line-height: 1.6; }
+.archive-questions p b { margin-right: 5px; color: var(--cinnabar); font-weight: 700; }
+.archive-questions footer { margin-top: 8px; font-size: 9.5px; color: var(--ink-3); line-height: 1.6; border-top: 1px dashed #e2d6bf; padding-top: 6px; }
+.archive-questions.is-compact article { padding: 5px 0; }
+.archive-veiled { margin: 14px 0; }
+.archive-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; }
+.archive-module { text-align: left; padding: 10px 12px; background: var(--paper-0); border: 1px solid #ddd0b8; border-left: 2px solid #c9b99d; cursor: pointer; transition: border-color .16s, transform .16s; }
+.archive-module:hover { border-left-color: var(--cinnabar); transform: translateY(-1px); }
+.archive-module header { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 11px; font-weight: 700; color: var(--ink-1); }
+.archive-module header span { display: inline-flex; align-items: center; gap: 6px; }
+.archive-module header > svg { color: var(--ink-3); }
+.archive-module p { margin-top: 5px; font-size: 9.5px; color: var(--ink-2); line-height: 1.55; }
+.archive-module p.is-gated { color: var(--ink-3); }
+.archive-page h3 { margin: 16px 0 6px; font-size: 12px; font-weight: 800; color: var(--ink-0); }
+.archive-page h3 small { margin-left: 6px; font-size: 9px; font-weight: 400; color: var(--ink-3); }
+.archive-facts { display: grid; grid-template-columns: 1fr 1fr; gap: 0 18px; }
+.archive-facts > div { padding: 7px 0; border-bottom: 1px dashed #e2d6bf; }
+.archive-facts dt { font-size: 9px; color: var(--ink-3); letter-spacing: .05em; }
+.archive-facts dd { margin-top: 3px; font-size: 11px; color: var(--ink-1); line-height: 1.55; }
+.archive-timeline { list-style: none; margin: 6px 0; }
+.archive-timeline li { display: flex; gap: 9px; padding: 6px 0; border-top: 1px dashed #e2d6bf; }
+.archive-timeline li:first-child { border-top: 0; }
+.archive-timeline span { flex: 0 0 auto; min-width: 26px; height: 18px; display: grid; place-items: center; border: 1px solid #c9b99d; background: var(--paper-1); font-size: 8.5px; color: var(--cinnabar-dark); }
+.archive-timeline p { font-size: 10.5px; color: var(--ink-1); line-height: 1.6; }
+.archive-empty { display: flex; align-items: center; gap: 7px; margin: 8px 0; padding: 9px 11px; background: var(--paper-1); border: 1px dashed #c9b99d; font-size: 10px; color: var(--ink-3); line-height: 1.6; }
+.archive-empty svg { flex: 0 0 auto; }
+.archive-note { margin: 6px 0; font-size: 10px; color: var(--ink-2); line-height: 1.7; }
+.archive-note svg { vertical-align: -2px; margin-right: 4px; color: var(--cinnabar); }
+.archive-desire { margin: 6px 0; padding-left: 9px; border-left: 2px solid var(--cinnabar); font-size: 11.5px; color: var(--ink-1); line-height: 1.7; }
+.archive-tokens { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.archive-nodes { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.archive-node { display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px; border: 1px solid #c9b99d; background: var(--paper-0); font-size: 10px; color: var(--ink-2); }
+.archive-node.is-self { border-color: #2e475688; color: var(--indigo); background: #2e47560d; }
+.archive-node.is-current { border-color: #a33a2b88; color: var(--cinnabar-dark); background: #a33a2b0d; font-weight: 700; }
+button.archive-node { cursor: pointer; }
+button.archive-node:hover { border-color: var(--cinnabar); color: var(--cinnabar); }
+.archive-jumps { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 12px; }
+.archive-footer { display: flex; flex-direction: column; gap: 8px; }
+.archive-footer .outline-button { width: 100%; }
+@media (max-width: 700px) {
+  .archive-entry { width: calc(100% - 32px); margin: 12px 16px 0; }
+  .person-archive { padding: 14px 16px 18px; }
+  .archive-grid { grid-template-columns: 1fr; }
+  .archive-facts { grid-template-columns: 1fr; }
+  .archive-identity { flex-direction: column; }
+  .archive-identity-text { flex: 0 0 auto; width: 100%; }
+  .archive-readonly { margin-left: 0; width: 100%; }
+}
+@media print {
+  .person-archive, .archive-entry { display: none; }
+}
