@@ -347,8 +347,9 @@ export default function App() {
       impeach: ['揭参已封发', '清名与刻名并至 县里再无回旋'],
       suppress: ['来文已压下', '幕友已经看见 把柄留在人手里'],
     }
-    if (game.runOfficialAction(id) === 'repeated') {
-      notify('此动作已行', '不重复耗时段 批语与动作已在卷中')
+    const result = game.runOfficialAction(id)
+    if (result.rejected) {
+      notify(result.rejected === 'repeated' ? '此动作已行' : '动作未执行', result.rejected === 'repeated' ? '不重复耗时段 批语与动作已在卷中' : `命令层拒绝（${result.rejected}），状态未改变。`)
       return
     }
     notify(...messages[id])
@@ -582,9 +583,9 @@ export default function App() {
   const narrator = useNarrator({ state, scene, period, officialAvailable })
   const [narrationIntent, setNarrationIntent] = useState<NarrationIntent>('旁白')
   const generatedEvent = narrator.run.event
-  const currentEvent: WorldEvent | GeneratedEvent | null = generatedEvent
-    ?? worldEvents.find(e => e.id === state.pendingEvent)
-    ?? (state.pendingEvent ? findGeneratedEvent(state.pendingEvent) : null)
+  // 正式世界事件优先；只在没有任何 pendingEvent 时展示本轮新生成事件。
+  const currentEvent: WorldEvent | GeneratedEvent | null = worldEvents.find(e => e.id === state.pendingEvent)
+    ?? (state.pendingEvent ? findGeneratedEvent(state.pendingEvent) : generatedEvent)
 
   const openNarration = () => {
     narrator.dismiss()
@@ -597,12 +598,26 @@ export default function App() {
 
   const chooseEventOption = (optionId: string) => {
     if (!currentEvent) return
-    if (generatedEvent && currentEvent.id === generatedEvent.id) {
-      game.resolveGeneratedEvent(generatedEvent, optionId)
-      narrator.dismiss()
-    } else {
-      game.resolveWorldOption(currentEvent.id, optionId)
+    const isGenerated = Boolean(generatedEvent && currentEvent.id === generatedEvent.id)
+    const result = isGenerated
+      ? game.resolveGeneratedEvent(generatedEvent!, optionId)
+      : game.resolveWorldOption(currentEvent.id, optionId)
+    if (result.rejected) {
+      const reasons: Record<string, string> = {
+        'world-event-pending': '正式世界事件尚待处理，生成事件不能抢占。',
+        'already-handled': '此事件已经结算，不会重复记账。',
+        'not-pending': '此事件已不在待决队列，请重新查看当前案头。',
+        'unknown-option': '所选方案无效，事件没有结算。',
+        'effect-unavailable': '当前条件不满足，事件没有结算。',
+        'unknown-effect': '该效果未登记，事件没有结算。',
+        'not-generated': '生成事件来源校验失败，事件没有结算。',
+        'unknown-event': '未找到对应世界事件，事件没有结算。',
+        'repeated': '此动作已经执行，不会重复结算。',
+      }
+      notify('事件未结算', reasons[result.rejected] ?? `结算被拒绝（${result.rejected}），状态未改变。`)
+      return
     }
+    if (isGenerated) narrator.dismiss()
     setOverlay(null)
     notify('事已记下', `${currentEvent.title} · 选择已入卷 世界继续按日程走`)
   }
