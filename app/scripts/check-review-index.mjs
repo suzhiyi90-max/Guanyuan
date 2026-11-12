@@ -7,9 +7,9 @@ const indexPath = resolve(root, '00-索引.md')
 const index = readFileSync(indexPath, 'utf8')
 const failures = []
 
-if (/\\.m\\d+(?=[\\s)`])/u.test(index)) failures.push('索引仍含 .m数字 伪路径')
+if (/\.m\d+/u.test(index)) failures.push('索引仍含 .m数字 伪路径')
 
-const rows = [...index.matchAll(/^\\| \`([^\\`]+)\`\\]\\(([^)]+)\\) \\|.*\\| (\\d+) \\|$/gm)]
+const rows = [...index.matchAll(/^\| \[`([^`]+)`\]\(([^)]+)\) \|.*\| (\d+) \|$/gm)]
 if (rows.length !== 21) failures.push(`文件地图应有 21 项，实际解析到 ${rows.length} 项`)
 
 for (const [, label, target, declared] of rows) {
@@ -20,7 +20,7 @@ for (const [, label, target, declared] of rows) {
     continue
   }
   const content = readFileSync(file, 'utf8')
-  const actual = (content.match(/\\n/g) ?? []).length
+  const actual = (content.match(/\n/g) ?? []).length
   if (actual !== Number(declared)) failures.push(`行数不一致：${label} 声明 ${declared}，实际 ${actual}`)
 }
 
