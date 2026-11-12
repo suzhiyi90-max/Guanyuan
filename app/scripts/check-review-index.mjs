@@ -9,7 +9,7 @@ const failures = []
 
 if (/\.m\d+/u.test(index)) failures.push('索引仍含 .m数字 伪路径')
 
-const links = [...index.matchAll(/\\]\\(([^)]+)\\)/g)].map(match => match[1])
+const links = [...index.matchAll(/\]\(([^)]+)\)/g)].map(match => match[1])
 for (const target of links) {
   const relative = target.split('#')[0]
   if (!relative || /^(?:https?:|mailto:)/u.test(relative)) continue
