@@ -666,8 +666,8 @@ try {
   const archiveEvidenceLabels = await archiveEvidenceLinks.allInnerTexts()
   const archiveHistoryText = await page.locator('.person-archive').innerText()
   const hasE008ArchiveRef = archiveEvidenceLabels.length === 1 && archiveEvidenceLabels[0].includes('E-008')
-  check('人物档案只列已解锁E-008凭据', hasE003ArchiveRef, `person=顾逢源; links=${JSON.stringify(archiveEvidenceLabels)}; history=${archiveHistoryText.slice(-240)}`)
-  if (hasE003ArchiveRef) {
+  check('人物档案只列已解锁E-008凭据', hasE008ArchiveRef, `person=顾逢源; links=${JSON.stringify(archiveEvidenceLabels)}; history=${archiveHistoryText.slice(-240)}`)
+  if (hasE008ArchiveRef) {
     await archiveEvidenceLinks.first().click()
     await page.waitForSelector('.evidence-board', { state: 'visible' })
     check('人物档案回查沿用原证据板并定位E-008', await page.locator('.evidence-board').getAttribute('data-source-focus') === 'E-008' && await page.locator('[data-evidence-origin-ref="E-008"]').isVisible())
