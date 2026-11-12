@@ -306,6 +306,13 @@ const gen = (effect: string) => ({ kind: 'generated' as const, event: genEvent(e
   ok('无正式待决时AI正常结算', !ai.rejected, ai.rejected ?? '')
   eq('AI结算不改pendingEvent', ai.state.pendingEvent, null)
 }
+{
+  const event = gen('log-done')
+  const s = base({ day: 2, pendingEvent: event.id })
+  const ai = executeCommand(s, { kind: 'generated', event, optionId: 'apply' })
+  ok('兼容同id旧式AI待决事件', !ai.rejected, ai.rejected ?? '')
+  eq('同id AI结算清理自身旧pending', ai.state.pendingEvent, null)
+}
 
 /* G1.7-D：人物档案只读投影、认知闸与公开日程边界。 */
 {
