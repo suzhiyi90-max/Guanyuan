@@ -948,4 +948,4 @@
 - 统一命令入口返回 `CommandResult`，修复 updater 外部变量副作用与 UI 假成功反馈。
 - 修复前端索引 21 项路径与行数，新增自动索引核验脚本。
 - 补充人物档案认知 / 只读投影测试与 Playwright 档案流程断言。
-- 新增 GitHub Actions engine / docs / build / smoke 门禁；最终验收 run `43235456939` 全绿，Playwright smoke 268/268；截图已抽查，回查返回截图的转场等待另作复验修订。
+- 新增 GitHub Actions engine / docs / build / smoke 门禁；最终 HEAD `95d278f` 对应 run `43237069345` 全绿，Playwright smoke 268/268；最终截图已抽查，人物档案回查往返转场完整。
