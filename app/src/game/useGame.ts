@@ -104,17 +104,12 @@ export function useGuanyuanGame() {
   const [state, setState] = useState<GameState>(() => loadSave() ?? initialState)
   const [toast, setToast] = useState<ToastMessage | null>(null)
   const restored = useRef(Boolean(loadSave()))
-  // 命令结算保持同步纯计算：先读取当前快照，成功后再提交；不在 React updater 内写外部变量。
-  const commandStateRef = useRef(state)
-  commandStateRef.current = state
+  // 命令结算在 updater 外基于本次 render 的状态快照同步计算；不在 updater 内写外部变量。
   const commitCommand = useCallback((command: Parameters<typeof executeCommand>[1]) => {
-    const result = executeCommand(commandStateRef.current, command)
-    if (!result.rejected) {
-      commandStateRef.current = result.state
-      setState(result.state)
-    }
+    const result = executeCommand(state, command)
+    if (!result.rejected) setState(result.state)
     return result
-  }, [])
+  }, [state])
 
   useEffect(() => {
     try {
