@@ -122,7 +122,7 @@ export function PersonArchive({ person, state, page, onPage, onExit, onOpenPerso
   )
 
   return (
-    <div className={`person-archive depth-${depth}`}>
+    <div className={`person-archive depth-${depth}`} data-person-id={person.id}>
       <header className="archive-head">
         <button type="button" className="archive-back" onClick={page === 'home' ? onExit : () => onPage('home')}>
           <ArrowLeft size={14} />{page === 'home' ? '返回人物卷' : '回主页'}
