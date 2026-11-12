@@ -598,9 +598,9 @@ export default function App() {
 
   const chooseEventOption = (optionId: string) => {
     if (!currentEvent) return
-    const isGenerated = Boolean(generatedEvent && currentEvent.id === generatedEvent.id)
+    const isGenerated = 'origin' in currentEvent
     const result = isGenerated
-      ? game.resolveGeneratedEvent(generatedEvent!, optionId)
+      ? game.resolveGeneratedEvent(currentEvent as GeneratedEvent, optionId)
       : game.resolveWorldOption(currentEvent.id, optionId)
     if (result.rejected) {
       const reasons: Record<string, string> = {
