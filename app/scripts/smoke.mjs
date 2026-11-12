@@ -249,6 +249,7 @@ try {
   await click('.archive-module:has-text("历史与公文")')
   await settle(250)
   check('人物档案历史公文子页可达', (await page.locator('.archive-title').innerText()).includes('历史与公文'))
+  check('未解锁凭据不进入人物档案', await page.locator('.archive-chips .is-link').count() === 0 && (await page.locator('.person-archive').innerText()).includes('凭据尚未入卷'))
   await shot('91-person-archive-history-1440')
   const archiveButtons = await page.locator('.person-archive button').allInnerTexts()
   check('人物档案不提供交谈请托委托等行动入口', !archiveButtons.some(label => /交谈|请托|委托|问话|送礼|升堂/.test(label)))
