@@ -9,6 +9,13 @@ const failures = []
 
 if (/\.m\d+/u.test(index)) failures.push('索引仍含 .m数字 伪路径')
 
+const links = [...index.matchAll(/\\]\\(([^)]+)\\)/g)].map(match => match[1])
+for (const target of links) {
+  const relative = target.split('#')[0]
+  if (!relative || /^(?:https?:|mailto:)/u.test(relative)) continue
+  if (!existsSync(resolve(root, relative))) failures.push(`链接目标不存在：${target}`)
+}
+
 const rows = [...index.matchAll(/^\| \[`([^`]+)`\]\(([^)]+)\) \|.*\| (\d+) \|$/gm)]
 if (rows.length !== 21) failures.push(`文件地图应有 21 项，实际解析到 ${rows.length} 项`)
 
