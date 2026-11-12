@@ -6,6 +6,7 @@ import { advanceDay, advancePeriod, goalReckoningOf, resolveWorldOptionPure, spe
 import { executeCommand } from '../src/game/commands'
 import type { GameState } from '../src/game/useGame'
 import type { GeneratedEvent } from '../src/narrative/types'
+import { personEvidenceIdsOf, personPresenceOf, personScheduleOf, revealDepthOf } from '../src/game/people'
 
 let pass = 0
 let fail = 0
@@ -304,6 +305,23 @@ const gen = (effect: string) => ({ kind: 'generated' as const, event: genEvent(e
   const ai = executeCommand(s, gen('log-done'))
   ok('无正式待决时AI正常结算', !ai.rejected, ai.rejected ?? '')
   eq('AI结算不改pendingEvent', ai.state.pendingEvent, null)
+}
+
+/* G1.7-D：人物档案只读投影、认知闸与公开日程边界。 */
+{
+  const s = base()
+  const before = JSON.stringify(s)
+  eq('档案证据映射只返回既有凭据', personEvidenceIdsOf('expert'), ['E-008'])
+  eq('未知人物无凭据', personEvidenceIdsOf('unknown-person'), [])
+  eq('未接触人物保持闻名', revealDepthOf('expert', s), '闻名')
+  eq('正式问话只提升为相识', revealDepthOf('expert', base({ asked: ['expert'] })), '相识')
+  const schedule = personScheduleOf(s, 'expert')
+  ok('公开日程不泄露过去安排', schedule.every(row => row.day >= s.day))
+  ok('公开日程只含公开投影字段', schedule.every(row => Object.keys(row).sort().join(',') === 'day,title,when'))
+  eq('未知人物没有公开日程', personScheduleOf(s, 'unknown-person'), [])
+  const presence = personPresenceOf(s, 'expert')
+  ok('在场投影只返回允许场景或空', presence === null || ['county', 'river', 'study'].includes(presence.scene))
+  eq('档案读取不修改游戏状态', JSON.stringify(s), before)
 }
 
 console.log(`\nengine ${pass}/${pass + fail} PASS`)
