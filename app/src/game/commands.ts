@@ -91,7 +91,7 @@ function executeGenerated(state: GameState, event: GeneratedEvent, optionId: str
   // 生成事件 id 以 ai- 开头、不经 pendingEvent 字段；非 ai- id 不得借本入口绕过世界事件校验。
   if (!event.id.startsWith('ai-')) return { state, rejected: 'not-generated' }
   // 正式世界事件具有更高优先级；待决期间不允许 AI 事件抢占或改写 pendingEvent。
-  if (state.pendingEvent) return { state, rejected: 'world-event-pending' }
+  if (state.pendingEvent && state.pendingEvent !== event.id) return { state, rejected: 'world-event-pending' }
   // 幂等：同一 eventId 不可二次结算（与 UI 世界事件同口径）。
   if (state.handledEvents.includes(event.id)) return { state, rejected: 'already-handled' }
   const option = event.options.find(item => item.id === optionId)
@@ -100,7 +100,7 @@ function executeGenerated(state: GameState, event: GeneratedEvent, optionId: str
   // 越权 / 未登记效果一律拒绝，不静默降级为风闻（FE-161）。
   if (!effect) return { state, rejected: 'unknown-effect' }
   if (!effect.available(state, officialAvailableOf(state))) return { state, rejected: 'effect-unavailable' }
-  let base: GameState = { ...state, handledEvents: [...state.handledEvents, event.id] }
+  let base: GameState = { ...state, handledEvents: [...state.handledEvents, event.id], pendingEvent: state.pendingEvent === event.id ? null : state.pendingEvent }
   // 成本：正式业务行动耗一个时段，与 UI 入口一致；幂等键 official 类与 UI 共享。
   if (effect.cost === 'action') {
     const spent = spendAction(base, effect.costKey ?? `effect-${effect.id}`)
