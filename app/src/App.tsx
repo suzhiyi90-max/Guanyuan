@@ -491,6 +491,7 @@ export default function App() {
   const returnToSpot = (spot: { detail: string; overlay: OverlayId | null; section: SectionId; scrollTop: number } | null) => {
     if (!spot) return
     setReturnSpot(null)
+    if (spot.overlay !== 'evidence') setEvidenceFocus(null)
     setOverlay(spot.overlay)
     setActiveSection(spot.section)
     restoreScrollTo(spot.scrollTop)
