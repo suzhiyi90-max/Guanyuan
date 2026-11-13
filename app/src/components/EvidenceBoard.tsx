@@ -11,6 +11,7 @@ interface Props {
   state: GameState
   onClose: () => void
   onOpenSource: (source: ClueSource, refs?: string[]) => void
+  initialRef?: string | null
 }
 
 const chain = [
@@ -27,9 +28,9 @@ const chainQuestions = [
   { needs: ['E-004', 'E-008'], text: '修造册与委员勘报相合 则书办「毋庸拆验」不只是判断 是失察 谁担这个失察？' },
 ]
 
-export function EvidenceBoard({ state, onClose, onOpenSource }: Props) {
-  const [expanded, setExpanded] = useState<string | null>(null)
-  const [focusedSource, setFocusedSource] = useState<string | null>(null)
+export function EvidenceBoard({ state, onClose, onOpenSource, initialRef = null }: Props) {
+  const [expanded, setExpanded] = useState<string | null>(initialRef && chain.some(item => item.id === initialRef) ? initialRef : null)
+  const [focusedSource, setFocusedSource] = useState<string | null>(initialRef)
   const [activeComparison, setActiveComparison] = useState<string | null>(null)
   const unlockedChain = chain.filter(item => state.unlocked.includes(item.id))
   const visibleQuestions = chainQuestions.filter(q => q.needs.every(id => state.unlocked.includes(id)))
@@ -40,7 +41,7 @@ export function EvidenceBoard({ state, onClose, onOpenSource }: Props) {
   const documentComparisons = state.comparisons.filter(item => item.source === 'document')
   const ledgerComparisons = state.comparisons.filter(item => item.source === 'ledger')
   const relatedComparisons = activeSource ? state.comparisons.filter(item => item.refs.includes(activeSource)) : []
-  const sourcePath = activeComparisonItem?.source ?? (relatedComparisons[0]?.source || (activeSource ? 'ledger' : null))
+  const sourcePath = activeComparisonItem?.source ?? (relatedComparisons[0]?.source || (activeSource && chain.some(item => item.id === activeSource) ? 'ledger' : null))
   const reduceMotion = useReducedMotion()
   const dialogRef = useOverlayDialog<HTMLDivElement>()
 
@@ -71,6 +72,7 @@ export function EvidenceBoard({ state, onClose, onOpenSource }: Props) {
         </header>
 
         <div className="evidence-scroll">
+          {initialRef && <p className="eyebrow" data-evidence-origin-ref={initialRef}>人物档案回查 · {initialRef} · {state.unlocked.includes(initialRef) ? '已取得' : '尚未解锁'}</p>}
           <div className="chain-strip" data-focus-id="evidence-chain" onKeyDown={handleChainKey} aria-label="证据钉，方向键移证">
             {chain.map((item, index) => {
               const unlocked = state.unlocked.includes(item.id)

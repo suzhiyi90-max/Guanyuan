@@ -104,6 +104,12 @@ export function useGuanyuanGame() {
   const [state, setState] = useState<GameState>(() => loadSave() ?? initialState)
   const [toast, setToast] = useState<ToastMessage | null>(null)
   const restored = useRef(Boolean(loadSave()))
+  // 命令结算在 updater 外基于本次 render 的状态快照同步计算；不在 updater 内写外部变量。
+  const commitCommand = useCallback((command: Parameters<typeof executeCommand>[1]) => {
+    const result = executeCommand(state, command)
+    if (!result.rejected) setState(result.state)
+    return result
+  }, [state])
 
   useEffect(() => {
     try {
@@ -295,40 +301,24 @@ export function useGuanyuanGame() {
     return accepted
   }, [])
 
-  // FE-161：三入口统一「组装 command → executeCommand」；UI 只提示，不持有结算。
-  // 返回契约 'ok' | 'repeated' 保持不变（rejected 一律映射为 repeated）。
-  const runOfficialAction = useCallback((key: OfficialActionId) => {
-    let rejected = false
-    setState(current => {
-      const result = executeCommand(current, { kind: 'official', key })
-      if (result.rejected) {
-        rejected = true
-        return current
-      }
-      return result.state
-    })
-    return rejected ? 'repeated' : 'ok'
-  }, [])
+  // FE-161 / G1.7-B：所有入口返回真实 CommandResult；UI 依 rejected 决定是否关闭与提示。
+  // 命令在 updater 外基于同步快照计算，避免 updater 副作用及异步返回值竞态。
+  const runOfficialAction = useCallback((key: OfficialActionId) => (
+    commitCommand({ kind: 'official', key })
+  ), [commitCommand])
 
   const continueNextDay = useCallback(() => {
     setState(advanceDay)
   }, [])
 
-  const resolveWorldOption = useCallback((eventId: string, optionId: string) => {
-    setState(current => {
-      const result = executeCommand(current, { kind: 'event', eventId, optionId })
-      return result.rejected ? current : result.state
-    })
-  }, [])
+  const resolveWorldOption = useCallback((eventId: string, optionId: string) => (
+    commitCommand({ kind: 'event', eventId, optionId })
+  ), [commitCommand])
 
-  // FE-157 / FE-161 / FE-162：生成事件走同一命令层。模型只给措辞与 effect id，
-  // 成本与判定全在本地；只借既有 handledEvents 记已决，不新增存档字段、不改存档结构。
-  const resolveGeneratedEvent = useCallback((event: GeneratedEvent, optionId: string) => {
-    setState(current => {
-      const result = executeCommand(current, { kind: 'generated', event, optionId })
-      return result.rejected ? current : result.state
-    })
-  }, [])
+  // 生成事件只借既有 handledEvents 记已决，不新增存档字段、不改存档结构。
+  const resolveGeneratedEvent = useCallback((event: GeneratedEvent, optionId: string) => (
+    commitCommand({ kind: 'generated', event, optionId })
+  ), [commitCommand])
 
   const resetGame = useCallback(() => {
     localStorage.removeItem(SAVE_KEY)

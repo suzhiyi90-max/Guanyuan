@@ -42,6 +42,7 @@ import { AnimatedNumber } from './components/AnimatedNumber'
 import { goals, people } from './data'
 import { streetStationOf, type CityLocationId, type StreetStationId } from './city'
 import { goalReckoningOf, officialAvailableOf, periods, useGuanyuanGame, verdictOf } from './game/useGame'
+import { routeCommandFeedback } from './game/commandFeedback'
 import { useNarrator } from './narrative/useNarrator'
 import { effectById } from './narrative/effects'
 import { findGeneratedEvent } from './narrative/store'
@@ -94,6 +95,7 @@ export default function App() {
   // FE-080 跨屏跳转后留一枚「回 · 上一处」，只记表面与焦点，不改业务、不写存档。
   // FE-082 再补来处小节与滚轴位置：回来时不再落在纸页顶端。
   const [returnSpot, setReturnSpot] = useState<{ label: string; detail: string; overlay: OverlayId | null; section: SectionId; scrollTop: number } | null>(null)
+  const [evidenceFocus, setEvidenceFocus] = useState<string | null>(null)
   // FE-090：回跳落位后短暂留一枚「已归位」纸角，只说明看见了，不改任何状态。
   const [arrivedSpot, setArrivedSpot] = useState<string | null>(null)
   const arrivedTimer = useRef<number | null>(null)
@@ -347,11 +349,12 @@ export default function App() {
       impeach: ['揭参已封发', '清名与刻名并至 县里再无回旋'],
       suppress: ['来文已压下', '幕友已经看见 把柄留在人手里'],
     }
-    if (game.runOfficialAction(id) === 'repeated') {
-      notify('此动作已行', '不重复耗时段 批语与动作已在卷中')
-      return
-    }
-    notify(...messages[id])
+    const result = game.runOfficialAction(id)
+    if (!routeCommandFeedback(
+      result,
+      reason => notify(reason === 'repeated' ? '此动作已行' : '动作未执行', reason === 'repeated' ? '不重复耗时段 批语与动作已在卷中' : `命令层拒绝（${reason}），状态未改变。`),
+      () => notify(...messages[id]),
+    )) return
   }
 
   const handleNextDay = () => {
@@ -489,6 +492,7 @@ export default function App() {
   const returnToSpot = (spot: { detail: string; overlay: OverlayId | null; section: SectionId; scrollTop: number } | null) => {
     if (!spot) return
     setReturnSpot(null)
+    if (spot.overlay !== 'evidence') setEvidenceFocus(null)
     setOverlay(spot.overlay)
     setActiveSection(spot.section)
     restoreScrollTo(spot.scrollTop)
@@ -582,9 +586,9 @@ export default function App() {
   const narrator = useNarrator({ state, scene, period, officialAvailable })
   const [narrationIntent, setNarrationIntent] = useState<NarrationIntent>('旁白')
   const generatedEvent = narrator.run.event
-  const currentEvent: WorldEvent | GeneratedEvent | null = generatedEvent
-    ?? worldEvents.find(e => e.id === state.pendingEvent)
-    ?? (state.pendingEvent ? findGeneratedEvent(state.pendingEvent) : null)
+  // 正式世界事件优先；只在没有任何 pendingEvent 时展示本轮新生成事件。
+  const currentEvent: WorldEvent | GeneratedEvent | null = worldEvents.find(e => e.id === state.pendingEvent)
+    ?? (state.pendingEvent ? findGeneratedEvent(state.pendingEvent) : generatedEvent)
 
   const openNarration = () => {
     narrator.dismiss()
@@ -597,12 +601,27 @@ export default function App() {
 
   const chooseEventOption = (optionId: string) => {
     if (!currentEvent) return
-    if (generatedEvent && currentEvent.id === generatedEvent.id) {
-      game.resolveGeneratedEvent(generatedEvent, optionId)
-      narrator.dismiss()
-    } else {
-      game.resolveWorldOption(currentEvent.id, optionId)
+    const isGenerated = 'origin' in currentEvent
+    const result = isGenerated
+      ? game.resolveGeneratedEvent(currentEvent as GeneratedEvent, optionId)
+      : game.resolveWorldOption(currentEvent.id, optionId)
+    const reasons: Record<string, string> = {
+      'world-event-pending': '正式世界事件尚待处理，生成事件不能抢占。',
+      'already-handled': '此事件已经结算，不会重复记账。',
+      'not-pending': '此事件已不在待决队列，请重新查看当前案头。',
+      'unknown-option': '所选方案无效，事件没有结算。',
+      'effect-unavailable': '当前条件不满足，事件没有结算。',
+      'unknown-effect': '该效果未登记，事件没有结算。',
+      'not-generated': '生成事件来源校验失败，事件没有结算。',
+      'unknown-event': '未找到对应世界事件，事件没有结算。',
+      'repeated': '此动作已经执行，不会重复结算。',
     }
+    if (!routeCommandFeedback(
+      result,
+      reason => notify('事件未结算', reasons[reason] ?? `结算被拒绝（${reason}），状态未改变。`),
+      () => undefined,
+    )) return
+    if (isGenerated) narrator.dismiss()
     setOverlay(null)
     notify('事已记下', `${currentEvent.title} · 选择已入卷 世界继续按日程走`)
   }
@@ -766,9 +785,9 @@ export default function App() {
         {overlay === 'document' && <DocumentWorkspace key="document" mode={docMode} onModeChange={setDocMode} selected={selectedCompare} onToggle={id => toggleSelection(id, 'document')} onRemember={handleRememberDoc} remembered={docRemembered} onClose={() => { setDocFocusHint(null); setOverlay(null) }} state={state} onOpenReview={() => setOverlay('review')} onOpenEvidence={() => setOverlay('evidence')} onOpenEpilogue={() => setOverlay('epilogue')} onOpenBrief={openBrief} focusHint={docFocusHint} reviewOrigin={currentOrigin ?? undefined} onBackToOrigin={backToReviewOrigin} onOpenFolio={openFolio} />}
         {overlay === 'plan' && <PlanDrawer key="plan" onClose={() => setOverlay(null)} onConfirm={handleConfirmPlan} canPlan={!taskStarted} state={state} />}
         {overlay === 'intelligence' && <IntelligenceDrawer key="intel" clues={state.clues} asked={state.asked} onClose={() => setOverlay(null)} onOpenSource={openSource} onOpenEvidence={() => setOverlay('evidence')} state={state} readAcrossJump={readAcrossJump} onOpenLastReview={focus => openDocumentAt(focus, 'intel')} onOpenRumor={openRumorTarget} reviewOrigin={currentOrigin ?? undefined} onBackReviewOrigin={backToReviewOrigin} />}
-        {overlay === 'evidence' && <EvidenceBoard key="evidence" state={state} onClose={() => setOverlay(null)} onOpenSource={openSource} />}
+        {overlay === 'evidence' && <EvidenceBoard key="evidence" state={state} initialRef={evidenceFocus} onClose={() => { setOverlay(null); setEvidenceFocus(null) }} onOpenSource={openSource} />}
         {overlay === 'banquet' && <BanquetModal key="banquet" period={period} onClose={() => setOverlay(null)} onChoose={handleBanquet} />}
-        {overlay === 'person' && <PersonPanel key="person" person={selectedPerson} state={state} onClose={() => setOverlay(null)} onAsk={handleAsk} archivePage={personArchive} onArchivePage={setPersonArchive} onOpenPerson={id => { setSelectedPersonId(id); setPersonArchive('home') }} onOpenEvidence={ref => { setReturnSpot(captureSpot('人物档案', `${selectedPerson.name} · 历史与公文 · ${ref}`)); setOverlay('evidence'); focusOn('evidence-chain') }} onOpenIntel={() => { setReturnSpot(captureSpot('人物档案', `${selectedPerson.name} · 全貌档案`)); setOverlay('intelligence'); focusOn('intel-drawer') }} onGoScene={scene => { setOverlay(null); setActiveSection('today'); changeScene(scene) }} />}
+        {overlay === 'person' && <PersonPanel key="person" person={selectedPerson} state={state} onClose={() => setOverlay(null)} onAsk={handleAsk} archivePage={personArchive} onArchivePage={setPersonArchive} onOpenPerson={id => { setSelectedPersonId(id); setPersonArchive('home') }} onOpenEvidence={ref => { setEvidenceFocus(ref); setReturnSpot(captureSpot('人物档案', `${selectedPerson.name} · 历史与公文 · ${ref}`)); setOverlay('evidence'); focusOn('evidence-chain') }} onOpenIntel={() => { setReturnSpot(captureSpot('人物档案', `${selectedPerson.name} · 全貌档案`)); setOverlay('intelligence'); focusOn('intel-drawer') }} onGoScene={scene => { setOverlay(null); setActiveSection('today'); changeScene(scene) }} />}
         {overlay === 'review' && <OfficialReview key="review" state={state} onClose={() => setOverlay(null)} onAction={handleOfficial} />}
         {overlay === 'world' && currentEvent && <WorldEventCard key={`world-${currentEvent.id}`} event={currentEvent} onChoose={chooseEventOption} onLater={() => { narrator.dismiss(); setOverlay(null) }} currentDay={state.day} onLocateDay={locateWorldDay} generated={Boolean(generatedEvent && currentEvent.id === generatedEvent.id)} optionNotes={generatedNotes} />}
         {overlay === 'world' && !currentEvent && <NarrationCard key="narration" run={narrator.run} ready={narrator.ready} intent={narrationIntent} onIntent={setNarrationIntent} onAwait={() => narrator.awaitInk(narrationIntent)} onSkip={narrator.skip} onCancel={() => { narrator.cancel(); setOverlay(null) }} configSlot={<NarratorConfig defaultOpen={!narrator.ready} />} />}

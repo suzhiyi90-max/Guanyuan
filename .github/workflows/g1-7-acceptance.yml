@@ -1,0 +1,64 @@
+name: G1.7 acceptance
+
+on:
+  push:
+    branches:
+      - fix/g1.7-acceptance
+  pull_request:
+    branches:
+      - feat/g1-engine
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Engine regression
+        run: npm run test:engine
+      - name: Review index integrity
+        run: npm run check:docs
+      - name: Patch whitespace integrity
+        working-directory: .
+        run: git diff --check d6f08f84525e319981684071cf6f6c6cbc64feea...HEAD
+      - name: Production build
+        run: npm run build
+      - name: Start Vite
+        run: |
+          npm run dev -- --host 127.0.0.1 --port 5199 > /tmp/guanyuan-vite.log 2>&1 &
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:5199/ > /dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/guanyuan-vite.log
+          exit 1
+      - name: Playwright smoke and archive regression
+        env:
+          TEMP: /tmp
+        run: npm run smoke
+      - name: Upload smoke screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: guanyuan-g1-7-smoke
+          path: /tmp/guanyuan-smoke/
+          if-no-files-found: ignore

@@ -4,8 +4,10 @@
  */
 import { advanceDay, advancePeriod, goalReckoningOf, resolveWorldOptionPure, spendAction, verdictOf } from '../src/game/engine'
 import { executeCommand } from '../src/game/commands'
+import { routeCommandFeedback } from '../src/game/commandFeedback'
 import type { GameState } from '../src/game/useGame'
 import type { GeneratedEvent } from '../src/narrative/types'
+import { personEvidenceIdsOf, personPresenceOf, personScheduleOf, revealDepthOf } from '../src/game/people'
 
 let pass = 0
 let fail = 0
@@ -285,6 +287,79 @@ const gen = (effect: string) => ({ kind: 'generated' as const, event: genEvent(e
   const r = executeCommand(s, gen('log-done'))
   ok('生成无pending放行', !r.rejected, r.rejected ?? '')
   eq('生成结算清pending保持', r.state.pendingEvent, null)
+}
+
+/* G1.7-B：正式委员覆勘命令的解锁效果由命令层原子返回。 */
+{
+  const result = executeCommand(base({ day: 2 }), { kind: 'official', key: 'commissioner' })
+  ok('委员覆勘命令可结算', !result.rejected, result.rejected ?? '')
+  ok('委员覆勘命令解锁E-008', result.state.unlocked.includes('E-008'))
+}
+
+/* G1.7-B：拒绝结果只触发失败反馈；调用方必须停止成功分支与关闭事件卡。 */
+{
+  const first = executeCommand(base({ day: 2 }), { kind: 'official', key: 'commissioner' })
+  const rejected = executeCommand(first.state, { kind: 'official', key: 'commissioner' })
+  let rejectedFeedback = 0
+  let acceptedFeedback = 0
+  let reason = ''
+  const continueSuccessUi = routeCommandFeedback(
+    rejected,
+    value => { rejectedFeedback += 1; reason = value },
+    () => { acceptedFeedback += 1 },
+  )
+  ok('拒绝结果中止成功UI分支', continueSuccessUi === false)
+  eq('拒绝结果只触发一次失败反馈', rejectedFeedback, 1)
+  eq('拒绝原因准确回传', reason, 'repeated')
+  eq('拒绝结果不触发成功提示', acceptedFeedback, 0)
+  ok('拒绝结果保留原状态引用', rejected.state === first.state)
+  let accepted = 0
+  const continueAcceptedUi = routeCommandFeedback(first, () => {}, () => { accepted += 1 })
+  ok('成功结果允许继续UI分支', continueAcceptedUi)
+  eq('成功结果只触发成功反馈', accepted, 1)
+}
+
+/* G1.7-A：AI 生成事件不得抢占正式 pendingEvent，也不得清空无关待决事件。 */
+{
+  const s = base({ day: 2, pendingEvent: 'material-arrival' })
+  const ai = executeCommand(s, gen('log-done'))
+  ok('正式事件待决时拒绝AI', ai.rejected === 'world-event-pending', ai.rejected ?? '')
+  ok('拒绝AI保留原state引用', ai.state === s)
+  eq('拒绝AI保留正式pendingEvent', ai.state.pendingEvent, 'material-arrival')
+  const world = executeCommand(s, { kind: 'event', eventId: 'material-arrival', optionId: 'weigh' })
+  ok('AI被拒后正式事件仍可结算', !world.rejected, world.rejected ?? '')
+  eq('正式事件结算后清pending', world.state.pendingEvent, null)
+  ok('正式事件结算记handled', world.state.handledEvents.includes('material-arrival'))
+}
+{
+  const s = base({ day: 2, pendingEvent: null })
+  const ai = executeCommand(s, gen('log-done'))
+  ok('无正式待决时AI正常结算', !ai.rejected, ai.rejected ?? '')
+  eq('AI结算不改pendingEvent', ai.state.pendingEvent, null)
+}
+{
+  const event = genEvent('log-done')
+  const s = base({ day: 2, pendingEvent: event.id })
+  const ai = executeCommand(s, { kind: 'generated', event, optionId: 'jia' })
+  ok('兼容同id旧式AI待决事件', !ai.rejected, ai.rejected ?? '')
+  eq('同id AI结算清理自身旧pending', ai.state.pendingEvent, null)
+}
+
+/* G1.7-D：人物档案只读投影、认知闸与公开日程边界。 */
+{
+  const s = base()
+  const before = JSON.stringify(s)
+  eq('档案证据映射只返回既有凭据', personEvidenceIdsOf('expert'), ['E-008'])
+  eq('未知人物无凭据', personEvidenceIdsOf('unknown-person'), [])
+  eq('未接触人物保持闻名', revealDepthOf('expert', s), '闻名')
+  eq('正式问话只提升为相识', revealDepthOf('expert', base({ asked: ['expert'] })), '相识')
+  const schedule = personScheduleOf(s, 'expert')
+  ok('公开日程不泄露过去安排', schedule.every(row => row.day >= s.day))
+  ok('公开日程只含公开投影字段', schedule.every(row => Object.keys(row).sort().join(',') === 'day,title,when'))
+  eq('未知人物没有公开日程', personScheduleOf(s, 'unknown-person'), [])
+  const presence = personPresenceOf(s, 'expert')
+  ok('在场投影只返回允许场景或空', presence === null || ['county', 'river', 'study'].includes(presence.scene))
+  eq('档案读取不修改游戏状态', JSON.stringify(s), before)
 }
 
 console.log(`\nengine ${pass}/${pass + fail} PASS`)

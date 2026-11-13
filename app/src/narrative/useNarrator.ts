@@ -68,6 +68,17 @@ export function useNarrator({ state, scene, period, officialAvailable }: Narrato
 
   useEffect(() => stop, [stop])
 
+  // 正式世界事件出现时立即撤销正在生成的 AI 叙事，避免旧上下文在待决事件后落笔。
+  useEffect(() => {
+    if (!state.pendingEvent) return
+    stop()
+    rawRef.current = ''
+    settledRef.current = null
+    quietRef.current = null
+    finishedRef.current = false
+    setRun(idleRun)
+  }, [state.pendingEvent, stop])
+
   const profile = activeProfile()
   const ready = store.enabled && Boolean(profile) && Boolean(getKey(profile?.id ?? ''))
 
@@ -78,12 +89,13 @@ export function useNarrator({ state, scene, period, officialAvailable }: Narrato
   }, [])
 
   const consume = useCallback(async (attempt: number): Promise<void> => {
+    const snapshot = stateRef.current
+    if (snapshot.pendingEvent) return
     const currentProfile = activeProfile()
     if (!currentProfile) { settle(null, '案上无笔 · 本日照旧'); return }
     const key = getKey(currentProfile.id)
     if (!key) { settle(null, '尚未备笔 · 本日照旧'); return }
 
-    const snapshot = stateRef.current
     const narrative = getNarrative()
     // beatIndex 只数「已决」的当日生成事件：未决而重候同一处境要命中旧稿，不重复计费。
     const beatIndex = snapshot.handledEvents.filter(id => id.startsWith(`ai-${snapshot.day}-`)).length
@@ -102,7 +114,7 @@ export function useNarrator({ state, scene, period, officialAvailable }: Narrato
         day: snapshot.day, seed: ctx.seed, profileId: currentProfile.id,
         allowedEffects: ctx.allowedEffects, maxChars: ctx.maxChars,
       })
-      if (parsed.ok) { settle(parsed.event, null); return }
+      if (parsed.ok && !stateRef.current.pendingEvent) { settle(parsed.event, null); return }
       cacheRef.current = false
       rawRef.current = ''
       firstTextRef.current = 0
@@ -134,13 +146,13 @@ export function useNarrator({ state, scene, period, officialAvailable }: Narrato
       settle(null, note.includes('跨域') ? '笔墨隔着一层纸 · 本日照旧' : '笔墨未至 · 本日照旧')
       return
     }
-    if (controller.signal.aborted) return
+    if (controller.signal.aborted || stateRef.current.pendingEvent) return
 
     const parsed = parseGeneratedEvent(raw, {
       day: snapshot.day, seed: ctx.seed, profileId: currentProfile.id,
       allowedEffects: ctx.allowedEffects, maxChars: ctx.maxChars,
     })
-    if (parsed.ok) {
+    if (parsed.ok && !stateRef.current.pendingEvent) {
       cacheSet(hash, raw)
       if (!usageRef.current.completion) usageRef.current.completion = raw.length
       settle(parsed.event, null)
@@ -162,6 +174,7 @@ export function useNarrator({ state, scene, period, officialAvailable }: Narrato
 
   const awaitInk = useCallback((intent: NarrationIntent) => {
     stop()
+    if (stateRef.current.pendingEvent) { setRun(idleRun); return }
     intentRef.current = intent
     rawRef.current = ''
     firstTextRef.current = 0
