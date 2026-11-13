@@ -42,6 +42,7 @@ import { AnimatedNumber } from './components/AnimatedNumber'
 import { goals, people } from './data'
 import { streetStationOf, type CityLocationId, type StreetStationId } from './city'
 import { goalReckoningOf, officialAvailableOf, periods, useGuanyuanGame, verdictOf } from './game/useGame'
+import { routeCommandFeedback } from './game/commandFeedback'
 import { useNarrator } from './narrative/useNarrator'
 import { effectById } from './narrative/effects'
 import { findGeneratedEvent } from './narrative/store'
@@ -349,11 +350,11 @@ export default function App() {
       suppress: ['来文已压下', '幕友已经看见 把柄留在人手里'],
     }
     const result = game.runOfficialAction(id)
-    if (result.rejected) {
-      notify(result.rejected === 'repeated' ? '此动作已行' : '动作未执行', result.rejected === 'repeated' ? '不重复耗时段 批语与动作已在卷中' : `命令层拒绝（${result.rejected}），状态未改变。`)
-      return
-    }
-    notify(...messages[id])
+    if (!routeCommandFeedback(
+      result,
+      reason => notify(reason === 'repeated' ? '此动作已行' : '动作未执行', reason === 'repeated' ? '不重复耗时段 批语与动作已在卷中' : `命令层拒绝（${reason}），状态未改变。`),
+      () => notify(...messages[id]),
+    )) return
   }
 
   const handleNextDay = () => {
@@ -604,21 +605,22 @@ export default function App() {
     const result = isGenerated
       ? game.resolveGeneratedEvent(currentEvent as GeneratedEvent, optionId)
       : game.resolveWorldOption(currentEvent.id, optionId)
-    if (result.rejected) {
-      const reasons: Record<string, string> = {
-        'world-event-pending': '正式世界事件尚待处理，生成事件不能抢占。',
-        'already-handled': '此事件已经结算，不会重复记账。',
-        'not-pending': '此事件已不在待决队列，请重新查看当前案头。',
-        'unknown-option': '所选方案无效，事件没有结算。',
-        'effect-unavailable': '当前条件不满足，事件没有结算。',
-        'unknown-effect': '该效果未登记，事件没有结算。',
-        'not-generated': '生成事件来源校验失败，事件没有结算。',
-        'unknown-event': '未找到对应世界事件，事件没有结算。',
-        'repeated': '此动作已经执行，不会重复结算。',
-      }
-      notify('事件未结算', reasons[result.rejected] ?? `结算被拒绝（${result.rejected}），状态未改变。`)
-      return
+    const reasons: Record<string, string> = {
+      'world-event-pending': '正式世界事件尚待处理，生成事件不能抢占。',
+      'already-handled': '此事件已经结算，不会重复记账。',
+      'not-pending': '此事件已不在待决队列，请重新查看当前案头。',
+      'unknown-option': '所选方案无效，事件没有结算。',
+      'effect-unavailable': '当前条件不满足，事件没有结算。',
+      'unknown-effect': '该效果未登记，事件没有结算。',
+      'not-generated': '生成事件来源校验失败，事件没有结算。',
+      'unknown-event': '未找到对应世界事件，事件没有结算。',
+      'repeated': '此动作已经执行，不会重复结算。',
     }
+    if (!routeCommandFeedback(
+      result,
+      reason => notify('事件未结算', reasons[reason] ?? `结算被拒绝（${reason}），状态未改变。`),
+      () => undefined,
+    )) return
     if (isGenerated) narrator.dismiss()
     setOverlay(null)
     notify('事已记下', `${currentEvent.title} · 选择已入卷 世界继续按日程走`)
