@@ -948,4 +948,10 @@
 - 统一命令入口返回 `CommandResult`，修复 updater 外部变量副作用与 UI 假成功反馈。
 - 修复前端索引 21 项路径与行数，新增自动索引核验脚本。
 - 补充人物档案认知 / 只读投影测试与 Playwright 档案流程断言。
-- 新增 GitHub Actions engine / docs / build / smoke 门禁；最终 HEAD `95d278f` 对应 run `43237069345` 全绿，Playwright smoke 268/268；最终截图已抽查，人物档案回查往返转场完整。
+- 新增 GitHub Actions engine / docs / build / smoke 门禁；最终 G1.7 原始 head `eaae87d` 对应 run `43238190913` 全绿；PR #10 merge-ref run `43371959629` engine 159/159、Playwright smoke 268/268、索引与 build 全绿，截图 artifact 上传并抽检人物档案、批阅与 390px 页面。
+
+### v1.68（2026-11-13 · Patch · G1.7-B 拒绝反馈闭环）
+
+- 新增 `game/commandFeedback.ts`，把 accepted / rejected 反馈路由抽成可单测纯函数；App 对拒绝立即 return，不执行成功提示、叙事 dismiss 或关闭事件卡。
+- engine-test 新增拒绝只触发失败反馈、准确回传原因、状态引用不变、成功反馈不触发，以及成功分支正向对照。
+- 本补丁 head：`85f688c`；尚未取得该 head 对应的新 Actions 运行结果，不能沿用此前 run 作为本补丁验收。等待 PR #10 最新 head CI。
