@@ -4,6 +4,7 @@
  */
 import { advanceDay, advancePeriod, goalReckoningOf, resolveWorldOptionPure, spendAction, verdictOf } from '../src/game/engine'
 import { executeCommand } from '../src/game/commands'
+import { routeCommandFeedback } from '../src/game/commandFeedback'
 import type { GameState } from '../src/game/useGame'
 import type { GeneratedEvent } from '../src/narrative/types'
 import { personEvidenceIdsOf, personPresenceOf, personScheduleOf, revealDepthOf } from '../src/game/people'
@@ -293,6 +294,29 @@ const gen = (effect: string) => ({ kind: 'generated' as const, event: genEvent(e
   const result = executeCommand(base({ day: 2 }), { kind: 'official', key: 'commissioner' })
   ok('委员覆勘命令可结算', !result.rejected, result.rejected ?? '')
   ok('委员覆勘命令解锁E-008', result.state.unlocked.includes('E-008'))
+}
+
+/* G1.7-B：拒绝结果只触发失败反馈；调用方必须停止成功分支与关闭事件卡。 */
+{
+  const first = executeCommand(base({ day: 2 }), { kind: 'official', key: 'commissioner' })
+  const rejected = executeCommand(first.state, { kind: 'official', key: 'commissioner' })
+  let rejectedFeedback = 0
+  let acceptedFeedback = 0
+  let reason = ''
+  const continueSuccessUi = routeCommandFeedback(
+    rejected,
+    value => { rejectedFeedback += 1; reason = value },
+    () => { acceptedFeedback += 1 },
+  )
+  ok('拒绝结果中止成功UI分支', continueSuccessUi === false)
+  eq('拒绝结果只触发一次失败反馈', rejectedFeedback, 1)
+  eq('拒绝原因准确回传', reason, 'repeated')
+  eq('拒绝结果不触发成功提示', acceptedFeedback, 0)
+  ok('拒绝结果保留原状态引用', rejected.state === first.state)
+  let accepted = 0
+  const continueAcceptedUi = routeCommandFeedback(first, () => {}, () => { accepted += 1 })
+  ok('成功结果允许继续UI分支', continueAcceptedUi)
+  eq('成功结果只触发成功反馈', accepted, 1)
 }
 
 /* G1.7-A：AI 生成事件不得抢占正式 pendingEvent，也不得清空无关待决事件。 */
