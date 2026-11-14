@@ -45,47 +45,14 @@ export function validateAppointment(appointment: Appointment): IdentityIssue[] {
     } else if (compareWorldTime(appointment.to.value, appointment.from) <= 0) {
       issues.push('appointment-end-before-start')
     }
+  } else if (appointment.to.kind !== 'n/a') {
+    issues.push('appointment-unknown-end')
   }
   return issues
 }
 
-export function validateAuthorization(grant: Authorization): IdentityIssue[] {
-  const issues: IdentityIssue[] = []
-  if (!grant.permission.trim()) issues.push('authorization-empty-permission')
-  if (!isValidWorldTime(grant.validFrom)) issues.push('authorization-invalid-time')
-  if (isValue(grant.validTo)) {
-    if (!isValidWorldTime(grant.validTo.value)
-      || (isValidWorldTime(grant.validFrom) && compareWorldTime(grant.validTo.value, grant.validFrom) <= 0)) {
-      issues.push('authorization-invalid-time')
-    }
-  } else if (grant.validTo.kind !== 'n/a') {
-    issues.push('authorization-invalid-time')
-  }
-
-  const hasRevocationEvent = isValue(grant.revokedBy)
-  const hasRevocationTime = isValue(grant.revokedAt)
-  const noRevocation = grant.revokedBy.kind === 'n/a' && grant.revokedAt.kind === 'n/a'
-  if (hasRevocationEvent !== hasRevocationTime || (!noRevocation && !hasRevocationEvent)) {
-    issues.push('authorization-revocation-inconsistent')
-  }
-  if ((hasRevocationEvent || hasRevocationTime) && !grant.revocable) {
-    issues.push('authorization-revocation-forbidden')
-  }
-  if (isValue(grant.revokedAt)) {
-    if (!isValidWorldTime(grant.revokedAt.value)) {
-      issues.push('authorization-invalid-time')
-    } else if (isValidWorldTime(grant.validFrom)
-      && compareWorldTime(grant.revokedAt.value, grant.validFrom) < 0) {
-      issues.push('authorization-invalid-time')
-    }
-  }
-  if (isValue(grant.validTo) && isValidWorldTime(grant.validTo.value)
-    && isValue(grant.revokedAt) && isValidWorldTime(grant.revokedAt.value)
-    && compareWorldTime(grant.revokedAt.value, grant.validTo.value) > 0) {
-    issues.push('authorization-invalid-time')
-  }
-  return issues
-}export function validateOfficeAppointments(
+/** Validate appointment history against the office's objective holder at a given time. */
+export function validateOfficeAppointments(
   office: Office,
   appointments: readonly Appointment[],
   at: Appointment['from'],
@@ -168,6 +135,17 @@ export function validateAuthorization(grant: Authorization): IdentityIssue[] {
     && isValue(grant.revokedAt) && isValidWorldTime(grant.revokedAt.value)
     && compareWorldTime(grant.revokedAt.value, grant.validTo.value) > 0) {
     issues.push('authorization-invalid-time')
+  }
+  return issues
+}
+
+export function validateAuthorizationSet(grants: readonly Authorization[]): IdentityIssue[] {
+  const issues: IdentityIssue[] = []
+  const ids = new Set<string>()
+  for (const grant of grants) {
+    if (ids.has(grant.id)) issues.push('authorization-duplicate-id')
+    ids.add(grant.id)
+    issues.push(...validateAuthorization(grant))
   }
   return issues
 }
