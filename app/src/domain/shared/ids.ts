@@ -6,6 +6,11 @@ export type BrandedId<Kind extends string> = string & {
 
 export type PersonId = BrandedId<'PersonId'>
 export type EventId = BrandedId<'EventId'>
+export type IdentityId = BrandedId<'IdentityId'>
+export type OfficeId = BrandedId<'OfficeId'>
+export type OrgId = BrandedId<'OrgId'>
+export type AppointmentId = BrandedId<'AppointmentId'>
+export type AuthorizationId = BrandedId<'AuthorizationId'>
 export type CapabilityRef = BrandedId<'CapabilityRef'>
 export type BodyScopeRef = BrandedId<'BodyScopeRef'>
 export type MindScopeRef = BrandedId<'MindScopeRef'>
