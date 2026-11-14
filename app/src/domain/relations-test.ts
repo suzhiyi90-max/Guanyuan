@@ -159,9 +159,9 @@ check('membership person reference must resolve', validateMembershipSet([
 ], [orgId], [p2]).includes('membership-person-missing'))
 
 // @ts-expect-error raw strings cannot be used as RelationId
-const invalidRelationId: import('./relations/model').RelationId = 'relation-raw'
+const invalidRelationId: import('./shared/ids').RelationId = 'relation-raw'
 // @ts-expect-error raw strings cannot be used as MembershipId
-const invalidMembershipId: import('./relations/model').MembershipId = 'membership-raw'
+const invalidMembershipId: import('./shared/ids').MembershipId = 'membership-raw'
 void invalidRelationId
 void invalidMembershipId
 

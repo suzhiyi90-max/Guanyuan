@@ -1,4 +1,4 @@
-import type { EventId, OrgId, PersonId } from '../shared/ids'
+import type { EventId, OrgId, PersonId, RelationId, RelationClaimId, RelationEvidenceId, MembershipId } from '../shared/ids'
 import type { WorldTime } from '../shared/world-time'
 
 /** Open string code: Q11 remains undecided; callers may register new relation types. */
@@ -28,11 +28,6 @@ export interface Relation {
   readonly sourceEvent: EventId
   readonly visibility: RelationVisibility
 }
-
-export type RelationId = import('../shared/ids').BrandedId<'RelationId'>
-export type RelationClaimId = import('../shared/ids').BrandedId<'RelationClaimId'>
-export type RelationEvidenceId = import('../shared/ids').BrandedId<'RelationEvidenceId'>
-export type MembershipId = import('../shared/ids').BrandedId<'MembershipId'>
 
 /** A person's assertion about a relation; it is not an objective relation mutation. */
 export interface RelationClaim {
