@@ -54,6 +54,8 @@ export interface Appointment {
   readonly from: WorldTime
   /** n/a means the appointment has no recorded end yet. */
   readonly to: Field<WorldTime>
+  /** Event provenance for the appointment's end; n/a pairs with an open interval. */
+  readonly endedBy: Field<EventId>
 }
 
 export type AuthorizationScope =
@@ -93,6 +95,7 @@ export type IdentityIssue =
   | 'appointment-invalid-world-time'
   | 'appointment-end-before-start'
   | 'appointment-unknown-end'
+  | 'appointment-end-event-inconsistent'
   | 'appointment-duplicate-id'
   | 'appointment-overlap'
   | 'office-holder-appointment-mismatch'

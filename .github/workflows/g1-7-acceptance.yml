@@ -17,6 +17,7 @@ on:
       - work/w2-c-body-mind-state
       - work/w2-d-life-stage-facts
       - work/w2-e-life-time-boundaries
+      - work/w2-f-death-settlement-integrity
   workflow_dispatch:
 
 permissions:
@@ -69,6 +70,8 @@ jobs:
         run: npm run test:domain:life-time
       - name: Death settlement reference contracts
         run: npm run test:domain:death-settlement
+      - name: Death office appointment handoff contracts
+        run: npm run test:domain:death-office
       - name: Review index integrity
         run: npm run check:docs
       - name: Patch whitespace integrity
