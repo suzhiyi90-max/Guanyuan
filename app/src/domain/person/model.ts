@@ -57,5 +57,4 @@ export interface Person {
   readonly capability: CapabilityRef
   readonly stateDomains: PersonStateDomains
   readonly history: LifeHistoryRef
-  readonly fixture: Field<'m1-river-seven'>
 }
