@@ -1,4 +1,5 @@
 export type Period = '晨' | '午' | '暮' | '夜'
+export type WorldDay = number
 
 export interface WorldTime {
   readonly day: number
