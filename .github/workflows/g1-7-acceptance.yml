@@ -35,6 +35,8 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Engine regression
         run: npm run test:engine
+      - name: Domain contract tests
+        run: npm run test:domain
       - name: Review index integrity
         run: npm run check:docs
       - name: Patch whitespace integrity
