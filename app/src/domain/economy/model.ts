@@ -12,7 +12,7 @@ import type { WorldTime } from '../shared/world-time'
 export type RightHolder = PersonId | OrgId
 export type AssetRightKind = 'ownership' | 'control' | 'handling' | 'disposal'
 
-/** A grant is an immutable authorization fact; revocation is an event keyed by this stable ID. */
+/** A grant is immutable; a revocation is a separate event referencing this exact grant ID. */
 export interface RightGrant {
   readonly id: RightGrantId
   readonly holder: RightHolder
@@ -21,6 +21,11 @@ export interface RightGrant {
   readonly revocable: boolean
   readonly transferable: boolean
   readonly expires: Field<WorldTime>
+}
+
+export interface RightRevocation {
+  readonly grant: RightGrantId
+  readonly revokedBy: EventId
 }
 
 export interface AssetRights {
@@ -71,6 +76,11 @@ export type EconomyIssue =
   | 'asset-right-grant-expiry-before-grant'
   | 'asset-right-grant-scope-conflict'
   | 'asset-revocation-grant-missing'
+  | 'asset-revocation-event-missing'
+  | 'asset-revocation-time-missing'
+  | 'asset-revocation-not-permitted'
+  | 'asset-revocation-before-grant'
+  | 'asset-revocation-duplicate'
   | 'debt-empty-kind'
   | 'debt-duplicate-id'
   | 'debt-invalid-principal'

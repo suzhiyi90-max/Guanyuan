@@ -1,14 +1,14 @@
 import { compareWorldTime, isValidWorldTime } from '../shared/world-time'
 import type { Field } from '../shared/field'
 import type { AssetId, DebtId, EventId, OrgId, PersonId, RightGrantId } from '../shared/ids'
-import type { Asset, AssetRightKind, Debt, EconomyIssue, RightGrant, RightHolder } from './model'
+import type { Asset, AssetRightKind, Debt, EconomyIssue, RightGrant, RightHolder, RightRevocation } from './model'
 
 export interface EconomyReferences {
   readonly persons: readonly PersonId[]
   readonly organizations: readonly OrgId[]
   readonly events: readonly EventId[]
   readonly eventTimes: ReadonlyMap<EventId, import('../shared/world-time').WorldTime>
-  readonly revokedGrantIds: readonly RightGrantId[]
+  readonly revocations: readonly RightRevocation[]
 }
 
 function duplicateIds<T>(items: readonly T[], getId: (item: T) => string): boolean {
@@ -25,11 +25,18 @@ function isKnownHolder(holder: RightHolder, refs: EconomyReferences): boolean {
   return refs.persons.includes(holder as PersonId) || refs.organizations.includes(holder as OrgId)
 }
 
+function revocationTime(grantId: RightGrantId, refs: EconomyReferences): import('../shared/world-time').WorldTime | undefined {
+  const revocation = refs.revocations.find(item => item.grant === grantId)
+  if (!revocation || !refs.events.includes(revocation.revokedBy)) return undefined
+  return refs.eventTimes.get(revocation.revokedBy)
+}
+
 function grantIsEffective(grant: RightGrant, at: import('../shared/world-time').WorldTime, refs: EconomyReferences): boolean {
   const grantedAt = refs.eventTimes.get(grant.grantedBy)
   if (!grantedAt || !isValidWorldTime(grantedAt) || !isValidWorldTime(at)) return false
   if (compareWorldTime(grantedAt, at) > 0) return false
-  if (refs.revokedGrantIds.includes(grant.id)) return false
+  const revokedAt = revocationTime(grant.id, refs)
+  if (revokedAt && isValidWorldTime(revokedAt) && compareWorldTime(revokedAt, at) <= 0) return false
   if (grant.expires.kind === 'n/a') return true
   if (grant.expires.kind === 'value') {
     return isValidWorldTime(grant.expires.value) && compareWorldTime(at, grant.expires.value) < 0
@@ -130,8 +137,24 @@ export function validateAssetSet(
   if (duplicateIds(assets, item => item.id)) issues.push('asset-duplicate-id')
   const allGrants = assets.flatMap(allGrantEntries)
   if (duplicateIds(allGrants, item => item.grant.id)) issues.push('asset-right-grant-duplicate-id')
-  for (const id of refs.revokedGrantIds) {
-    if (!allGrants.some(item => item.grant.id === id)) issues.push('asset-revocation-grant-missing')
+  const revocationTargets = new Set<string>()
+  for (const revocation of refs.revocations) {
+    if (revocationTargets.has(revocation.grant)) issues.push('asset-revocation-duplicate')
+    revocationTargets.add(revocation.grant)
+    const grant = allGrants.find(item => item.grant.id === revocation.grant)?.grant
+    if (!grant) {
+      issues.push('asset-revocation-grant-missing')
+      continue
+    }
+    if (!refs.events.includes(revocation.revokedBy)) issues.push('asset-revocation-event-missing')
+    const revokedAt = refs.eventTimes.get(revocation.revokedBy)
+    const grantedAt = refs.eventTimes.get(grant.grantedBy)
+    if (!revokedAt || !isValidWorldTime(revokedAt)) issues.push('asset-revocation-time-missing')
+    if (grant.revocable !== true) issues.push('asset-revocation-not-permitted')
+    if (revokedAt && isValidWorldTime(revokedAt) && grantedAt && isValidWorldTime(grantedAt)
+      && compareWorldTime(revokedAt, grantedAt) < 0) {
+      issues.push('asset-revocation-before-grant')
+    }
   }
   for (const asset of assets) issues.push(...validateAsset(asset, refs, at))
   return issues

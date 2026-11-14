@@ -2,7 +2,7 @@ import { brandedId, field } from './index'
 import type { Person } from './person/model'
 import type { Goal, PlayerGoal, ScheduleEntry, ScheduleScope } from './planning/model'
 import { validateGoalSet, validatePlayerGoal, validateScheduleSet } from './planning/validation'
-import type { Asset, Debt, RightGrant } from './economy/model'
+import type { Asset, Debt, RightGrant, RightRevocation } from './economy/model'
 import {
   canDisposeAsset,
   deriveAssetOwner,
@@ -93,8 +93,9 @@ const eventTimes = new Map<EventId, { day: number; period: '晨' | '午' | '暮'
 ])
 const economyRefs: EconomyReferences = {
   persons: [p1, p2], organizations: [org1], events: [event1, event2, event3],
-  eventTimes, revokedGrantIds: [],
+  eventTimes, revocations: [],
 }
+const revoke = (grantId: import('./shared/ids').RightGrantId, revokedBy = event2): RightRevocation => ({ grant: grantId, revokedBy })
 const grant = (id: string, holder: typeof p1 | typeof p2 | typeof org1, scope: string, grantedBy = event1): RightGrant => ({
   id: brandedId<'RightGrantId'>(id), holder, grantedBy, scope,
   revocable: true, transferable: false, expires: field.notApplicable,
@@ -115,7 +116,7 @@ check('multiple owners do not collapse to one person', deriveAssetOwner([
   ownerGrant, grant('grant-other', p2, 'shared'),
 ], now, economyRefs).kind === 'n/a')
 check('revoked grant is excluded from derived owner', deriveAssetOwner([ownerGrant], now, {
-  ...economyRefs, revokedGrantIds: [ownerGrant.id],
+  ...economyRefs, revocations: [revoke(ownerGrant.id)],
 }).kind === 'n/a')
 check('expired grant is excluded from derived owner', deriveAssetOwner([
   { ...ownerGrant, expires: field.value({ day: 2, period: '晨' }) },
@@ -136,20 +137,37 @@ check('duplicate right grant IDs rejected across rights', validateAsset({
   ...baseAsset,
   rights: { ...baseAsset.rights, control: [ownerGrant] },
 }, economyRefs, now).includes('asset-right-grant-duplicate-id'))
+const secondGrant = grant('grant-disposal-2', p1, 'whole')
 const secondAsset: Asset = {
   ...baseAsset,
   id: brandedId<'AssetId'>('asset-2'),
-  rights: { ownership: [], control: [], handling: [], disposal: [grant('grant-disposal-2', p1, 'whole')] },
+  rights: { ownership: [], control: [], handling: [], disposal: [secondGrant] },
   owner: field.notApplicable,
 }
 check('revocation references are checked across the whole asset set', validateAssetSet(
   [baseAsset, secondAsset],
-  { ...economyRefs, revokedGrantIds: [brandedId<'RightGrantId'>('grant-disposal-2')] },
+  { ...economyRefs, revocations: [revoke(secondGrant.id)] },
   now,
 ).length === 0)
 check('unknown revocation target is rejected once at set boundary', validateAssetSet(
-  [baseAsset], { ...economyRefs, revokedGrantIds: [brandedId<'RightGrantId'>('missing-grant')] }, now,
+  [baseAsset], { ...economyRefs, revocations: [revoke(brandedId<'RightGrantId'>('missing-grant'))] }, now,
 ).includes('asset-revocation-grant-missing'))
+check('revocation event must resolve', validateAssetSet(
+  [baseAsset], { ...economyRefs, revocations: [revoke(ownerGrant.id, brandedId<'EventId'>('missing-event'))] }, now,
+).includes('asset-revocation-event-missing'))
+check('revocation cannot target a non-revocable grant', validateAssetSet([{
+  ...baseAsset,
+  rights: { ownership: [{ ...ownerGrant, id: brandedId<'RightGrantId'>('grant-fixed'), revocable: false }], control: [], handling: [], disposal: [] },
+  owner: field.notApplicable,
+}], { ...economyRefs, revocations: [revoke(brandedId<'RightGrantId'>('grant-fixed'))] }, now).includes('asset-revocation-not-permitted'))
+check('revocation cannot predate its grant event', validateAssetSet([{
+  ...baseAsset,
+  rights: { ownership: [grant('grant-future-revoked', p1, 'future', event3)], control: [], handling: [], disposal: [] },
+  owner: field.notApplicable,
+}], { ...economyRefs, revocations: [revoke(brandedId<'RightGrantId'>('grant-future-revoked'), event2)] }, now).includes('asset-revocation-before-grant'))
+check('duplicate revocations of one grant are rejected', validateAssetSet(
+  [baseAsset], { ...economyRefs, revocations: [revoke(ownerGrant.id), revoke(ownerGrant.id, event3)] }, now,
+).includes('asset-revocation-duplicate'))
 check('handling does not confer disposal', !canDisposeAsset({
   ...baseAsset, rights: { ownership: [], control: [], handling: [grant('handling', p1, 'whole')], disposal: [] },
 }, p1, now, economyRefs))
@@ -161,7 +179,7 @@ check('explicit disposal grant confers disposal without ownership', canDisposeAs
 }, p1, now, economyRefs))
 check('revoked disposal grant no longer confers disposal', !canDisposeAsset({
   ...baseAsset, rights: { ownership: [], control: [], handling: [], disposal: [grant('disposal-revoked', p1, 'whole')] },
-}, p1, now, { ...economyRefs, revokedGrantIds: [brandedId<'RightGrantId'>('disposal-revoked')] }))
+}, p1, now, { ...economyRefs, revocations: [revoke(brandedId<'RightGrantId'>('disposal-revoked'))] }))
 
 const debt: Debt = {
   id: brandedId<'DebtId'>('debt-1'), creditor: p1, debtor: p2, principal: 25,
