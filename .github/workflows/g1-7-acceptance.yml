@@ -7,6 +7,7 @@ on:
   pull_request:
     branches:
       - feat/g1-engine
+      - work/w1-a-person-core
   workflow_dispatch:
 
 permissions:
@@ -37,6 +38,8 @@ jobs:
         run: npm run test:engine
       - name: Domain contract tests
         run: npm run test:domain
+      - name: Identity and authorization contract tests
+        run: npm run test:domain:identity
       - name: Review index integrity
         run: npm run check:docs
       - name: Patch whitespace integrity
