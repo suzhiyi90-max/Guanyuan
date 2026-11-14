@@ -12,7 +12,8 @@
     "check:docs": "node scripts/check-review-index.mjs",
     "art": "node scripts/prepare-art.mjs",
     "test:domain": "tsc --noEmit --strict --skipLibCheck --target ES2022 --module ESNext --moduleResolution Bundler --lib ES2022,DOM scripts/domain-test.ts && esbuild scripts/domain-test.ts --bundle --platform=node --format=cjs --outfile=node_modules/.cache/domain-test.cjs --log-level=warning && node node_modules/.cache/domain-test.cjs",
-    "test:domain:identity": "tsc --noEmit --strict --skipLibCheck --target ES2022 --module ESNext --moduleResolution Bundler --lib ES2022,DOM scripts/identity-test.ts && esbuild scripts/identity-test.ts --bundle --platform=node --format=cjs --outfile=node_modules/.cache/identity-test.cjs --log-level=warning && node node_modules/.cache/identity-test.cjs"
+    "test:domain:identity": "tsc --noEmit --strict --skipLibCheck --target ES2022 --module ESNext --moduleResolution Bundler --lib ES2022,DOM scripts/identity-test.ts && esbuild scripts/identity-test.ts --bundle --platform=node --format=cjs --outfile=node_modules/.cache/identity-test.cjs --log-level=warning && node node_modules/.cache/identity-test.cjs",
+    "test:domain:relations": "tsc --noEmit --strict --skipLibCheck --target ES2022 --module ESNext --moduleResolution Bundler --lib ES2022,DOM scripts/relations-test.ts && esbuild scripts/relations-test.ts --bundle --platform=node --format=cjs --outfile=node_modules/.cache/relations-test.cjs --log-level=warning && node node_modules/.cache/relations-test.cjs"
   },
   "dependencies": {
     "framer-motion": "^12.23.24",

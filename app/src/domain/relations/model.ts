@@ -1,0 +1,80 @@
+import type { EventId, OrgId, PersonId } from '../shared/ids'
+import type { WorldTime } from '../shared/world-time'
+
+/** Open string code: Q11 remains undecided; callers may register new relation types. */
+export type RelationTypeCode = string & { readonly __relationTypeCode: unique symbol }
+export type RelationCertainty = 'confirmed' | 'reported' | 'suspected' | 'unverified'
+export type RelationLifecycleStatus = 'active' | 'dormant' | 'severed'
+export type RelationVisibilityLevel = 'public' | 'contact' | 'private' | 'secret'
+
+export interface RelationVisibility {
+  readonly observer: PersonId | 'player'
+  readonly level: RelationVisibilityLevel
+}
+
+export interface RelationLifecycle {
+  readonly status: RelationLifecycleStatus
+  readonly validFrom: EventId
+  readonly validTo: EventId | 'open'
+}
+
+/** Objective A-layer directed edge. Multiple edges between the same people are valid. */
+export interface Relation {
+  readonly id: RelationId
+  readonly from: PersonId
+  readonly to: PersonId
+  readonly type: RelationTypeCode
+  readonly lifecycle: RelationLifecycle
+  readonly sourceEvent: EventId
+  readonly visibility: RelationVisibility
+}
+
+export type RelationId = import('../shared/ids').BrandedId<'RelationId'>
+export type RelationClaimId = import('../shared/ids').BrandedId<'RelationClaimId'>
+export type RelationEvidenceId = import('../shared/ids').BrandedId<'RelationEvidenceId'>
+export type MembershipId = import('../shared/ids').BrandedId<'MembershipId'>
+
+/** A person's assertion about a relation; it is not an objective relation mutation. */
+export interface RelationClaim {
+  readonly id: RelationClaimId
+  readonly relation: RelationId
+  readonly claimant: PersonId | 'player'
+  readonly certainty: RelationCertainty
+  readonly assertedAt: WorldTime
+  readonly sourceEvent: EventId
+}
+
+/** Provenance attached to a claim, kept separate from both claim and objective relation. */
+export type EvidenceReference =
+  | { readonly kind: 'event'; readonly id: EventId }
+  | { readonly kind: 'person'; readonly id: PersonId }
+  | { readonly kind: 'organization'; readonly id: OrgId }
+  | { readonly kind: 'document'; readonly id: string }
+
+export interface RelationEvidence {
+  readonly id: RelationEvidenceId
+  readonly claim: RelationClaimId
+  readonly evidence: EvidenceReference
+  readonly weight: 'direct' | 'corroborating' | 'hearsay'
+  readonly sourceEvent: EventId
+}
+
+export interface Organization {
+  readonly id: OrgId
+  readonly type: string
+  readonly name: string
+  readonly purpose: string
+  readonly region: string
+  readonly rules: readonly string[]
+}
+
+export interface Membership {
+  readonly id: MembershipId
+  readonly organization: OrgId
+  readonly person: PersonId
+  readonly role: string
+  readonly obligations: readonly string[]
+  readonly validFrom: EventId
+  readonly validTo: EventId | 'open'
+  readonly sourceEvent: EventId
+}
