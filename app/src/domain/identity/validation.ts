@@ -12,7 +12,6 @@ export function validateIdentityAssignment(
 ): IdentityIssue[] {
   const issues: IdentityIssue[] = []
   if (!identity.code.trim()) issues.push('identity-empty-code')
-  if (identity.validFrom !== identity.sourceEvent) issues.push('identity-source-mismatch')
   if (identity.validTo !== 'open' && identity.validTo === identity.validFrom) {
     issues.push('identity-validity-reference-mismatch')
   }
@@ -24,6 +23,12 @@ export function validateOffice(office: Office): IdentityIssue[] {
   const issues: IdentityIssue[] = []
   if (office.holder.kind !== 'held' && office.holder.kind !== 'vacant') {
     issues.push('office-invalid-holder')
+  }
+  if (office.validTo !== 'open' && office.validTo === office.validFrom) {
+    issues.push('identity-validity-reference-mismatch')
+  }
+  if (new Set(office.authorization).size !== office.authorization.length) {
+    issues.push('identity-id-already-exists')
   }
   return issues
 }
@@ -46,13 +51,22 @@ export function validateAppointment(appointment: Appointment): IdentityIssue[] {
 
 export function validateAuthorization(grant: Authorization): IdentityIssue[] {
   const issues: IdentityIssue[] = []
-  if (!isValidWorldTime(grant.validFrom)) issues.push('authorization-invalid-time')
-  if (isValue(grant.validTo) && !isValidWorldTime(grant.validTo.value)) {
+  if (!grant.permission.trim() || !isValidWorldTime(grant.validFrom)) {
     issues.push('authorization-invalid-time')
   }
+  if (isValue(grant.validTo)) {
+    if (!isValidWorldTime(grant.validTo.value)
+      || (isValidWorldTime(grant.validFrom) && compareWorldTime(grant.validTo.value, grant.validFrom) <= 0)) {
+      issues.push('authorization-invalid-time')
+    }
+  } else if (grant.validTo.kind !== 'n/a') {
+    issues.push('authorization-invalid-time')
+  }
+
   const hasRevocationEvent = isValue(grant.revokedBy)
   const hasRevocationTime = isValue(grant.revokedAt)
-  if (hasRevocationEvent !== hasRevocationTime) {
+  const noRevocation = grant.revokedBy.kind === 'n/a' && grant.revokedAt.kind === 'n/a'
+  if (hasRevocationEvent !== hasRevocationTime || (!noRevocation && !hasRevocationEvent)) {
     issues.push('authorization-revocation-inconsistent')
   }
   if ((hasRevocationEvent || hasRevocationTime) && !grant.revocable) {

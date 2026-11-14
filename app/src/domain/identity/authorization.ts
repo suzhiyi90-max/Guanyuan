@@ -29,9 +29,15 @@ export function isAuthorizationActive(grant: Authorization, at: AuthorizationReq
   if (compareWorldTime(at, grant.validFrom) < 0) return false
   if (isValue(grant.validTo)) {
     if (!isValidWorldTime(grant.validTo.value) || compareWorldTime(at, grant.validTo.value) >= 0) return false
+  } else if (grant.validTo.kind !== 'n/a') {
+    return false
   }
   if (isValue(grant.revokedAt)) {
-    if (!isValidWorldTime(grant.revokedAt.value) || compareWorldTime(at, grant.revokedAt.value) >= 0) return false
+    if (!grant.revocable || !isValue(grant.revokedBy)
+      || !isValidWorldTime(grant.revokedAt.value)
+      || compareWorldTime(at, grant.revokedAt.value) >= 0) return false
+  } else if (grant.revokedAt.kind !== 'n/a' || grant.revokedBy.kind !== 'n/a') {
+    return false
   }
   return true
 }
@@ -41,7 +47,7 @@ export function hasAuthorization(
   grants: readonly Authorization[],
   request: AuthorizationRequest,
 ): boolean {
-  if (!isValidWorldTime(request.at)) return false
+  if (!isValidWorldTime(request.at) || !request.permission.trim()) return false
   return grants.some((grant) =>
     grant.principal === request.principal
     && grant.permission === request.permission

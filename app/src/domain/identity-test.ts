@@ -35,9 +35,12 @@ check('identity axes are independent records', validateIdentityAssignment({
 }, [identity]).length === 0)
 check('identity history cannot reuse an existing id', validateIdentityAssignment(identity, [identity]).includes('identity-id-already-exists'))
 check('identity code cannot be empty', validateIdentityAssignment({ ...identity, code: '  ' }, []).includes('identity-empty-code'))
-check('identity source must match opening event', validateIdentityAssignment({
-  ...identity, sourceEvent: brandedId<'EventId'>('event-other'),
-}, []).includes('identity-source-mismatch'))
+check('identity source may differ from effective-start event', validateIdentityAssignment({
+  ...identity, sourceEvent: brandedId<'EventId'>('event-recorded-later'),
+}, []).length === 0)
+check('identity cannot end at its own start event', validateIdentityAssignment({
+  ...identity, validTo: event,
+}, []).includes('identity-validity-reference-mismatch'))
 
 const office: Office = {
   id: officeId,
@@ -98,6 +101,9 @@ check('revoked grant is inactive at revocation boundary', !hasAuthorization([{
   ...grant, revokedBy: field.value(brandedId<'EventId'>('event-revoke')),
   revokedAt: field.value(now),
 }], request))
+check('unknown revocation state cannot grant authority', !hasAuthorization([{
+  ...grant, revokedBy: field.unknown, revokedAt: field.unknown,
+}], request))
 check('non-revocable grant cannot carry revocation', validateAuthorization({
   ...grant, revocable: false,
   revokedBy: field.value(brandedId<'EventId'>('event-revoke')),
@@ -106,6 +112,9 @@ check('non-revocable grant cannot carry revocation', validateAuthorization({
 check('revocation event and time must travel together', validateAuthorization({
   ...grant, revokedBy: field.value(brandedId<'EventId'>('event-revoke')),
 }).includes('authorization-revocation-inconsistent'))
+check('unknown validity end is not treated as open-ended', !hasAuthorization([{
+  ...grant, validTo: field.unknown,
+}], request))
 
 // @ts-expect-error unknown is not an objective Office holder
 const invalidHolder: Office['holder'] = { kind: 'unknown' }
