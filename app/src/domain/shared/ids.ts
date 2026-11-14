@@ -34,6 +34,8 @@ export type ScheduleScopeId = BrandedId<'ScheduleScopeId'>
 export type EconomyScopeId = BrandedId<'EconomyScopeId'>
 export type LocationStateRef = BrandedId<'LocationStateRef'>
 export type LifeHistoryRef = BrandedId<'LifeHistoryRef'>
+export type LifeHistoryEntryId = BrandedId<'LifeHistoryEntryId'>
+export type LifeDomainHookId = BrandedId<'LifeDomainHookId'>
 
 /**
  * Brands an already allocated identifier without choosing its wire format.
