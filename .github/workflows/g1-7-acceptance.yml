@@ -12,6 +12,7 @@ on:
       - work/w1-c-relations-organizations
       - work/w1-d-cognition-communications
       - work/w1-e-goals-schedule-economy
+      - work/w2-life-lifecycle
   workflow_dispatch:
 
 permissions:
@@ -52,6 +53,10 @@ jobs:
         run: npm run test:domain:planning-economy
       - name: Life history and body/mind hook contracts
         run: npm run test:domain:life
+      - name: Calendar age contract tests
+        run: npm run test:domain:age
+      - name: Asset inheritance contract tests
+        run: npm run test:domain:inheritance
       - name: Review index integrity
         run: npm run check:docs
       - name: Patch whitespace integrity
