@@ -1,6 +1,6 @@
 import { brandedId, field } from './index'
 import { hasAuthorization } from './identity/authorization'
-import { validateAppointment, validateAuthorization, validateIdentityAssignment, validateOffice } from './identity/validation'
+import { validateAppointment, validateAuthorization, validateAuthorizationSet, validateIdentityAssignment, validateOffice, validateOfficeAppointments } from './identity/validation'
 import type { Appointment, Authorization, IdentityAssignment, Office } from './identity/model'
 
 let passed = 0
@@ -67,6 +67,33 @@ check('appointment end must follow start', validateAppointment({
   ...appointment, to: field.value({ day: 1, period: '夜' }),
 }).includes('appointment-end-before-start'))
 check('open appointment interval is valid', validateAppointment({ ...appointment, to: field.notApplicable }).length === 0)
+check('unknown appointment end is not treated as open', validateAppointment({
+  ...appointment, to: field.unknown,
+}).includes('appointment-unknown-end'))
+check('not-generated appointment end is not treated as open', validateAppointment({
+  ...appointment, to: field.notGenerated,
+}).includes('appointment-unknown-end'))
+
+const activeAppointment: Appointment = {
+  ...appointment,
+  from: { day: 9, period: '晨' },
+  to: field.value({ day: 12, period: '夜' }),
+}
+check('held office must match exactly one active appointment', validateOfficeAppointments(office, [activeAppointment], now).length === 0)
+check('held office without appointment is rejected', validateOfficeAppointments(office, [], now).includes('office-holder-appointment-mismatch'))
+check('vacant office cannot have an active appointment', validateOfficeAppointments({
+  ...office, holder: { kind: 'vacant' },
+}, [activeAppointment], now).includes('office-vacancy-has-active-appointment'))
+check('overlapping appointments are rejected', validateOfficeAppointments(office, [
+  activeAppointment,
+  { ...activeAppointment, id: brandedId<'AppointmentId'>('appointment-002'), person: otherPerson, from: { day: 10, period: '晨' }, to: field.notApplicable },
+], now).includes('appointment-overlap'))
+check('invalid appointment time is reported without throwing', validateOfficeAppointments(office, [
+  { ...activeAppointment, from: { day: 0, period: '晨' } as never },
+], now).includes('appointment-invalid-world-time'))
+check('duplicate appointment ids are rejected', validateOfficeAppointments(office, [
+  activeAppointment, activeAppointment,
+], now).includes('appointment-duplicate-id'))
 
 const grant: Authorization = {
   id: brandedId<'AuthorizationId'>('auth-001'),
@@ -121,6 +148,7 @@ check('unknown authorization end fails validation', validateAuthorization({
 check('empty permission cannot be granted', validateAuthorization({
   ...grant, permission: '  ',
 }).includes('authorization-empty-permission'))
+check('duplicate authorization ids are rejected', validateAuthorizationSet([grant, grant]).includes('authorization-duplicate-id'))
 check('invalid revocation time is rejected', validateAuthorization({
   ...grant, revokedBy: field.value(brandedId<'EventId'>('event-revoke')),
   revokedAt: field.value({ day: 0, period: '晨' } as never),
