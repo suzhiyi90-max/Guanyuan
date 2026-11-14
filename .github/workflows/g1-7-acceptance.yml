@@ -9,6 +9,7 @@ on:
       - feat/g1-engine
       - work/w1-a-person-core
       - work/w1-b-identity-office-auth
+      - work/w1-c-relations-organizations
   workflow_dispatch:
 
 permissions:
