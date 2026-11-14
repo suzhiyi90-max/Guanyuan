@@ -74,7 +74,7 @@ export function validatePersonLifecycle(person: Person, now: WorldTime): PersonL
   return issues
 }
 
-function isValueField<T>(value: Field<T>): value is { readonly kind: 'value'; readonly value: T } {
+function isValueField<T extends {}>(value: Field<T>): value is { readonly kind: 'value'; readonly value: T } {
   return value.kind === 'value'
 }
 
