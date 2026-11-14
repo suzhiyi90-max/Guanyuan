@@ -26,6 +26,7 @@ export type LifeStageIssue =
   | 'life-stage-event-time-mismatch'
   | 'life-stage-invalid-time'
   | 'life-stage-after-death'
+  | 'life-stage-before-birth'
   | 'life-stage-empty-track'
   | 'life-stage-empty-code'
   | 'life-stage-empty-detail'

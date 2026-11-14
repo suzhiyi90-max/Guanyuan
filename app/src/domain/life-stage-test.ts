@@ -95,8 +95,19 @@ const failedAppend = appendLifeStageFact([first], {
 }, refs)
 check('failed append preserves original collection', failedAppend.issues.length > 0
   && failedAppend.facts.length === 1 && failedAppend.facts[0] === first)
+const bornPerson: Person = {
+  ...person, birth: field.value({ day: 1, period: '晨' }),
+}
+check('stage before birth rejected', validateLifeStageFacts([
+  first,
+], { ...refs, persons: [{ ...bornPerson, birth: field.value({ day: 1, period: '午' }) }] })
+  .includes('life-stage-before-birth'))
+check('stage at birth time remains admissible', validateLifeStageFacts([
+  first,
+], { ...refs, persons: [bornPerson] }).length === 0)
+
 const deceased: Person = {
-  ...person, lifeState: 'dead',
+  ...bornPerson, lifeState: 'dead',
   death: field.value({ at: { day: 1, period: '午' }, causeEvent: event2, estateSettlements: [] }),
 }
 check('post-death stage updates rejected', validateLifeStageFacts([

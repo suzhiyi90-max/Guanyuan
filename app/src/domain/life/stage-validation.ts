@@ -52,11 +52,19 @@ export function validateLifeStageFacts(
     const person = refs.persons.find(item => item.id === fact.person)
     if (!person) {
       issues.push('life-stage-person-missing')
-    } else if (person.death.kind === 'value'
-      && isValidWorldTime(fact.at)
-      && isValidWorldTime(person.death.value.at)
-      && compareWorldTime(fact.at, person.death.value.at) > 0) {
-      issues.push('life-stage-after-death')
+    } else {
+      if (person.birth.kind === 'value'
+        && isValidWorldTime(fact.at)
+        && isValidWorldTime(person.birth.value)
+        && compareWorldTime(fact.at, person.birth.value) < 0) {
+        issues.push('life-stage-before-birth')
+      }
+      if (person.death.kind === 'value'
+        && isValidWorldTime(fact.at)
+        && isValidWorldTime(person.death.value.at)
+        && compareWorldTime(fact.at, person.death.value.at) > 0) {
+        issues.push('life-stage-after-death')
+      }
     }
 
     if (!refs.events.includes(fact.sourceEvent)) issues.push('life-stage-event-missing')
