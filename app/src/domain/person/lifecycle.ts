@@ -17,6 +17,7 @@ export type PersonLifecycleIssue =
   | 'alive-person-must-not-have-death-record'
   | 'death-record-is-in-the-future'
   | 'birth-is-in-the-future'
+  | 'death-precedes-birth'
   | 'invalid-world-time'
   | 'death-settlement-chain-incomplete'
 
@@ -37,12 +38,26 @@ export function validatePersonLifecycle(person: Person, now: WorldTime): PersonL
     addIssue('alive-person-must-not-have-death-record')
   }
 
+  const birthAt = isValueField(person.birth) ? person.birth.value : undefined
+  if (birthAt !== undefined) {
+    if (!isValidWorldTime(birthAt)) {
+      addIssue('invalid-world-time')
+    } else if (nowIsValid && compareWorldTime(birthAt, now) > 0) {
+      addIssue('birth-is-in-the-future')
+    }
+  }
+
   if (person.death.kind === 'value') {
     const deathAt = person.death.value.at
     if (!isValidWorldTime(deathAt)) {
       addIssue('invalid-world-time')
-    } else if (nowIsValid && compareWorldTime(deathAt, now) > 0) {
-      addIssue('death-record-is-in-the-future')
+    } else {
+      if (nowIsValid && compareWorldTime(deathAt, now) > 0) {
+        addIssue('death-record-is-in-the-future')
+      }
+      if (birthAt !== undefined && isValidWorldTime(birthAt) && compareWorldTime(deathAt, birthAt) < 0) {
+        addIssue('death-precedes-birth')
+      }
     }
 
     const domains = person.death.value.estateSettlements.map((item) => item.domain)
@@ -53,14 +68,6 @@ export function validatePersonLifecycle(person: Person, now: WorldTime): PersonL
       || requiredSettlementDomains.some((domain) => !uniqueDomains.has(domain))
     ) {
       addIssue('death-settlement-chain-incomplete')
-    }
-  }
-
-  if (isValueField(person.birth)) {
-    if (!isValidWorldTime(person.birth.value)) {
-      addIssue('invalid-world-time')
-    } else if (nowIsValid && compareWorldTime(person.birth.value, now) > 0) {
-      addIssue('birth-is-in-the-future')
     }
   }
 
