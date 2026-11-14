@@ -10,6 +10,7 @@ on:
       - work/w1-a-person-core
       - work/w1-b-identity-office-auth
       - work/w1-c-relations-organizations
+      - work/w1-d-cognition-communications
   workflow_dispatch:
 
 permissions:
@@ -46,6 +47,8 @@ jobs:
         run: npm run test:domain:relations
       - name: Cognition and communications contract tests
         run: npm run test:domain:cognition
+      - name: Planning and economy contract tests
+        run: npm run test:domain:planning-economy
       - name: Review index integrity
         run: npm run check:docs
       - name: Patch whitespace integrity
