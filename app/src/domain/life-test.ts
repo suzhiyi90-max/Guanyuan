@@ -79,6 +79,12 @@ check('life history before birth is rejected', validateLifeHistory(history, {
 check('life history at exact birth time is allowed', validateLifeHistory({
   ...history, entries: [{ ...first, event: event2, at: { day: 1, period: '午' } }],
 }, { ...refs, persons: [bornPerson] }).length === 0)
+const failedBoundaryAppend = appendLifeHistoryEntry(history, second, {
+  ...refs, persons: [{ ...person, birth: field.value({ day: 1, period: '暮' }) }],
+})
+check('life history append rejects pre-birth event atomically',
+  failedBoundaryAppend.issues.includes('life-history-before-birth')
+  && failedBoundaryAppend.history === history)
 check('life history after death is rejected', validateLifeHistory({
   ...history, entries: [first, second],
 }, { ...refs, persons: [{ ...person, lifeState: 'dead', death: field.value({
