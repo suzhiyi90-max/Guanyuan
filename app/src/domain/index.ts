@@ -19,3 +19,6 @@ export * from './planning/validation'
 
 export * from './economy/model'
 export * from './economy/validation'
+
+export * from './life/model'
+export * from './life/validation'

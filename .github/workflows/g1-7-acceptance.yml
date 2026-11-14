@@ -11,6 +11,7 @@ on:
       - work/w1-b-identity-office-auth
       - work/w1-c-relations-organizations
       - work/w1-d-cognition-communications
+      - work/w1-e-goals-schedule-economy
   workflow_dispatch:
 
 permissions:
@@ -49,6 +50,8 @@ jobs:
         run: npm run test:domain:cognition
       - name: Planning and economy contract tests
         run: npm run test:domain:planning-economy
+      - name: Life history and body/mind hook contracts
+        run: npm run test:domain:life
       - name: Review index integrity
         run: npm run check:docs
       - name: Patch whitespace integrity
