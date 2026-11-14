@@ -24,7 +24,7 @@ const now = { day: 8, period: '暮' } as const
 const basePerson: Person = {
   id: brandedId<'PersonId'>('p-fixture-001'),
   displayName: '测试人物',
-  birth: field.value({ day: 1, period: '晨' }),
+  birth: field.value({ day: 1, period: '晨' } as const),
   lifeState: 'alive',
   archiveState: 'active',
   death: field.notApplicable,
@@ -56,7 +56,7 @@ check('dead without death record is rejected', validatePersonLifecycle(deadWitho
 const aliveWithRecord = {
   ...basePerson,
   death: field.value({
-    at: { day: 7, period: '午' },
+    at: { day: 7, period: '午' } as const,
     causeEvent: brandedId<'EventId'>('evt-death-001'),
     estateSettlements: [],
   }),
@@ -76,11 +76,11 @@ const deadPerson: Person = {
 check('dead + death record is valid', isPersonLifecycleValid(deadPerson, now))
 check('future death record is rejected', validatePersonLifecycle({
   ...deadPerson,
-  death: field.value({ ...deathRecord, at: { day: 9, period: '晨' } }),
+  death: field.value({ ...deathRecord, at: { day: 9, period: '晨' } as const }),
 }, now).includes('death-record-is-in-the-future'))
 check('future birth is rejected', validatePersonLifecycle({
   ...basePerson,
-  birth: field.value({ day: 9, period: '晨' }),
+  birth: field.value({ day: 9, period: '晨' } as const),
 }, now).includes('birth-is-in-the-future'))
 
 // Compile-time contract guards: null and unbranded identifiers must not pass.
