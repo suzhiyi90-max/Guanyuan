@@ -1,6 +1,7 @@
 import { compareWorldTime, isValidWorldTime } from '../shared/world-time'
 import type { EventId } from '../shared/ids'
 import type { Person } from '../person/model'
+import { personLifeTimeBoundaryViolations } from '../person/lifecycle'
 import type { Visibility } from '../shared/visibility'
 import type { LifeStageFact, LifeStageIssue } from './stage'
 
@@ -53,17 +54,8 @@ export function validateLifeStageFacts(
     if (!person) {
       issues.push('life-stage-person-missing')
     } else {
-      if (person.birth.kind === 'value'
-        && isValidWorldTime(fact.at)
-        && isValidWorldTime(person.birth.value)
-        && compareWorldTime(fact.at, person.birth.value) < 0) {
-        issues.push('life-stage-before-birth')
-      }
-      if (person.death.kind === 'value'
-        && isValidWorldTime(fact.at)
-        && isValidWorldTime(person.death.value.at)
-        && compareWorldTime(fact.at, person.death.value.at) > 0) {
-        issues.push('life-stage-after-death')
+      for (const violation of personLifeTimeBoundaryViolations(person, fact.at)) {
+        issues.push(violation === 'before-birth' ? 'life-stage-before-birth' : 'life-stage-after-death')
       }
     }
 

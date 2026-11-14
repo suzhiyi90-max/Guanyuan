@@ -1,6 +1,7 @@
 import { compareWorldTime, isValidWorldTime } from '../shared/world-time'
 import type { EventId } from '../shared/ids'
 import type { Person } from '../person/model'
+import { personLifeTimeBoundaryViolations } from '../person/lifecycle'
 import type { Visibility } from '../shared/visibility'
 import type { LifeDomainHook, LifeHistory, LifeHistoryEntry, LifeIssue } from './model'
 
@@ -19,6 +20,22 @@ function validVisibility(value: Visibility, persons: readonly Person[]): boolean
 
 function sameWorldTime(left: import('../shared/world-time').WorldTime, right: import('../shared/world-time').WorldTime): boolean {
   return isValidWorldTime(left) && isValidWorldTime(right) && compareWorldTime(left, right) === 0
+}
+
+function appendLifeBoundaryIssues(
+  issues: LifeIssue[],
+  person: Person | undefined,
+  at: import('../shared/world-time').WorldTime,
+  record: 'history' | 'hook',
+): void {
+  if (!person) return
+  for (const violation of personLifeTimeBoundaryViolations(person, at)) {
+    if (record === 'history') {
+      issues.push(violation === 'before-birth' ? 'life-history-before-birth' : 'life-history-after-death')
+    } else {
+      issues.push(violation === 'before-birth' ? 'life-hook-before-birth' : 'life-hook-after-death')
+    }
+  }
 }
 
 export function validateLifeHistory(history: LifeHistory, refs: LifeReferences): LifeIssue[] {
@@ -42,6 +59,7 @@ export function validateLifeHistory(history: LifeHistory, refs: LifeReferences):
     else if (!sameWorldTime(entry.at, eventAt)) issues.push('life-history-event-time-mismatch')
 
     if (!isValidWorldTime(entry.at)) issues.push('life-history-invalid-time')
+    appendLifeBoundaryIssues(issues, person, entry.at, 'history')
     if (previousAt && isValidWorldTime(previousAt) && isValidWorldTime(entry.at)
       && compareWorldTime(entry.at, previousAt) < 0) {
       issues.push('life-history-order-reversed')
@@ -59,6 +77,7 @@ export function appendLifeHistoryEntry(
   refs: LifeReferences,
 ): { readonly history: LifeHistory; readonly issues: LifeIssue[] } {
   const issues: LifeIssue[] = validateLifeHistory(history, refs)
+  const person = refs.persons.find(item => item.id === history.person)
   const last = history.entries[history.entries.length - 1]
   if (history.entries.some(item => item.id === entry.id)) issues.push('life-history-entry-duplicate-id')
   if (history.entries.some(item => item.event === entry.event)) issues.push('life-history-event-duplicate')
@@ -67,6 +86,7 @@ export function appendLifeHistoryEntry(
   if (!eventAt || !isValidWorldTime(eventAt)) issues.push('life-history-event-time-missing')
   else if (!sameWorldTime(entry.at, eventAt)) issues.push('life-history-event-time-mismatch')
   if (!isValidWorldTime(entry.at)) issues.push('life-history-invalid-time')
+  appendLifeBoundaryIssues(issues, person, entry.at, 'history')
   if (last && isValidWorldTime(last.at) && isValidWorldTime(entry.at)
     && compareWorldTime(entry.at, last.at) < 0) {
     issues.push('life-history-order-reversed')
@@ -84,6 +104,7 @@ export function validateLifeDomainHook(hook: LifeDomainHook, refs: LifeReference
     const expectedScope = hook.domain === 'body' ? person.stateDomains.body : person.stateDomains.mind
     if (hook.scope !== expectedScope) issues.push('life-hook-scope-mismatch')
   }
+  appendLifeBoundaryIssues(issues, person, hook.at, 'hook')
   if (!refs.events.includes(hook.sourceEvent)) issues.push('life-hook-event-missing')
   const eventAt = refs.eventTimes.get(hook.sourceEvent)
   if (!eventAt || !isValidWorldTime(eventAt)) issues.push('life-hook-event-time-missing')

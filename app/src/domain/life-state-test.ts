@@ -171,6 +171,13 @@ const deceased: Person = {
     estateSettlements: [],
   }),
 }
+const bornPerson: Person = { ...person, birth: field.value({ day: 1, period: '午' }) }
+check('pre-birth state facts are rejected', validateLifeStateFacts([first], {
+  ...refs, persons: [bornPerson],
+}).includes('life-state-before-birth'))
+check('state fact at exact birth time is allowed', validateLifeStateFacts([{
+  ...first, at: { day: 1, period: '午' }, sourceEvent: event2,
+}], { ...refs, persons: [bornPerson] }).length === 0)
 check('post-death facts are rejected', validateLifeStateFacts([
   { ...mind, at: { day: 2, period: '晨' } },
 ], { ...refs, persons: [deceased] }).includes('life-state-after-death'))

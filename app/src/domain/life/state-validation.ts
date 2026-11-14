@@ -1,6 +1,7 @@
 import { compareWorldTime, isValidWorldTime } from '../shared/world-time'
 import type { EventId } from '../shared/ids'
 import type { Person } from '../person/model'
+import { personLifeTimeBoundaryViolations } from '../person/lifecycle'
 import type { Visibility } from '../shared/visibility'
 import type { LifeStateFact, LifeStateIssue, LifeStateValue } from './state'
 
@@ -73,11 +74,8 @@ export function validateLifeStateFacts(
         : person.stateDomains.mind
       if (fact.scope !== expectedScope) issues.push('life-state-scope-mismatch')
 
-      if (person.death.kind === 'value'
-        && isValidWorldTime(fact.at)
-        && isValidWorldTime(person.death.value.at)
-        && compareWorldTime(fact.at, person.death.value.at) > 0) {
-        issues.push('life-state-after-death')
+      for (const violation of personLifeTimeBoundaryViolations(person, fact.at)) {
+        issues.push(violation === 'before-birth' ? 'life-state-before-birth' : 'life-state-after-death')
       }
     }
 
