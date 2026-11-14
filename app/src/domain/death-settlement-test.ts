@@ -41,6 +41,7 @@ const person: Person = {
   },
   history: brandedId<'LifeHistoryRef'>('death-settlement-history'),
 }
+const deathRecord = person.death.kind === 'value' ? person.death.value : undefined
 const refs = {
   events: [deathEvent, settlementEvent],
   eventTimes: new Map<EventId, WorldTime>([
@@ -59,7 +60,7 @@ check('missing death cause time is rejected',
 check('invalid death record time is rejected',
   validateDeathSettlementReferences({
     ...person,
-    death: field.value({ ...person.death.value, at: { day: 0, period: '午' } }),
+    death: deathRecord ? field.value({ ...deathRecord, at: { day: 0, period: '午' } }) : field.notApplicable,
   }, refs).includes('death-settlement-death-time-invalid'))
 check('death event time must match death record',
   validateDeathSettlementReferences(person, {
@@ -89,14 +90,14 @@ check('invalid runtime settlement status is rejected',
   validateDeathSettlementReferences({
     ...person,
     death: field.value({
-      ...person.death.value,
-      estateSettlements: person.death.value.estateSettlements.map((item, index) =>
+      ...(deathRecord ?? { at: deathAt, causeEvent: deathEvent, estateSettlements: [] }),
+      estateSettlements: (deathRecord?.estateSettlements ?? []).map((item, index) =>
         index === 0 ? { ...item, status: 'completed' as never } : item),
     }),
   }, refs).includes('death-settlement-invalid-status'))
 check('settlement validation is read-only',
-  person.death.kind === 'value'
-    && person.death.value.estateSettlements.every(item => item.status === 'pending'))
+  deathRecord !== undefined
+    && deathRecord.estateSettlements.every(item => item.status === 'pending'))
 
 if (failed > 0) throw new Error(`Death settlement contract tests failed: ${failed}/${passed + failed}`)
 console.log(`Death settlement contract tests: ${passed}/${passed + failed} passed`)
