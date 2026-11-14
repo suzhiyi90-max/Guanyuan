@@ -7,12 +7,13 @@ export interface LifeStateReferences {readonly persons:readonly Person[];readonl
 const levels=['public','contact','private','secret'] as const
 function validVisibility(v:Visibility,ps:readonly Person[]):boolean{return(v.observer==='player'||ps.some(p=>p.id===v.observer))&&levels.includes(v.level)}
 function validateValue(v:LifeStateValue):LifeStateIssue[]{const o:LifeStateIssue[]=[];if(v.kind==='qualitative'&&!v.code.trim())o.push('life-state-empty-value-code');if(v.kind==='classified'){if(!v.code.trim())o.push('life-state-empty-value-code');if(v.detail.kind==='value'&&!v.detail.value.trim())o.push('life-state-empty-detail')}if(v.kind==='quantitative'){if(!Number.isFinite(v.value))o.push('life-state-invalid-quantitative-value');if(!v.scale.trim())o.push('life-state-empty-scale');if(v.unit.kind==='value'&&!v.unit.value.trim())o.push('life-state-empty-unit')}return o}
-function dimensionKey(f:LifeStateFact):string{return [f.person,f.domain,f.scope,f.dimension].join('|')}
+function dimensionKey(f:LifeStateFact):string{return JSON.stringify([f.person,f.domain,f.scope,f.dimension])}
 export function validateLifeStateFacts(fs:readonly LifeStateFact[],r:LifeStateReferences):LifeStateIssue[]{
  const o:LifeStateIssue[]=[],byId=new Map(fs.map(f=>[f.id,f])),ids=new Set<string>(),replaced=new Set<string>(),roots=new Set<string>()
  for(const f of fs){
   if(ids.has(f.id))o.push('life-state-duplicate-id');ids.add(f.id)
-  if(f.supersedes.kind!=='value'){const k=dimensionKey(f);if(roots.has(k))o.push('life-state-dimension-root-duplicate');roots.add(k)}
+  if(f.supersedes.kind==='n/a'){const k=dimensionKey(f);if(roots.has(k))o.push('life-state-dimension-root-duplicate');roots.add(k)}
+  else if(f.supersedes.kind!=='value')o.push('life-state-root-must-be-not-applicable')
   const p=r.persons.find(x=>x.id===f.person)
   if(!p)o.push('life-state-person-missing');else{const s=f.domain==='body'?p.stateDomains.body:p.stateDomains.mind;if(f.scope!==s)o.push('life-state-scope-mismatch');if(p.death.kind==='value'&&isValidWorldTime(f.at)&&isValidWorldTime(p.death.value.at)&&compareWorldTime(f.at,p.death.value.at)>0)o.push('life-state-after-death')}
   if(!r.events.includes(f.sourceEvent))o.push('life-state-event-missing')

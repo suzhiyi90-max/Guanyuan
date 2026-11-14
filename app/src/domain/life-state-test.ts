@@ -25,6 +25,7 @@ check('revision must be later',validateLifeStateFacts([a,{...b,at:{day:1,period:
 check('cross-person supersession rejected',validateLifeStateFacts([a,{...b,person:brandedId<'PersonId'>('other')}],refs).includes('life-state-supersedes-person-mismatch'))
 check('a predecessor cannot be superseded twice',validateLifeStateFacts([a,b,{...b,id:brandedId<'LifeStateFactId'>('c'),sourceEvent:e3,at:{day:2,period:'晨'},supersedes:field.value(a.id)}],refs).includes('life-state-supersedes-already-replaced'))
 check('duplicate roots for one dimension rejected',validateLifeStateFacts([a,{...a,id:brandedId<'LifeStateFactId'>('root2'),sourceEvent:e2,at:{day:1,period:'午'}}],refs).includes('life-state-dimension-root-duplicate'))
+check('root must explicitly be n/a',validateLifeStateFacts([{...a,supersedes:field.unknown}],refs).includes('life-state-root-must-be-not-applicable'))
 const failedAppend=appendLifeStateFact([a],{...b,at:{day:1,period:'晨'},sourceEvent:e1},refs)
 check('failed append returns original collection',failedAppend.issues.length>0&&failedAppend.facts.length===1&&failedAppend.facts[0]===a)
 const dead:Person={...p,lifeState:'dead',death:field.value({at:{day:1,period:'午'},causeEvent:e2,estateSettlements:[]})}

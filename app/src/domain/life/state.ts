@@ -24,3 +24,4 @@ export type LifeStateIssue =
  | 'life-state-supersedes-self'|'life-state-supersedes-person-mismatch'|'life-state-supersedes-domain-mismatch'
  | 'life-state-supersedes-dimension-mismatch'|'life-state-supersedes-scope-mismatch'
  | 'life-state-supersedes-time-not-later'|'life-state-supersedes-already-replaced'|'life-state-dimension-root-duplicate'
+ | 'life-state-root-must-be-not-applicable'
