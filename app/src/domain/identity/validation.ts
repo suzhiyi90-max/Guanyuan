@@ -170,5 +170,3 @@ export function validateAuthorizationSet(grants: readonly Authorization[]): Iden
   }
   return issues
 }
-
-export type { ScheduleScopeId }
