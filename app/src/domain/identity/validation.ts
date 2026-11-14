@@ -28,7 +28,7 @@ export function validateOffice(office: Office): IdentityIssue[] {
     issues.push('identity-validity-reference-mismatch')
   }
   if (new Set(office.authorization).size !== office.authorization.length) {
-    issues.push('identity-id-already-exists')
+    issues.push('office-authorization-duplicate')
   }
   return issues
 }
@@ -51,9 +51,8 @@ export function validateAppointment(appointment: Appointment): IdentityIssue[] {
 
 export function validateAuthorization(grant: Authorization): IdentityIssue[] {
   const issues: IdentityIssue[] = []
-  if (!grant.permission.trim() || !isValidWorldTime(grant.validFrom)) {
-    issues.push('authorization-invalid-time')
-  }
+  if (!grant.permission.trim()) issues.push('authorization-empty-permission')
+  if (!isValidWorldTime(grant.validFrom)) issues.push('authorization-invalid-time')
   if (isValue(grant.validTo)) {
     if (!isValidWorldTime(grant.validTo.value)
       || (isValidWorldTime(grant.validFrom) && compareWorldTime(grant.validTo.value, grant.validFrom) <= 0)) {
@@ -72,10 +71,13 @@ export function validateAuthorization(grant: Authorization): IdentityIssue[] {
   if ((hasRevocationEvent || hasRevocationTime) && !grant.revocable) {
     issues.push('authorization-revocation-forbidden')
   }
-  if (isValue(grant.revokedAt) && isValidWorldTime(grant.revokedAt.value)
-    && isValidWorldTime(grant.validFrom)
-    && compareWorldTime(grant.revokedAt.value, grant.validFrom) < 0) {
-    issues.push('authorization-invalid-time')
+  if (isValue(grant.revokedAt)) {
+    if (!isValidWorldTime(grant.revokedAt.value)) {
+      issues.push('authorization-invalid-time')
+    } else if (isValidWorldTime(grant.validFrom)
+      && compareWorldTime(grant.revokedAt.value, grant.validFrom) < 0) {
+      issues.push('authorization-invalid-time')
+    }
   }
   if (isValue(grant.validTo) && isValidWorldTime(grant.validTo.value)
     && isValue(grant.revokedAt) && isValidWorldTime(grant.revokedAt.value)

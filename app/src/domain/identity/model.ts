@@ -84,12 +84,13 @@ export interface AuthorizationRequest {
 
 export type IdentityIssue =
   | 'identity-empty-code'
-  | 'identity-source-mismatch'
   | 'identity-validity-reference-mismatch'
   | 'identity-id-already-exists'
+  | 'office-invalid-holder'
+  | 'office-authorization-duplicate'
   | 'appointment-invalid-world-time'
   | 'appointment-end-before-start'
-  | 'office-invalid-holder'
+  | 'authorization-empty-permission'
   | 'authorization-invalid-time'
   | 'authorization-revocation-inconsistent'
   | 'authorization-revocation-forbidden'

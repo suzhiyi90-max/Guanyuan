@@ -115,6 +115,13 @@ check('revocation event and time must travel together', validateAuthorization({
 check('unknown validity end is not treated as open-ended', !hasAuthorization([{
   ...grant, validTo: field.unknown,
 }], request))
+check('empty permission cannot be granted', validateAuthorization({
+  ...grant, permission: '  ',
+}).includes('authorization-empty-permission'))
+check('invalid revocation time is rejected', validateAuthorization({
+  ...grant, revokedBy: field.value(brandedId<'EventId'>('event-revoke')),
+  revokedAt: field.value({ day: 0, period: '晨' } as never),
+}).includes('authorization-invalid-time'))
 
 // @ts-expect-error unknown is not an objective Office holder
 const invalidHolder: Office['holder'] = { kind: 'unknown' }
