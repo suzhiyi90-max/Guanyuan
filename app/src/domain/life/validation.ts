@@ -1,6 +1,7 @@
 import { compareWorldTime, isValidWorldTime } from '../shared/world-time'
 import type { EventId } from '../shared/ids'
 import type { Person } from '../person/model'
+import { personLifeTimeBoundaryViolations } from '../person/lifecycle'
 import type { Visibility } from '../shared/visibility'
 import type { LifeDomainHook, LifeHistory, LifeHistoryEntry, LifeIssue } from './model'
 
@@ -42,6 +43,11 @@ export function validateLifeHistory(history: LifeHistory, refs: LifeReferences):
     else if (!sameWorldTime(entry.at, eventAt)) issues.push('life-history-event-time-mismatch')
 
     if (!isValidWorldTime(entry.at)) issues.push('life-history-invalid-time')
+    if (person) {
+      for (const violation of personLifeTimeBoundaryViolations(person, entry.at)) {
+        issues.push(violation === 'before-birth' ? 'life-history-before-birth' : 'life-history-after-death')
+      }
+    }
     if (previousAt && isValidWorldTime(previousAt) && isValidWorldTime(entry.at)
       && compareWorldTime(entry.at, previousAt) < 0) {
       issues.push('life-history-order-reversed')
@@ -83,6 +89,9 @@ export function validateLifeDomainHook(hook: LifeDomainHook, refs: LifeReference
   else {
     const expectedScope = hook.domain === 'body' ? person.stateDomains.body : person.stateDomains.mind
     if (hook.scope !== expectedScope) issues.push('life-hook-scope-mismatch')
+    for (const violation of personLifeTimeBoundaryViolations(person, hook.at)) {
+      issues.push(violation === 'before-birth' ? 'life-hook-before-birth' : 'life-hook-after-death')
+    }
   }
   if (!refs.events.includes(hook.sourceEvent)) issues.push('life-hook-event-missing')
   const eventAt = refs.eventTimes.get(hook.sourceEvent)
