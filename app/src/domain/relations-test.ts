@@ -28,7 +28,6 @@ function check(name: string, condition: boolean): void {
 
 const p1 = brandedId<'PersonId'>('person-001')
 const p2 = brandedId<'PersonId'>('person-002')
-const p3 = brandedId<'PersonId'>('person-003')
 const orgId = brandedId<'OrgId'>('org-001')
 const event1 = brandedId<'EventId'>('event-001')
 const event2 = brandedId<'EventId'>('event-002')
@@ -73,17 +72,20 @@ const claim: RelationClaim = {
   assertedAt: now,
   sourceEvent: event2,
 }
-check('claim resolves to objective relation', validateRelationClaim(claim, [relationId]).length === 0)
+check('claim resolves to objective relation', validateRelationClaim(claim, [relationId], [p1, p2]).length === 0)
 check('claim cannot create relation by dangling reference', validateRelationClaim({
   ...claim, relation: brandedId<'RelationId'>('missing-relation'),
-}, [relationId]).includes('claim-relation-missing'))
+}, [relationId], [p1, p2]).includes('claim-relation-missing'))
 check('claim certainty is independent and bounded', validateRelationClaim({
   ...claim, certainty: 'certain' as never,
-}, [relationId]).includes('claim-invalid-certainty'))
-check('claim collection rejects duplicate IDs', validateRelationClaimSet([claim, claim], [relationId]).includes('claim-duplicate-id'))
+}, [relationId], [p1, p2]).includes('claim-invalid-certainty'))
+check('claim collection rejects duplicate IDs', validateRelationClaimSet([claim, claim], [relationId], [p1, p2]).includes('claim-duplicate-id'))
 check('claim time is validated', validateRelationClaim({
   ...claim, assertedAt: { day: 0, period: '晨' } as never,
-}, [relationId]).includes('claim-invalid-time'))
+}, [relationId], [p1, p2]).includes('claim-invalid-time'))
+check('claimant person reference must resolve', validateRelationClaim({
+  ...claim, claimant: brandedId<'PersonId'>('missing-person'),
+}, [relationId], [p2]).includes('claim-person-missing'))
 
 const evidence: RelationEvidence = {
   id: brandedId<'RelationEvidenceId'>('evidence-001'),
@@ -92,17 +94,20 @@ const evidence: RelationEvidence = {
   weight: 'direct',
   sourceEvent: event2,
 }
-check('evidence resolves to a claim', validateRelationEvidence(evidence, [claimId]).length === 0)
+check('evidence resolves to a claim', validateRelationEvidence(evidence, [claimId], [p1, p2], [orgId]).length === 0)
 check('dangling evidence claim is rejected', validateRelationEvidence({
   ...evidence, claim: brandedId<'RelationClaimId'>('missing-claim'),
-}, [claimId]).includes('evidence-claim-missing'))
+}, [claimId], [p1, p2], [orgId]).includes('evidence-claim-missing'))
 check('empty evidence reference is rejected', validateRelationEvidence({
   ...evidence, evidence: { kind: 'document', id: '  ' },
-}, [claimId]).includes('evidence-reference-invalid'))
+}, [claimId], [p1, p2], [orgId]).includes('evidence-reference-invalid'))
 check('evidence weight is validated', validateRelationEvidence({
   ...evidence, weight: 'rumor' as never,
-}, [claimId]).includes('evidence-invalid-weight'))
-check('evidence collection rejects duplicate IDs', validateRelationEvidenceSet([evidence, evidence], [claimId]).includes('evidence-duplicate-id'))
+}, [claimId], [p1, p2], [orgId]).includes('evidence-invalid-weight'))
+check('evidence person reference must resolve', validateRelationEvidence({
+  ...evidence, evidence: { kind: 'person', id: brandedId<'PersonId'>('missing-person') },
+}, [claimId], [p1, p2], [orgId]).includes('evidence-person-missing'))
+check('evidence collection rejects duplicate IDs', validateRelationEvidenceSet([evidence, evidence], [claimId], [p1, p2], [orgId]).includes('evidence-duplicate-id'))
 
 const organization: Organization = {
   id: orgId,

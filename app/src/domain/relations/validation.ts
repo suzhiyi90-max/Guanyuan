@@ -73,9 +73,11 @@ export function validateRelationSet(
 export function validateRelationClaim(
   claim: RelationClaim,
   relationIds: readonly RelationId[],
+  personIds: readonly PersonId[],
 ): RelationIssue[] {
   const issues: RelationIssue[] = []
   if (!relationIds.includes(claim.relation)) issues.push('claim-relation-missing')
+  if (claim.claimant !== 'player' && !personIds.includes(claim.claimant)) issues.push('claim-person-missing')
   if (!isValidWorldTime(claim.assertedAt)) issues.push('claim-invalid-time')
   if (!['confirmed', 'reported', 'suspected', 'unverified'].includes(claim.certainty)) {
     issues.push('claim-invalid-certainty')
@@ -86,20 +88,29 @@ export function validateRelationClaim(
 export function validateRelationClaimSet(
   claims: readonly RelationClaim[],
   relationIds: readonly RelationId[],
+  personIds: readonly PersonId[],
 ): RelationIssue[] {
   const issues: RelationIssue[] = []
   if (duplicateIds(claims, (item) => item.id)) issues.push('claim-duplicate-id')
-  for (const claim of claims) issues.push(...validateRelationClaim(claim, relationIds))
+  for (const claim of claims) issues.push(...validateRelationClaim(claim, relationIds, personIds))
   return issues
 }
 
 export function validateRelationEvidence(
   evidence: RelationEvidence,
   claimIds: readonly string[],
+  personIds: readonly PersonId[],
+  organizationIds: readonly OrgId[],
 ): RelationIssue[] {
   const issues: RelationIssue[] = []
   if (!claimIds.includes(evidence.claim)) issues.push('evidence-claim-missing')
   if (!isValidEvidenceReference(evidence.evidence)) issues.push('evidence-reference-invalid')
+  if (evidence.evidence.kind === 'person' && !personIds.includes(evidence.evidence.id)) {
+    issues.push('evidence-person-missing')
+  }
+  if (evidence.evidence.kind === 'organization' && !organizationIds.includes(evidence.evidence.id)) {
+    issues.push('evidence-organization-missing')
+  }
   if (!['direct', 'corroborating', 'hearsay'].includes(evidence.weight)) {
     issues.push('evidence-invalid-weight')
   }
@@ -109,10 +120,12 @@ export function validateRelationEvidence(
 export function validateRelationEvidenceSet(
   evidence: readonly RelationEvidence[],
   claimIds: readonly string[],
+  personIds: readonly PersonId[],
+  organizationIds: readonly OrgId[],
 ): RelationIssue[] {
   const issues: RelationIssue[] = []
   if (duplicateIds(evidence, (item) => item.id)) issues.push('evidence-duplicate-id')
-  for (const item of evidence) issues.push(...validateRelationEvidence(item, claimIds))
+  for (const item of evidence) issues.push(...validateRelationEvidence(item, claimIds, personIds, organizationIds))
   return issues
 }
 
@@ -164,20 +177,6 @@ export function validateMembershipSet(
     if (!people.has(membership.person)) issues.push('membership-person-missing')
   }
   return issues
-}
-
-/** A membership is not evidence of a private interpersonal relation. */
-export function membershipDoesNotCreateRelation(
-  memberships: readonly Membership[],
-  relations: readonly Relation[],
-): boolean {
-  return relations.every((relation) =>
-    !memberships.some((membership) =>
-      membership.organization === membership.organization
-      && membership.person === relation.from
-      && relation.to !== relation.from,
-    ),
-  )
 }
 
 /** Type helper for callers that need to preserve the relation ID brand. */
