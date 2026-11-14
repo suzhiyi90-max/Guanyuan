@@ -20,5 +20,8 @@ export function compareWorldTime(left: WorldTime, right: WorldTime): number {
 }
 
 export function isValidWorldTime(value: WorldTime): boolean {
-  return Number.isInteger(value.day) && value.day >= 1 && value.period in periodOrder
+  return Number.isInteger(value.day)
+    && value.day >= 1
+    && typeof value.period === 'string'
+    && Object.hasOwn(periodOrder, value.period)
 }
