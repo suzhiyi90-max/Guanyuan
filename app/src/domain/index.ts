@@ -6,3 +6,6 @@ export * from './person/lifecycle'
 export * from './identity/model'
 export * from './identity/authorization'
 export * from './identity/validation'
+
+export * from './relations/model'
+export * from './relations/validation'

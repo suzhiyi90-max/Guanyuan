@@ -8,6 +8,8 @@ on:
     branches:
       - feat/g1-engine
       - work/w1-a-person-core
+      - work/w1-b-identity-office-auth
+      - work/w1-c-relations-organizations
   workflow_dispatch:
 
 permissions:
@@ -40,6 +42,8 @@ jobs:
         run: npm run test:domain
       - name: Identity and authorization contract tests
         run: npm run test:domain:identity
+      - name: Relations and organizations contract tests
+        run: npm run test:domain:relations
       - name: Review index integrity
         run: npm run check:docs
       - name: Patch whitespace integrity
