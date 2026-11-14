@@ -72,6 +72,7 @@ export type EconomyIssue =
   | 'asset-right-grant-scope-conflict'
   | 'asset-revocation-grant-missing'
   | 'debt-empty-kind'
+  | 'debt-duplicate-id'
   | 'debt-invalid-principal'
   | 'debt-creditor-missing'
   | 'debt-debtor-missing'

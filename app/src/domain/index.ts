@@ -1,7 +1,7 @@
 export * from './shared/field'
 export * from './shared/ids'
 export * from './shared/world-time'
-export * from './shared/visibility'
+export type { Visibility } from './shared/visibility'
 export * from './person/model'
 export * from './person/lifecycle'
 export * from './identity/model'
