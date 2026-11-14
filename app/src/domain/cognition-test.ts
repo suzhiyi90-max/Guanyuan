@@ -80,7 +80,7 @@ check('propagation cannot predate its source knowledge',validateMessagePropagati
   {...propagation,propagatedAt:{day:2,period:'晨'}},[message],[entry,recipientKnowledge],[p1,p2,p3],
 ).includes('propagation-time-before-source'))
 check('recipient cannot propagate an unread message',validateMessagePropagation(
-  {...propagation,fromHolder:p2},[message],[entry,recipientKnowledge],[p1,p2,p3],
+  {...propagation,fromHolder:p2},[{...message,readAt:field.unknown}],[entry,recipientKnowledge],[p1,p2,p3],
 ).includes('propagation-recipient-not-read'))
 check('propagation rejects missing message',validateMessagePropagation(
   {...propagation,message:brandedId<'MessageId'>('missing')},[],[entry,recipientKnowledge],[p1,p2,p3],
