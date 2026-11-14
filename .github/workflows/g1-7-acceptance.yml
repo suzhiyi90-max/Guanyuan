@@ -16,6 +16,7 @@ on:
       - work/w2-b-age-succession
       - work/w2-c-body-mind-state
       - work/w2-d-life-stage-facts
+      - work/w2-e-life-time-boundaries
   workflow_dispatch:
 
 permissions:
@@ -64,6 +65,8 @@ jobs:
         run: npm run test:domain:life-state
       - name: Life stage fact contracts
         run: npm run test:domain:life-stage
+      - name: Unified life time boundary contracts
+        run: npm run test:domain:life-time
       - name: Review index integrity
         run: npm run check:docs
       - name: Patch whitespace integrity
