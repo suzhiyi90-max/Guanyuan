@@ -20,6 +20,7 @@ export type MessageId = BrandedId<'MessageId'>
 export type AssetId = BrandedId<'AssetId'>
 export type DebtId = BrandedId<'DebtId'>
 export type RightGrantId = BrandedId<'RightGrantId'>
+export type AssetInheritanceId = BrandedId<'AssetInheritanceId'>
 export type ScheduleId = BrandedId<'ScheduleId'>
 export type PlaceId = BrandedId<'PlaceId'>
 export type ActionRef = BrandedId<'ActionRef'>
