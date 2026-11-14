@@ -4,6 +4,7 @@ import {
   field,
   isFieldValue,
   isPersonLifecycleValid,
+  isValidWorldTime,
   validatePersonLifecycle,
 } from '../src/domain'
 import type { EstateSettlementDomain, Person } from '../src/domain'
@@ -39,7 +40,6 @@ const basePerson: Person = {
     location: brandedId<'LocationStateRef'>('location-fixture-001'),
   },
   history: brandedId<'LifeHistoryRef'>('history-fixture-001'),
-  fixture: field.value('m1-river-seven'),
 }
 
 check('alive + n/a death is valid', isPersonLifecycleValid(basePerson, now))
@@ -49,6 +49,7 @@ check('n/a is distinct from unknown', String(field.notApplicable.kind) !== Strin
 check('Field value guard', isFieldValue(field.value('x')))
 check('world time orders day before period', compareWorldTime({ day: 2, period: '夜' }, { day: 3, period: '晨' }) < 0)
 check('world time orders periods within day', compareWorldTime({ day: 2, period: '午' }, { day: 2, period: '暮' }) < 0)
+check('world time rejects inherited object keys', !isValidWorldTime({ day: 2, period: 'toString' } as never))
 
 const deadWithoutRecord = { ...basePerson, lifeState: 'dead' as const }
 check('dead without death record is rejected', validatePersonLifecycle(deadWithoutRecord, now).includes('dead-person-requires-death-record'))
@@ -61,7 +62,7 @@ const aliveWithRecord = {
     estateSettlements: [],
   }),
 }
-check('alive with death record is rejected', validatePersonLifecycle(aliveWithRecord, now).includes('alive-person-must-not-have-death-record'))
+check('alive with record is rejected', validatePersonLifecycle(aliveWithRecord, now).includes('alive-person-must-not-have-death-record'))
 
 const settlementDomains: readonly EstateSettlementDomain[] = [
   'office', 'debt', 'asset', 'membership', 'relation', 'goal',
@@ -97,6 +98,11 @@ check('future birth is rejected', validatePersonLifecycle({
   ...basePerson,
   birth: field.value({ day: 9, period: '晨' } as const),
 }, now).includes('birth-is-in-the-future'))
+check('death before birth is rejected', validatePersonLifecycle({
+  ...deadPerson,
+  birth: field.value({ day: 8, period: '暮' } as const),
+  death: field.value({ ...deathRecord, at: { day: 8, period: '午' } as const }),
+}, now).includes('death-precedes-birth'))
 
 // Compile-time contract guards: null and unbranded identifiers must not pass.
 // @ts-expect-error null is not a Field state
