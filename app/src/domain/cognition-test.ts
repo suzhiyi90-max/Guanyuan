@@ -43,7 +43,7 @@ check('knowledge rejects missing subject',validateKnowledgeEntry({...entry,subje
 check('knowledge collection rejects duplicate IDs',validateKnowledgeSet([entry,entry],refs).includes('knowledge-duplicate-id'))
 check('belief is constrained to believed or misunderstood',validateBelief(entry).length===0)
 check('known fact cannot be reclassified as belief',validateBelief({...entry,stance:'known'}).includes('belief-invalid-stance'))
-check('holder projection excludes other people's knowledge',knowledgeForHolder([entry,{...entry,id:brandedId<'KnowledgeId'>('knowledge-2'),holder:p2}],p1).length===1)
+check("holder projection excludes other people's knowledge",knowledgeForHolder([entry,{...entry,id:brandedId<'KnowledgeId'>('knowledge-2'),holder:p2}],p1).length===1)
 
 const message:Message={
   id:messageId,sender:p1,recipient:p2,channel,contentRefs:[{kind:'relation',id:rel}],
