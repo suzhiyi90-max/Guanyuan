@@ -1,12 +1,11 @@
 import { isValidWorldTime } from '../shared/world-time'
-import type { PersonId, OrgId } from '../shared/ids'
+import type { PersonId, OrgId, RelationId } from '../shared/ids'
 import type {
   Membership,
   Organization,
   Relation,
   RelationClaim,
   RelationEvidence,
-  RelationId,
   RelationIssue,
 } from './model'
 
