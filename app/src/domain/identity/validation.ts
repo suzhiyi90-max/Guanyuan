@@ -139,6 +139,24 @@ export function validateAuthorization(grant: Authorization): IdentityIssue[] {
   return issues
 }
 
+/** Office authorization references must resolve to grants scoped to that office. */
+export function validateOfficeAuthorizationReferences(
+  office: Office,
+  grants: readonly Authorization[],
+): IdentityIssue[] {
+  const issues: IdentityIssue[] = [...validateOffice(office)]
+  const byId = new Map(grants.map((grant) => [grant.id, grant]))
+  for (const id of office.authorization) {
+    const grant = byId.get(id)
+    if (!grant) {
+      issues.push('office-authorization-reference-missing')
+    } else if (grant.scope.kind !== 'office' || grant.scope.office !== office.id) {
+      issues.push('office-authorization-scope-mismatch')
+    }
+  }
+  return issues
+}
+
 export function validateAuthorizationSet(grants: readonly Authorization[]): IdentityIssue[] {
   const issues: IdentityIssue[] = []
   const ids = new Set<string>()

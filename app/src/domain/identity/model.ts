@@ -88,6 +88,8 @@ export type IdentityIssue =
   | 'identity-id-already-exists'
   | 'office-invalid-holder'
   | 'office-authorization-duplicate'
+  | 'office-authorization-reference-missing'
+  | 'office-authorization-scope-mismatch'
   | 'appointment-invalid-world-time'
   | 'appointment-end-before-start'
   | 'appointment-unknown-end'

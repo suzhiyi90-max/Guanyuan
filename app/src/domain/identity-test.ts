@@ -1,6 +1,6 @@
 import { brandedId, field } from './index'
 import { hasAuthorization } from './identity/authorization'
-import { validateAppointment, validateAuthorization, validateAuthorizationSet, validateIdentityAssignment, validateOffice, validateOfficeAppointments } from './identity/validation'
+import { validateAppointment, validateAuthorization, validateAuthorizationSet, validateIdentityAssignment, validateOffice, validateOfficeAppointments, validateOfficeAuthorizationReferences } from './identity/validation'
 import type { Appointment, Authorization, IdentityAssignment, Office } from './identity/model'
 
 let passed = 0
@@ -109,6 +109,15 @@ const grant: Authorization = {
 }
 const request = { principal: person, permission: 'issue.local-order', scope: { kind: 'office', office: officeId } as const, at: now }
 check('explicit matching grant authorizes action', hasAuthorization([grant], request))
+check('office authorization reference resolves to matching scope', validateOfficeAuthorizationReferences({
+  ...office, authorization: [grant.id],
+}, [grant]).length === 0)
+check('office authorization cannot contain dangling references', validateOfficeAuthorizationReferences({
+  ...office, authorization: [brandedId<'AuthorizationId'>('missing-auth')],
+}, [grant]).includes('office-authorization-reference-missing'))
+check('office authorization cannot reference another office scope', validateOfficeAuthorizationReferences({
+  ...office, authorization: [grant.id],
+}, [{ ...grant, scope: { kind: 'office', office: brandedId<'OfficeId'>('office-002') } }]).includes('office-authorization-scope-mismatch'))
 check('authorization defaults to deny', !hasAuthorization([], request))
 check('different principal is denied', !hasAuthorization([grant], { ...request, principal: otherPerson }))
 check('different permission is denied', !hasAuthorization([grant], { ...request, permission: 'issue.extraordinary-order' }))
