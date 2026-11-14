@@ -9,3 +9,6 @@ export * from './identity/validation'
 
 export * from './relations/model'
 export * from './relations/validation'
+
+export * from './cognition/model'
+export * from './cognition/validation'

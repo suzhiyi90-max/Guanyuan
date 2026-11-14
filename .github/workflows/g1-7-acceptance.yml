@@ -44,6 +44,8 @@ jobs:
         run: npm run test:domain:identity
       - name: Relations and organizations contract tests
         run: npm run test:domain:relations
+      - name: Cognition and communications contract tests
+        run: npm run test:domain:cognition
       - name: Review index integrity
         run: npm run check:docs
       - name: Patch whitespace integrity
