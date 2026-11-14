@@ -72,6 +72,18 @@ check('history timestamp must match source event', validateLifeHistory({
 check('archived person keeps the same life history reference', validateLifeHistory(history, {
   ...refs, persons: [{ ...person, archiveState: 'archived' }],
 }).length === 0)
+const bornPerson: Person = { ...person, birth: field.value({ day: 1, period: '午' }) }
+check('life history before birth is rejected', validateLifeHistory(history, {
+  ...refs, persons: [bornPerson],
+}).includes('life-history-before-birth'))
+check('life history at exact birth time is allowed', validateLifeHistory({
+  ...history, entries: [{ ...first, event: event2, at: { day: 1, period: '午' } }],
+}, { ...refs, persons: [bornPerson] }).length === 0)
+check('life history after death is rejected', validateLifeHistory({
+  ...history, entries: [first, second],
+}, { ...refs, persons: [{ ...person, lifeState: 'dead', death: field.value({
+  at: { day: 1, period: '晨' }, causeEvent: event1, estateSettlements: [],
+}) }] }).includes('life-history-after-death'))
 
 const bodyHook: LifeDomainHook = {
   id: brandedId<'LifeDomainHookId'>('hook-body-1'), person: personId,
@@ -96,6 +108,14 @@ check('life hook code must be non-empty', validateLifeDomainHookSet([
 check('duplicate life hook IDs rejected', validateLifeDomainHookSet([
   bodyHook, { ...bodyHook },
 ], refs).includes('life-hook-duplicate-id'))
+check('life hook before birth is rejected', validateLifeDomainHookSet([bodyHook], {
+  ...refs, persons: [{ ...person, birth: field.value({ day: 1, period: '暮' }) }],
+}).includes('life-hook-before-birth'))
+check('life hook after death is rejected', validateLifeDomainHookSet([mindHook], {
+  ...refs, persons: [{ ...person, lifeState: 'dead', death: field.value({
+    at: { day: 1, period: '午' }, causeEvent: event2, estateSettlements: [],
+  }) }],
+}).includes('life-hook-after-death'))
 
 // @ts-expect-error raw strings cannot be used as LifeHistoryEntryId
 const invalidEntryId: import('./shared/ids').LifeHistoryEntryId = 'raw'
