@@ -13,6 +13,9 @@ const periodOrder: Record<Period, number> = {
 }
 
 export function compareWorldTime(left: WorldTime, right: WorldTime): number {
+  if (!isValidWorldTime(left) || !isValidWorldTime(right)) {
+    throw new Error('Cannot compare invalid world times')
+  }
   if (left.day !== right.day) return left.day < right.day ? -1 : 1
   const leftPeriod = periodOrder[left.period]
   const rightPeriod = periodOrder[right.period]
