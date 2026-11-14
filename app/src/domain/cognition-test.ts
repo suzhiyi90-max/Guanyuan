@@ -54,6 +54,7 @@ const message:Message={
 check('valid message lifecycle accepted',validateMessage(message,refs).length===0)
 check('message status is derived from milestones',deriveMessageStatus(message)==='read')
 check('message rejects empty channel',validateMessage({...message,channel:' ' as never},refs).includes('message-empty-channel'))
+check('message rejects empty failure code',validateMessage({...message,failure:field.value(' ' as never)},refs).includes('message-invalid-failure-code'))
 check('message rejects invalid distortion',validateMessage({...message,distortion:1.2},refs).includes('message-invalid-distortion'))
 check('message requires delivered before read',validateMessage({...message,deliveredAt:field.unknown},refs).includes('message-stage-prerequisite'))
 check('message rejects reversed stage times',validateMessage({...message,readAt:field.value({day:3,period:'晨'})},refs).includes('message-stage-order'))
@@ -78,6 +79,9 @@ check('propagation rejects source holder mismatch',validateMessagePropagation(
 check('propagation cannot predate its source knowledge',validateMessagePropagation(
   {...propagation,propagatedAt:{day:2,period:'晨'}},[message],[entry,recipientKnowledge],[p1,p2,p3],
 ).includes('propagation-time-before-source'))
+check('recipient cannot propagate an unread message',validateMessagePropagation(
+  {...propagation,fromHolder:p2},[message],[entry,recipientKnowledge],[p1,p2,p3],
+).includes('propagation-recipient-not-read'))
 check('propagation rejects missing message',validateMessagePropagation(
   {...propagation,message:brandedId<'MessageId'>('missing')},[],[entry,recipientKnowledge],[p1,p2,p3],
 ).includes('propagation-message-missing'))

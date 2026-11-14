@@ -132,6 +132,7 @@ function validateMessageStages(message: Message): CognitionIssue[] {
 export function validateMessage(message: Message, refs: CognitionReferences): CognitionIssue[] {
   const issues: CognitionIssue[] = []
   if (!message.channel.trim()) issues.push('message-empty-channel')
+  if (message.failure.kind === 'value' && !message.failure.value.trim()) issues.push('message-invalid-failure-code')
   if (!refs.persons.includes(message.sender)) issues.push('message-sender-missing')
   if (!refs.persons.includes(message.recipient)) issues.push('message-recipient-missing')
   if (!isValidWorldTime(message.sentAt)) issues.push('message-invalid-time')
@@ -195,6 +196,18 @@ export function validateMessagePropagation(
   }
   if (message && message.sender !== propagation.fromHolder && message.recipient !== propagation.fromHolder) {
     issues.push('propagation-source-holder-mismatch')
+  }
+  if (message && isValidWorldTime(message.sentAt) && isValidWorldTime(propagation.propagatedAt)
+    && compareWorldTime(propagation.propagatedAt, message.sentAt) < 0) {
+    issues.push('propagation-time-before-message')
+  }
+  if (message && propagation.fromHolder === message.recipient) {
+    if (message.deliveredAt.kind !== 'value' || message.readAt.kind !== 'value') {
+      issues.push('propagation-recipient-not-read')
+    } else if (isValidWorldTime(message.readAt.value) && isValidWorldTime(propagation.propagatedAt)
+      && compareWorldTime(propagation.propagatedAt, message.readAt.value) < 0) {
+      issues.push('propagation-time-before-message')
+    }
   }
   return issues
 }
