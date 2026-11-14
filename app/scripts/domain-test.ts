@@ -45,12 +45,17 @@ const basePerson: Person = {
 
 check('alive + n/a death is valid', isPersonLifecycleValid(basePerson, now))
 check('archive state is independent of life state', isPersonLifecycleValid({ ...basePerson, archiveState: 'archived' }, now))
+const { fixture: _fixture, ...personWithoutFixture } = basePerson
+check('fixture provenance is optional', isPersonLifecycleValid(personWithoutFixture, now))
 check('unknown is distinct from not-generated', String(field.unknown.kind) !== String(field.notGenerated.kind))
 check('n/a is distinct from unknown', String(field.notApplicable.kind) !== String(field.unknown.kind))
 check('Field value guard', isFieldValue(field.value('x')))
 check('world time orders day before period', compareWorldTime({ day: 2, period: '夜' }, { day: 3, period: '晨' }) < 0)
 check('world time orders periods within day', compareWorldTime({ day: 2, period: '午' }, { day: 2, period: '暮' }) < 0)
 check('world time rejects inherited object keys', !isValidWorldTime({ day: 2, period: 'toString' } as never))
+let invalidComparisonRejected = false
+try { compareWorldTime({ day: 2, period: 'toString' } as never, now) } catch { invalidComparisonRejected = true }
+check('world time comparison rejects invalid input', invalidComparisonRejected)
 
 const deadWithoutRecord = { ...basePerson, lifeState: 'dead' as const }
 check('dead without death record is rejected', validatePersonLifecycle(deadWithoutRecord, now).includes('dead-person-requires-death-record'))
