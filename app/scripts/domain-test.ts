@@ -108,6 +108,10 @@ check('death before birth is rejected', validatePersonLifecycle({
 // Compile-time contract guards: null and unbranded identifiers must not pass.
 // @ts-expect-error null is not a Field state
 const nullField: import('../src/domain').Field<string> = null
+// @ts-expect-error Field payload types cannot include null
+type NullablePayload = import('../src/domain').Field<string | null>
+// @ts-expect-error the value constructor cannot materialize null
+const nullValue = field.value(null)
 // @ts-expect-error raw strings are not branded PersonId values
 const unbrandedPersonId: import('../src/domain').PersonId = 'p-raw'
 void nullField
