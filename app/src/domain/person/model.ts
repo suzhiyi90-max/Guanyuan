@@ -60,4 +60,3 @@ export interface Person {
   /** Optional fixture provenance; never part of person identity or world rules. */
   readonly fixture: Field<string>
 }
-
