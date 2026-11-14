@@ -90,6 +90,7 @@ export type CognitionIssue =
   | 'knowledge-invalid-secrecy'
   | 'knowledge-duplicate-id'
   | 'knowledge-holder-missing'
+  | 'knowledge-source-event-missing'
   | 'knowledge-subject-missing'
   | 'belief-invalid-stance'
   | 'message-empty-channel'

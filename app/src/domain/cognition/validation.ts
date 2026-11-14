@@ -69,6 +69,7 @@ export interface CognitionReferences {
 export function validateKnowledgeEntry(entry: KnowledgeEntry, refs: CognitionReferences): CognitionIssue[] {
   const issues: CognitionIssue[] = []
   if (!refs.persons.includes(entry.holder)) issues.push('knowledge-holder-missing')
+  if (!refs.events.includes(entry.sourceEvent)) issues.push('knowledge-source-event-missing')
   if (!entry.proposition.trim()) issues.push('knowledge-empty-proposition')
   if (!isValidWorldTime(entry.acquiredAt)) issues.push('knowledge-invalid-time')
   if (!['known', 'believed', 'suspected', 'misunderstood'].includes(entry.stance)) {

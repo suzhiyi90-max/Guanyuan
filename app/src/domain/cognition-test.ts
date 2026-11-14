@@ -39,6 +39,7 @@ const entry:KnowledgeEntry={
 }
 check('valid holder-scoped knowledge accepted',validateKnowledgeEntry(entry,refs).length===0)
 check('knowledge rejects missing holder',validateKnowledgeEntry({...entry,holder:brandedId<'PersonId'>('missing')},refs).includes('knowledge-holder-missing'))
+check('knowledge rejects missing source event',validateKnowledgeEntry({...entry,sourceEvent:brandedId<'EventId'>('missing')},refs).includes('knowledge-source-event-missing'))
 check('knowledge rejects missing subject',validateKnowledgeEntry({...entry,subject:{kind:'person',id:brandedId<'PersonId'>('missing')}},refs).includes('knowledge-subject-missing'))
 check('knowledge collection rejects duplicate IDs',validateKnowledgeSet([entry,entry],refs).includes('knowledge-duplicate-id'))
 check('belief is constrained to believed or misunderstood',validateBelief(entry).length===0)
