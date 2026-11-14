@@ -43,6 +43,11 @@ export function validateLifeHistory(history: LifeHistory, refs: LifeReferences):
     else if (!sameWorldTime(entry.at, eventAt)) issues.push('life-history-event-time-mismatch')
 
     if (!isValidWorldTime(entry.at)) issues.push('life-history-invalid-time')
+  if (person) {
+    for (const violation of personLifeTimeBoundaryViolations(person, entry.at)) {
+      issues.push(violation === 'before-birth' ? 'life-history-before-birth' : 'life-history-after-death')
+    }
+  }
     if (person) {
       for (const violation of personLifeTimeBoundaryViolations(person, entry.at)) {
         issues.push(violation === 'before-birth' ? 'life-history-before-birth' : 'life-history-after-death')
@@ -65,6 +70,7 @@ export function appendLifeHistoryEntry(
   refs: LifeReferences,
 ): { readonly history: LifeHistory; readonly issues: LifeIssue[] } {
   const issues: LifeIssue[] = validateLifeHistory(history, refs)
+  const person = refs.persons.find(item => item.id === history.person)
   const last = history.entries[history.entries.length - 1]
   if (history.entries.some(item => item.id === entry.id)) issues.push('life-history-entry-duplicate-id')
   if (history.entries.some(item => item.event === entry.event)) issues.push('life-history-event-duplicate')
