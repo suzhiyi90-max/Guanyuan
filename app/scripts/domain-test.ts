@@ -40,6 +40,7 @@ const basePerson: Person = {
     location: brandedId<'LocationStateRef'>('location-fixture-001'),
   },
   history: brandedId<'LifeHistoryRef'>('history-fixture-001'),
+  fixture: field.value('m1-river-seven'),
 }
 
 check('alive + n/a death is valid', isPersonLifecycleValid(basePerson, now))
