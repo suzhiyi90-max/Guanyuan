@@ -114,6 +114,7 @@ export type DeathSettlementIssue =
   | 'death-settlement-person-alive'
   | 'death-settlement-record-missing'
   | 'death-settlement-death-event-missing'
+  | 'death-settlement-death-time-invalid'
   | 'death-settlement-death-event-time-missing'
   | 'death-settlement-death-time-mismatch'
   | 'death-settlement-event-missing'
@@ -144,6 +145,7 @@ export function validateDeathSettlementReferences(
 
   const death = person.death.value
   const deathTimeValid = isValidWorldTime(death.at)
+  if (!deathTimeValid) issues.push('death-settlement-death-time-invalid')
   if (!refs.events.includes(death.causeEvent)) {
     issues.push('death-settlement-death-event-missing')
   }

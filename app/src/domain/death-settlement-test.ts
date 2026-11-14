@@ -56,6 +56,11 @@ check('missing death cause event is rejected',
 check('missing death cause time is rejected',
   validateDeathSettlementReferences(person, { ...refs, eventTimes: new Map([[settlementEvent, settlementAt]]) })
     .includes('death-settlement-death-event-time-missing'))
+check('invalid death record time is rejected',
+  validateDeathSettlementReferences({
+    ...person,
+    death: field.value({ ...person.death.value, at: { day: 0, period: '午' } }),
+  }, refs).includes('death-settlement-death-time-invalid'))
 check('death event time must match death record',
   validateDeathSettlementReferences(person, {
     ...refs, eventTimes: new Map([[deathEvent, { day: 8, period: '晨' }], [settlementEvent, settlementAt]]),
