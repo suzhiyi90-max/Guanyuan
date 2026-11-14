@@ -15,6 +15,7 @@ on:
       - work/w2-life-lifecycle
       - work/w2-b-age-succession
       - work/w2-c-body-mind-state
+      - work/w2-d-life-stage-facts
   workflow_dispatch:
 
 permissions:
@@ -61,6 +62,8 @@ jobs:
         run: npm run test:domain:inheritance
       - name: Body and mind state fact contracts
         run: npm run test:domain:life-state
+      - name: Life stage fact contracts
+        run: npm run test:domain:life-stage
       - name: Review index integrity
         run: npm run check:docs
       - name: Patch whitespace integrity
