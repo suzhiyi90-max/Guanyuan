@@ -115,6 +115,9 @@ check('revocation event and time must travel together', validateAuthorization({
 check('unknown validity end is not treated as open-ended', !hasAuthorization([{
   ...grant, validTo: field.unknown,
 }], request))
+check('unknown authorization end fails validation', validateAuthorization({
+  ...grant, validTo: field.unknown,
+}).includes('authorization-invalid-time'))
 check('empty permission cannot be granted', validateAuthorization({
   ...grant, permission: '  ',
 }).includes('authorization-empty-permission'))
