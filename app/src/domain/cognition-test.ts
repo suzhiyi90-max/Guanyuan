@@ -58,6 +58,7 @@ check('message rejects invalid distortion',validateMessage({...message,distortio
 check('message requires delivered before read',validateMessage({...message,deliveredAt:field.unknown},refs).includes('message-stage-prerequisite'))
 check('message rejects reversed stage times',validateMessage({...message,readAt:field.value({day:3,period:'晨'})},refs).includes('message-stage-order'))
 check('message delivery cannot precede send',validateMessage({...message,deliveredAt:field.value({day:3,period:'晨'})},refs).includes('message-stage-order'))
+check('invalid send time is reported without throwing',validateMessage({...message,sentAt:{day:0,period:'晨'} as never},refs).includes('message-invalid-time'))
 check('failed message cannot also be delivered',validateMessage({...message,failure:field.value('lost' as never)},refs).includes('message-failure-after-progress'))
 check('message parent must resolve',validateMessage({...message,parentMessage:field.value(brandedId<'MessageId'>('missing'))},refs).includes('message-parent-missing'))
 

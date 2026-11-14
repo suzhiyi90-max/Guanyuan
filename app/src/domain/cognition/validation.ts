@@ -106,7 +106,9 @@ function validateMessageStages(message: Message): CognitionIssue[] {
     message.understoodAt,
     message.repliedAt,
   ] as const
-  const times: Array<{ index: number; time: import('../shared/world-time').WorldTime }> = [{ index: -1, time: message.sentAt }]
+  const times: Array<{ index: number; time: import('../shared/world-time').WorldTime }> = isValidWorldTime(message.sentAt)
+    ? [{ index: -1, time: message.sentAt }]
+    : []
   stages.forEach((stage, index) => {
     if (stage.kind === 'value') {
       if (!isValidWorldTime(stage.value)) issues.push('message-invalid-time')
