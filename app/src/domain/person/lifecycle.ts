@@ -108,3 +108,70 @@ export function personLifeTimeBoundaryViolations(
   }
   return violations
 }
+
+
+export type DeathSettlementIssue =
+  | 'death-settlement-person-alive'
+  | 'death-settlement-record-missing'
+  | 'death-settlement-death-event-missing'
+  | 'death-settlement-death-time-invalid'
+  | 'death-settlement-death-event-time-missing'
+  | 'death-settlement-death-time-mismatch'
+  | 'death-settlement-event-missing'
+  | 'death-settlement-event-time-missing'
+  | 'death-settlement-before-death'
+  | 'death-settlement-invalid-status'
+
+export interface DeathSettlementReferences {
+  readonly events: readonly import('../shared/ids').EventId[]
+  readonly eventTimes: ReadonlyMap<import('../shared/ids').EventId, WorldTime>
+}
+
+/**
+ * Validate only the shared reference/time envelope for a deceased person's six
+ * settlement domains. Domain-specific completion remains the responsibility of
+ * each domain validator; this function never settles or mutates domain records.
+ */
+export function validateDeathSettlementReferences(
+  person: Person,
+  refs: DeathSettlementReferences,
+): DeathSettlementIssue[] {
+  const issues: DeathSettlementIssue[] = []
+  if (person.lifeState !== 'dead') issues.push('death-settlement-person-alive')
+  if (person.death.kind !== 'value') {
+    issues.push('death-settlement-record-missing')
+    return issues
+  }
+
+  const death = person.death.value
+  const deathTimeValid = isValidWorldTime(death.at)
+  if (!deathTimeValid) issues.push('death-settlement-death-time-invalid')
+  if (!refs.events.includes(death.causeEvent)) {
+    issues.push('death-settlement-death-event-missing')
+  }
+  const causeAt = refs.eventTimes.get(death.causeEvent)
+  if (!causeAt || !isValidWorldTime(causeAt)) {
+    issues.push('death-settlement-death-event-time-missing')
+  } else if (deathTimeValid && compareWorldTime(causeAt, death.at) !== 0) {
+    issues.push('death-settlement-death-time-mismatch')
+  }
+
+  for (const settlement of death.estateSettlements) {
+    if (settlement.status !== 'pending' && settlement.status !== 'settled') {
+      issues.push('death-settlement-invalid-status')
+    }
+    if (!refs.events.includes(settlement.settlementEvent)) {
+      issues.push('death-settlement-event-missing')
+      continue
+    }
+    const settlementAt = refs.eventTimes.get(settlement.settlementEvent)
+    if (!settlementAt || !isValidWorldTime(settlementAt)) {
+      issues.push('death-settlement-event-time-missing')
+      continue
+    }
+    if (deathTimeValid && compareWorldTime(settlementAt, death.at) < 0) {
+      issues.push('death-settlement-before-death')
+    }
+  }
+  return [...new Set(issues)]
+}
