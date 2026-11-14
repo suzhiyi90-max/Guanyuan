@@ -13,6 +13,8 @@ on:
       - work/w1-d-cognition-communications
       - work/w1-e-goals-schedule-economy
       - work/w2-life-lifecycle
+      - work/w2-b-age-succession
+      - work/w2-c-body-mind-state
   workflow_dispatch:
 
 permissions:
@@ -57,6 +59,8 @@ jobs:
         run: npm run test:domain:age
       - name: Asset inheritance contract tests
         run: npm run test:domain:inheritance
+      - name: Body and mind state fact contracts
+        run: npm run test:domain:life-state
       - name: Review index integrity
         run: npm run check:docs
       - name: Patch whitespace integrity

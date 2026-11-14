@@ -37,6 +37,7 @@ export type LocationStateRef = BrandedId<'LocationStateRef'>
 export type LifeHistoryRef = BrandedId<'LifeHistoryRef'>
 export type LifeHistoryEntryId = BrandedId<'LifeHistoryEntryId'>
 export type LifeDomainHookId = BrandedId<'LifeDomainHookId'>
+export type LifeStateFactId = BrandedId<'LifeStateFactId'>
 
 /**
  * Brands an already allocated identifier without choosing its wire format.
