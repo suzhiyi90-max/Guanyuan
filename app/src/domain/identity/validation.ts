@@ -39,6 +39,9 @@ export function validateAppointment(appointment: Appointment): IdentityIssue[] {
     issues.push('appointment-invalid-world-time')
     return issues
   }
+  if (appointment.to.kind !== appointment.endedBy.kind) {
+    issues.push('appointment-end-event-inconsistent')
+  }
   if (isValue(appointment.to)) {
     if (!isValidWorldTime(appointment.to.value)) {
       issues.push('appointment-invalid-world-time')

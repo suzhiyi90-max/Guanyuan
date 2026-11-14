@@ -61,18 +61,24 @@ const appointment: Appointment = {
   person,
   from: { day: 2, period: '晨' },
   to: field.value({ day: 9, period: '夜' }),
+  endedBy: field.value(event),
 }
-check('appointment with increasing interval is valid', validateAppointment(appointment).length === 0)
+check('appointment with increasing interval and end provenance is valid', validateAppointment(appointment).length === 0)
 check('appointment end must follow start', validateAppointment({
   ...appointment, to: field.value({ day: 1, period: '夜' }),
 }).includes('appointment-end-before-start'))
-check('open appointment interval is valid', validateAppointment({ ...appointment, to: field.notApplicable }).length === 0)
+check('open appointment interval is valid', validateAppointment({
+  ...appointment, to: field.notApplicable, endedBy: field.notApplicable,
+}).length === 0)
 check('unknown appointment end is not treated as open', validateAppointment({
-  ...appointment, to: field.unknown,
+  ...appointment, to: field.unknown, endedBy: field.unknown,
 }).includes('appointment-unknown-end'))
 check('not-generated appointment end is not treated as open', validateAppointment({
-  ...appointment, to: field.notGenerated,
+  ...appointment, to: field.notGenerated, endedBy: field.notGenerated,
 }).includes('appointment-unknown-end'))
+check('appointment end time and cause must have matching Field states', validateAppointment({
+  ...appointment, endedBy: field.notApplicable,
+}).includes('appointment-end-event-inconsistent'))
 
 const activeAppointment: Appointment = {
   ...appointment,
@@ -86,7 +92,7 @@ check('vacant office cannot have an active appointment', validateOfficeAppointme
 }, [activeAppointment], now).includes('office-vacancy-has-active-appointment'))
 check('overlapping appointments are rejected', validateOfficeAppointments(office, [
   activeAppointment,
-  { ...activeAppointment, id: brandedId<'AppointmentId'>('appointment-002'), person: otherPerson, from: { day: 10, period: '晨' }, to: field.notApplicable },
+  { ...activeAppointment, id: brandedId<'AppointmentId'>('appointment-002'), person: otherPerson, from: { day: 10, period: '晨' }, to: field.notApplicable, endedBy: field.notApplicable },
 ], now).includes('appointment-overlap'))
 check('invalid appointment time is reported without throwing', validateOfficeAppointments(office, [
   { ...activeAppointment, from: { day: 0, period: '晨' } as never },
