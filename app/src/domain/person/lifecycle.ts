@@ -81,3 +81,30 @@ function isValueField<T extends {}>(value: Field<T>): value is { readonly kind: 
 export function isPersonLifecycleValid(person: Person, now: WorldTime): boolean {
   return validatePersonLifecycle(person, now).length === 0
 }
+
+/** Shared temporal boundary verdict for all event-backed person-life records. */
+export type PersonLifeTimeBoundaryViolation = 'before-birth' | 'after-death'
+
+/**
+ * Birth and death instants are inclusive. Unknown, not-generated and n/a
+ * boundaries remain unknown; this helper never invents a life boundary.
+ * Invalid record times are handled by the owning domain validator.
+ */
+export function personLifeTimeBoundaryViolations(
+  person: Person,
+  at: WorldTime,
+): PersonLifeTimeBoundaryViolation[] {
+  if (!isValidWorldTime(at)) return []
+  const violations: PersonLifeTimeBoundaryViolation[] = []
+  if (person.birth.kind === 'value'
+    && isValidWorldTime(person.birth.value)
+    && compareWorldTime(at, person.birth.value) < 0) {
+    violations.push('before-birth')
+  }
+  if (person.death.kind === 'value'
+    && isValidWorldTime(person.death.value.at)
+    && compareWorldTime(at, person.death.value.at) > 0) {
+    violations.push('after-death')
+  }
+  return violations
+}
