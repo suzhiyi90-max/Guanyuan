@@ -57,4 +57,7 @@ export interface Person {
   readonly capability: CapabilityRef
   readonly stateDomains: PersonStateDomains
   readonly history: LifeHistoryRef
+  /** Optional fixture provenance; never part of person identity or world rules. */
+  readonly fixture: Field<string>
 }
+
