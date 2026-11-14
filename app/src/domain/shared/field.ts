@@ -3,12 +3,13 @@ export type AbsentField =
   | { readonly kind: 'not-generated' }
   | { readonly kind: 'n/a' }
 
-export type Field<T> =
+// {} excludes null and undefined while still permitting primitive payloads.
+export type Field<T extends {}> =
   | { readonly kind: 'value'; readonly value: T }
   | AbsentField
 
 export const field = {
-  value<T>(value: T): Field<T> {
+  value<T extends {}>(value: T): Field<T> {
     return { kind: 'value', value }
   },
   unknown: { kind: 'unknown' } as const,
@@ -16,6 +17,6 @@ export const field = {
   notApplicable: { kind: 'n/a' } as const,
 }
 
-export function isFieldValue<T>(value: Field<T>): value is { readonly kind: 'value'; readonly value: T } {
+export function isFieldValue<T extends {}>(value: Field<T>): value is { readonly kind: 'value'; readonly value: T } {
   return value.kind === 'value'
 }
