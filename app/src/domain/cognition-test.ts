@@ -69,7 +69,7 @@ const propagation:MessagePropagation={
   sourceKnowledge:[knowledgeId],
   resultingKnowledge:[brandedId<'KnowledgeId'>('knowledge-3')],
 }
-const recipientKnowledge:KnowledgeEntry={...entry,id:brandedId<'KnowledgeId'>('knowledge-3'),holder:p3,sourceEvent:event}
+const recipientKnowledge:KnowledgeEntry={...entry,id:brandedId<'KnowledgeId'>('knowledge-3'),holder:p3,sourceEvent:event,acquiredAt:{day:4,period:'晨'}}
 check('valid knowledge propagation resolves both holder scopes',validateMessagePropagation(
   propagation,[message, {...message,id:brandedId<'MessageId'>('message-2'),recipient:p3}], [entry,recipientKnowledge],[p1,p2,p3],
 ).length===0)
