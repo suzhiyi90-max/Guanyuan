@@ -27,8 +27,10 @@ Body 与 Mind 是两个独立 scope：
 每条 LifeStateFact 必须包含 Person、domain、scope、dimension、sourceEvent、at、value、visibility、supersedes。
 - sourceEvent 必须存在，且事件时间与事实时间一致。
 - Body fact 只能引用 Person.stateDomains.body；Mind fact 只能引用 mind。
-- 首次记录 supersedes=n/a；更新必须明确引用同一人物、同一 domain/scope/dimension 的前一记录。
+- 首次记录的 supersedes 必须为 n/a；unknown / not-generated 不代表“确认没有前序记录”，因此拒绝作为根记录。
+- 更新必须明确引用同一人物、同一 domain/scope/dimension 的前一记录。
 - 一个前序事实最多被后续记录替代一次；修订时间必须严格晚于前序事实。
+- 同一人物、同一状态维度只能有一条根记录；后续事实必须沿 supersedes 链追加。
 - 历史记录只追加，不覆盖。失败追加返回原数组。
 - 当前状态由未被 supersede 的事实投影，不另存第二份权威 current state。
 
