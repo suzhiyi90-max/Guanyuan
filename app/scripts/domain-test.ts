@@ -6,7 +6,7 @@ import {
   isPersonLifecycleValid,
   validatePersonLifecycle,
 } from '../src/domain'
-import type { Person } from '../src/domain'
+import type { EstateSettlementDomain, Person } from '../src/domain'
 
 let passed = 0
 let failed = 0
@@ -63,10 +63,17 @@ const aliveWithRecord = {
 }
 check('alive with death record is rejected', validatePersonLifecycle(aliveWithRecord, now).includes('alive-person-must-not-have-death-record'))
 
+const settlementDomains: readonly EstateSettlementDomain[] = [
+  'office', 'debt', 'asset', 'membership', 'relation', 'goal',
+]
 const deathRecord = {
   at: { day: 7, period: '午' } as const,
   causeEvent: brandedId<'EventId'>('evt-death-001'),
-  estateSettlements: [{ domain: 'asset' as const, settlementEvent: brandedId<'EventId'>('evt-estate-001'), status: 'pending' as const }],
+  estateSettlements: settlementDomains.map((domain, index) => ({
+    domain,
+    settlementEvent: brandedId<'EventId'>(`evt-estate-${index + 1}`),
+    status: 'pending' as const,
+  })),
 }
 const deadPerson: Person = {
   ...basePerson,
@@ -74,6 +81,14 @@ const deadPerson: Person = {
   death: field.value(deathRecord),
 }
 check('dead + death record is valid', isPersonLifecycleValid(deadPerson, now))
+check('incomplete estate settlement chain is rejected', validatePersonLifecycle({
+  ...deadPerson,
+  death: field.value({ ...deathRecord, estateSettlements: deathRecord.estateSettlements.slice(0, 1) }),
+}, now).includes('death-settlement-chain-incomplete'))
+check('invalid world time is rejected', validatePersonLifecycle({
+  ...basePerson,
+  birth: field.value({ day: 0, period: '晨' } as const),
+}, now).includes('invalid-world-time'))
 check('future death record is rejected', validatePersonLifecycle({
   ...deadPerson,
   death: field.value({ ...deathRecord, at: { day: 9, period: '晨' } as const }),
