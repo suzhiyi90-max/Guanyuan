@@ -72,6 +72,7 @@ export type LifeStateIssue =
   | 'life-state-event-time-mismatch'
   | 'life-state-invalid-time'
   | 'life-state-after-death'
+  | 'life-state-before-birth'
   | 'life-state-empty-dimension'
   | 'life-state-empty-value-code'
   | 'life-state-invalid-quantitative-value'
