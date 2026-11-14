@@ -1,9 +1,5 @@
 declare const idBrand: unique symbol
-
-export type BrandedId<Kind extends string> = string & {
-  readonly [idBrand]: Kind
-}
-
+export type BrandedId<Kind extends string> = string & { readonly [idBrand]: Kind }
 export type PersonId = BrandedId<'PersonId'>
 export type EventId = BrandedId<'EventId'>
 export type IdentityId = BrandedId<'IdentityId'>
@@ -37,14 +33,5 @@ export type LocationStateRef = BrandedId<'LocationStateRef'>
 export type LifeHistoryRef = BrandedId<'LifeHistoryRef'>
 export type LifeHistoryEntryId = BrandedId<'LifeHistoryEntryId'>
 export type LifeDomainHookId = BrandedId<'LifeDomainHookId'>
-
-/**
- * Brands an already allocated identifier without choosing its wire format.
- * World scoping, allocation and fixture mapping remain persistence/identity
- * policy decisions; this helper only rejects empty identifiers.
- */
-export function brandedId<Kind extends string>(value: string): BrandedId<Kind> {
-  const normalized = value.trim()
-  if (!normalized) throw new Error('Domain identifiers must not be empty')
-  return normalized as BrandedId<Kind>
-}
+export type LifeStateFactId = BrandedId<'LifeStateFactId'>
+export function brandedId<Kind extends string>(value: string): BrandedId<Kind> { const v=value.trim(); if(!v) throw new Error('Domain identifiers must not be empty'); return v as BrandedId<Kind> }

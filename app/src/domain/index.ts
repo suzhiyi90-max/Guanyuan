@@ -7,20 +7,17 @@ export * from './person/lifecycle'
 export * from './identity/model'
 export * from './identity/authorization'
 export * from './identity/validation'
-
 export * from './relations/model'
 export * from './relations/validation'
-
 export * from './cognition/model'
 export * from './cognition/validation'
-
 export * from './planning/model'
 export * from './planning/validation'
-
 export * from './economy/model'
 export * from './economy/validation'
 export * from './economy/inheritance'
-
 export * from './life/model'
 export * from './life/validation'
 export * from './life/age'
+export * from './life/state'
+export * from './life/state-validation'
