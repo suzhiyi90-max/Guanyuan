@@ -12,6 +12,7 @@ import {
   type PreviewRuntimeIntent,
   type PreviewRuntimeSession,
 } from './runtime-orchestrator'
+import { createRuntimeSmokeFixture, type RuntimeSmokeFixture } from './runtime-smoke-fixture'
 import type { GeneratedEvent } from '../narrative/types'
 
 export { periods, goalReckoningOf, verdictOf, officialAvailableOf }
@@ -21,6 +22,18 @@ let worldAllocationSequence = 0
 function allocatePreviewWorldId(): string {
   worldAllocationSequence += 1
   return `preview-world-${Date.now().toString(36)}-${worldAllocationSequence.toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+}
+
+function createInitialRuntimeSession(): PreviewRuntimeSession {
+  const development = Boolean((import.meta as ImportMeta & { readonly env?: { readonly DEV?: boolean } }).env?.DEV)
+  if (development && typeof window !== 'undefined') {
+    const requested = new URLSearchParams(window.location.search).get('smoke')
+    const fixtures: readonly RuntimeSmokeFixture[] = ['day8', 'day9', 'day10', 'day10-night']
+    if (requested && fixtures.includes(requested as RuntimeSmokeFixture)) {
+      return createRuntimeSmokeFixture(requested as RuntimeSmokeFixture)
+    }
+  }
+  return createPreviewRuntimeSession(allocatePreviewWorldId())
 }
 
 function asCommandResult(result: PreviewRuntimeDispatchResult): CommandResult {
@@ -62,7 +75,7 @@ export function nextCheckpointOf(state: GameState): { when: string; label: strin
 
 export function useGuanyuanGame() {
   const runtimeRef = useRef<PreviewRuntimeSession | null>(null)
-  if (!runtimeRef.current) runtimeRef.current = createPreviewRuntimeSession(allocatePreviewWorldId())
+  if (!runtimeRef.current) runtimeRef.current = createInitialRuntimeSession()
   const [state, setState] = useState<GameState>(() => runtimeRef.current!.state)
   const [toast, setToast] = useState<ToastMessage | null>(null)
   const restored = useRef(false)
