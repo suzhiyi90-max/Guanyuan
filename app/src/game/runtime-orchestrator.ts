@@ -226,7 +226,7 @@ export async function dispatchPreviewRuntimeCandidate(
     )
     if (validation.status === 'validated') {
       log = validation.log
-      validatedLedger = validation.ledger
+      validatedLedger = validation.ledger as EventLedger<PreviewRuntimeEventKind>
     } else if (validation.status === 'schema-invalid' || validation.status === 'registry-version-mismatch'
       || validation.status === 'invalid-registry' || validation.status === 'invalid-state') {
       const rejected = rejectAiCandidate(log, candidateId, validation.status, 'rule:preview-generated-event')
@@ -246,14 +246,15 @@ export async function dispatchPreviewRuntimeCandidate(
   if (fact.status === 'rejected') {
     return { status: 'rejected', session: unchanged(), reason: fact.reason }
   }
-  const state = projectionState(session.worldId, fact.ledger, session.registry)
+  const committedLedger = fact.ledger as EventLedger<PreviewRuntimeEventKind>
+  const state = projectionState(session.worldId, committedLedger, session.registry)
   if (!state) return { status: 'rejected', session: unchanged(), reason: 'replay-rejected' }
   const next: PreviewRuntimeSession = Object.freeze({
     ...session,
-    ledger: fact.ledger,
+    ledger: committedLedger,
     state,
     candidateLog: log,
     requestSequence: session.requestSequence + 1,
   })
-  return { status: fact.status, session: next, event: fact.event }
+  return { status: fact.status, session: next, event: fact.event as LedgerEvent<PreviewRuntimeEventKind> }
 }
