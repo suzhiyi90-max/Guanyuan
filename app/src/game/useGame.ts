@@ -149,7 +149,8 @@ export function useGuanyuanGame() {
   }, [commitIntent])
 
   const chooseBanquet = useCallback((choice: 'attend' | 'delegate' | 'audit') => {
-    if (runtimeRef.current!.state.periodIndex !== 3) return false
+    const current = runtimeRef.current!.state
+    if (current.periodIndex !== 3 || current.completedActions.includes(`banquet-${current.day}`)) return false
     const result = commitIntent({ kind: 'banquet.choice', payload: { choice } })
     return result.status !== 'rejected'
   }, [commitIntent])
