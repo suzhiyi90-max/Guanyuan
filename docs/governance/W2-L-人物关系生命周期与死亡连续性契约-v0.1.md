@@ -29,7 +29,7 @@ outcome 仅为 preserved 或 ended。
 处置必须引用真实关系边、关系端点、唯一死者、其 DeathRecord 和一致的死亡事件时点。关系起点必须早于死亡。关系终点事件（如存在）必须可解析且晚于起点。
 
 ended 必须满足 Relation.lifecycle.validTo === deathEvent 且 status === severed。
-preserved 不得与 severed 状态冲突；若关系另有后续终点，该终点必须严格晚于死亡时点。
+preserved 表示该死亡时点不终止关系，不得将该死亡事件作为关系终点；关系可由另一个严格晚于死亡时点的事件在后续独立终止，并在该后续终止时标记 severed。不得把后续 severed 状态反向解释为死亡时点已经 ended。
 
 ## 4. 明确不做事项
 
