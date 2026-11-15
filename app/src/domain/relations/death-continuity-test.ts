@@ -64,7 +64,7 @@ check('ended disposition rejects open interval', validateRelationDeathContinuity
 check('ended disposition requires severed status', validateRelationDeathContinuity([{ ...closedEdge, lifecycle: { ...closedEdge.lifecycle, status: 'active' } }], [ended], [deceased, living], refs).includes('relation-death-ended-not-severed'))
 check('preserved disposition rejects severed status', validateRelationDeathContinuity([closedEdge], [preserved], [deceased, living], refs).includes('relation-death-preserved-but-severed'))
 check('relation ended before death remains historical without disposition', validateRelationDeathContinuity([{ ...edge, lifecycle: { status: 'severed', validFrom: start, validTo: end } }], [], [deceased, living], refs).length === 0)
-check('disposition is unnecessary when relation ended before death', validateRelationDeathContinuity([{ ...edge, lifecycle: { status: 'severed', validFrom: start, validTo: start } }], [preserved], [deceased, living], refs).includes('relation-death-disposition-unnecessary'))
+check('disposition is unnecessary when relation ended before death', validateRelationDeathContinuity([{ ...edge, lifecycle: { status: 'severed', validFrom: start, validTo: end } }], [preserved], [deceased, living], { ...refs, eventTimes: new Map(refs.eventTimes).set(end, { day: 7, period: '暮' }) }).includes('relation-death-disposition-unnecessary'))
 check('later relation end requires preserved disposition', validateRelationDeathContinuity([{ ...edge, lifecycle: { ...edge.lifecycle, validTo: end } }], [], [deceased, living], refs).includes('relation-death-disposition-missing'))
 check('preserved relation can have a later end event', validateRelationDeathContinuity([{ ...edge, lifecycle: { ...edge.lifecycle, validTo: end } }], [preserved], [deceased, living], refs).length === 0)
 check('relation cannot begin at or after endpoint death', validateRelationDeathContinuity([{ ...edge, lifecycle: { ...edge.lifecycle, validFrom: deathEvent } }], [preserved], [deceased, living], refs).includes('relation-death-starts-at-or-after-death'))
@@ -79,7 +79,7 @@ check('death event must match death record', validateRelationDeathContinuity([ed
 check('death event time must match death record', validateRelationDeathContinuity([edge], [preserved], [deceased, living], { ...refs, eventTimes: new Map(refs.eventTimes).set(deathEvent, endAt) }).includes('relation-death-event-time-mismatch'))
 check('duplicate disposition IDs are rejected', validateRelationDeathContinuity([edge], [preserved, preserved], [deceased, living], refs).includes('relation-death-disposition-duplicate-id'))
 check('duplicate relation/deceased disposition is rejected', validateRelationDeathContinuity([edge], [preserved, { ...preserved, id: brandedId<'RelationDeathDispositionId'>('rel-duplicate') }], [deceased, living], refs).includes('relation-death-disposition-duplicate-endpoint'))
-check('two endpoints can be preserved then ended at later death', validateRelationDeathContinuity([edge], [
+check('two endpoints can be preserved then ended at later death', validateRelationDeathContinuity([{ ...edge, lifecycle: { status: 'severed', validFrom: start, validTo: secondDeath } }], [
   preserved, { ...preserved, id: brandedId<'RelationDeathDispositionId'>('rel-disposition-2'), deceased: secondDeadId, deathEvent: secondDeath, outcome: 'ended' },
 ], [deceased, laterDeceased], refs).length === 0)
 check('terminal end makes later endpoint disposition unnecessary', validateRelationDeathContinuity([closedEdge], [
