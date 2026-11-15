@@ -702,10 +702,10 @@ try {
   await shot('21-affairs-verified-1440')
 
   // 7.8 跨日到第四日 主簿改口与五档结果
-  const askAt = async i => {
+  const askAt = async name => {
     await nav('人情')
     await settle(300)
-    await page.locator('.person-card').nth(i).click()
+    await page.locator('.person-card').filter({ hasText: name }).first().click()
     await settle(300)
     await click('button:has-text("正式问")')
     await settle(300)
@@ -729,8 +729,8 @@ try {
   check('主簿来问事件卡', (await page.locator('.world-card').count()) === 1)
   await click('button:has-text("把借领状与旧欠并置给他看")')
   await settle(400)
-  await askAt(3)
-  await askAt(4)
+  await askAt('阮裕丰')
+  await askAt('桑鹤龄')
   await nav('今日')
   await settle(300)
   await click('.scene-switcher button:has-text("夜书房")')
@@ -1022,6 +1022,8 @@ try {
     await click('.world-later')
     await settle(250)
   }
+  await nav('今日')
+  await settle(350)
   await click('.scene-switcher button:has-text("东堤")')
   await settle(80)
   check('减少动效下场景即时切换', await page.locator('.scene-river').isVisible() && (await page.locator('.scene-county').count()) === 0)
