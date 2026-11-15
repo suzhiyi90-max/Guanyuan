@@ -1,5 +1,5 @@
-import { brandedId, type EventId } from '../src/domain/shared/ids'
-import { appendLedgerEvent, createEventLedger, type EventLedger, type JsonValue, type LedgerEvent, type WorldId } from '../src/domain/event-ledger'
+import { brandedId } from '../src/domain/shared/ids'
+import { appendAiCandidateFact, appendCandidateValidationReceipt, appendLedgerEvent, createEventLedger, type EventLedger, type JsonValue, type LedgerEvent, type WorldId } from '../src/domain/event-ledger'
 import { createEventRegistry, freezeEventRegistry, registerEventSchema } from '../src/domain/event-registry'
 import { replayEventRange, type StreamCursor } from '../src/domain/event-replay'
 import { createWorldSnapshot } from '../src/domain/world-snapshot'
@@ -174,27 +174,19 @@ async function main(): Promise<void> {
     && crossWorld.issue === 'save-package-base-world-mismatch')
 
   const receiptWorld = brandedId<'WorldId'>('receipt-incremental-world') as WorldId
-  const receiptDigest = await candidatePayloadDigest('person.created', '1.0.0', { name: '丙' })
-  const receipt: LedgerEvent<Kind> = Object.freeze({
-    worldId: receiptWorld,
-    id: brandedId<'EventId'>('evt:receipt-incremental-world:1'),
-    seq: 1,
-    source: 'rule',
-    kind: 'candidate.validated',
-    intentKind: 'candidate-validation',
-    actor: 'system:candidate-validator',
-    requestWorldTime: t1,
-    committedAt: t1,
-    clientRequestId: 'candidate-validation:c1',
-    payload: {
-      candidate: 'c1',
-      targetKind: 'person.created',
-      payloadDigest: receiptDigest,
-      digestAlgorithm: 'sha-256/canonical-json-v1',
-      registryVersion: '1.0.0',
-      validatedBy: 'rule:test',
-    },
-  })
+  const candidatePayload: JsonValue = { name: '丙' }
+  const receiptDigest = await candidatePayloadDigest('person.created', '1.0.0', candidatePayload)
+  const receiptLedger = createEventLedger<Kind>(receiptWorld)
+  const receiptAppend = await appendCandidateValidationReceipt(receiptLedger, registry, {
+    candidateId: 'c1',
+    targetKind: 'person.created',
+    candidatePayload,
+    payloadDigest: receiptDigest,
+    registryVersion: '1.0.0',
+    validatedBy: 'rule:test',
+  }, t1, t1)
+  if (receiptAppend.status !== 'appended') throw new Error('incremental-test-receipt-append-failed')
+  const receipt = receiptAppend.event
   const receiptHead: StreamCursor = { kind: 'event', seq: 1, eventId: receipt.id }
   const receiptSnapshot = createWorldSnapshot({
     schemaVersion: 1, worldId: receiptWorld, streamHead: receiptHead, checkpointAt: t1, materialized: [],
@@ -207,21 +199,19 @@ async function main(): Promise<void> {
   }, verification)
   if (receiptBase.status !== 'valid') throw new Error('incremental-test-receipt-base-failed')
 
-  const aiFact: LedgerEvent<Kind> = Object.freeze({
-    worldId: receiptWorld,
-    id: brandedId<'EventId'>('evt:receipt-incremental-world:2'),
-    seq: 2,
+  const aiAppend = await appendAiCandidateFact(receiptAppend.ledger, registry, {
     source: 'ai-candidate',
     kind: 'person.created',
-    intentKind: 'ai-person-create',
-    actor: 'ai:candidate',
+    intentKind: 'ai-candidate-fact',
+    actor: 'ai-candidate',
     requestWorldTime: t1,
-    committedAt: t2,
     clientRequestId: 'ai-fact-001',
     candidateRef: 'c1',
-    validationRef: receipt.id as EventId,
-    payload: { name: '丙' },
-  })
+    validationRef: receipt.id,
+    payload: candidatePayload,
+  }, t2)
+  if (aiAppend.status !== 'appended') throw new Error('incremental-test-ai-fact-append-failed')
+  const aiFact = aiAppend.event
   const aiHead: StreamCursor = { kind: 'event', seq: 2, eventId: aiFact.id }
   const aiSnapshot = createWorldSnapshot({
     schemaVersion: 1, worldId: receiptWorld, streamHead: aiHead, checkpointAt: t2, materialized: ['丙'],
