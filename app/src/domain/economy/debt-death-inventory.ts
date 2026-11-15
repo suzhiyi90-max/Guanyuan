@@ -283,7 +283,7 @@ export function validateDebtDeathInventory(
   const successionIssues: EconomyIssue[] = validateDebtPartySuccessions(
     debts, successions.filter(item => item.deceased === inventory.deceased
       && item.deathEvent === inventory.deathEvent),
-    { ...refs, persons: refs.persons },
+    { ...refs, persons: refs.persons, organizations: [], revocations: [] },
   )
   if (successionIssues.length > 0) issues.push('debt-death-inventory-succession-invalid')
 
