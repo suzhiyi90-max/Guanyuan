@@ -1,4 +1,15 @@
 import { appendLedgerEvent, createEventLedger, type EventLedger, type JsonValue, type LedgerEvent, type WorldId } from '../domain/event-ledger'
+import {
+  appendValidatedAiCandidateFact,
+  createCandidateLog,
+  rejectAiCandidate,
+  submitAiCandidate,
+  validateAiCandidate,
+  type CandidateLog,
+} from '../domain/ai-candidate'
+import type { GeneratedEvent } from '../narrative/types'
+import { effectById } from '../narrative/effects'
+import { officialAvailableOf } from './engine'
 import { validateEventPayload, type EventRegistry } from '../domain/event-registry'
 import { brandedId } from '../domain/shared/ids'
 import type { WorldTime } from '../domain/shared/world-time'
@@ -32,6 +43,7 @@ export interface PreviewRuntimeSession {
   readonly ledger: EventLedger<PreviewRuntimeEventKind>
   readonly state: GameState
   readonly requestSequence: number
+  readonly candidateLog: CandidateLog
 }
 
 export type PreviewRuntimeDispatchResult =
@@ -59,7 +71,7 @@ export function createPreviewRuntimeSession(worldIdValue: string): PreviewRuntim
   const ledger = createEventLedger<PreviewRuntimeEventKind>(worldId)
   const state = projectionState(worldId, ledger, registry)
   if (!state) throw new Error('preview-runtime-genesis-projection-failed')
-  return Object.freeze({ worldId, registry, ledger, state, requestSequence: 0 })
+  return Object.freeze({ worldId, registry, ledger, state, requestSequence: 0, candidateLog: createCandidateLog() })
 }
 
 /**
@@ -78,6 +90,7 @@ export function dispatchPreviewRuntimeIntent(
     ledger,
     state,
     requestSequence,
+    candidateLog: session.candidateLog,
   })
   const requestId = clientRequestId?.trim() || `player-command-${requestSequence}`
   if (!requestId) return { status: 'rejected', session: nextSession(), reason: 'client-request-id-empty' }
@@ -123,4 +136,103 @@ export function dispatchPreviewRuntimeIntent(
     session: nextSession(appended.ledger, state),
     event: appended.event,
   }
+}
+
+
+export type PreviewRuntimeCandidateResult =
+  | { readonly status: 'appended' | 'duplicate'; readonly session: PreviewRuntimeSession; readonly event: LedgerEvent<PreviewRuntimeEventKind> }
+  | { readonly status: 'rejected'; readonly session: PreviewRuntimeSession; readonly reason: string }
+
+/**
+ * Validates one selected AI option as an out-of-ledger candidate, appends its
+ * trusted receipt, appends the referenced fact, and only then commits a fully
+ * replayed session. All ledger changes are prepared off-session.
+ */
+export async function dispatchPreviewRuntimeCandidate(
+  session: PreviewRuntimeSession,
+  generated: GeneratedEvent,
+  optionId: string,
+): Promise<PreviewRuntimeCandidateResult> {
+  const unchanged = (candidateLog = session.candidateLog): PreviewRuntimeSession => Object.freeze({
+    ...session,
+    candidateLog,
+    requestSequence: session.requestSequence + 1,
+  })
+  if (!generated || generated.origin !== 'ai' || typeof generated.id !== 'string'
+    || !generated.id.startsWith('ai-') || generated.day !== session.state.day) {
+    return { status: 'rejected', session: unchanged(), reason: 'not-generated-or-stale' }
+  }
+  if (session.state.pendingEvent && session.state.pendingEvent !== generated.id) {
+    return { status: 'rejected', session: unchanged(), reason: 'world-event-pending' }
+  }
+  if (session.state.handledEvents.includes(generated.id)) {
+    return { status: 'rejected', session: unchanged(), reason: 'already-handled' }
+  }
+  const option = generated.options.find(item => item.id === optionId)
+  if (!option) return { status: 'rejected', session: unchanged(), reason: 'unknown-option' }
+  const effect = effectById(option.effect)
+  if (!effect) return { status: 'rejected', session: unchanged(), reason: 'unknown-effect' }
+  if (!effect.available(session.state, officialAvailableOf(session.state))) {
+    return { status: 'rejected', session: unchanged(), reason: 'effect-unavailable' }
+  }
+
+  const candidateId = `${generated.id}:${option.id}`
+  const existing = session.candidateLog.candidates.find(item => item.candidateId === candidateId)
+  let log = session.candidateLog
+  if (!existing) {
+    const submitted = submitAiCandidate(log, {
+      candidateId,
+      targetKind: 'ai.generated-event.resolved',
+      registryVersion: session.registry.registryVersion,
+      payload: {
+        generatedEventId: generated.id,
+        optionId: option.id,
+        effect: option.effect,
+        result: option.result || option.label,
+        refs: option.refs ?? [],
+      },
+    })
+    if (submitted.status !== 'accepted') return { status: 'rejected', session: unchanged(), reason: 'candidate-submit-rejected' }
+    log = submitted.log
+  } else if (existing.status === 'rejected') {
+    return { status: 'rejected', session: unchanged(), reason: 'candidate-terminal-rejected' }
+  }
+
+  const period = periods[session.state.periodIndex]
+  if (!period) return { status: 'rejected', session: unchanged(), reason: 'world-time-invalid' }
+  const now: WorldTime = Object.freeze({ day: session.state.day, period })
+  let validatedLedger = session.ledger
+  if (existing?.status !== 'validated') {
+    const validation = await validateAiCandidate(
+      log, session.ledger, session.registry, candidateId,
+      'rule:preview-generated-event', now, now,
+    )
+    if (validation.status === 'validated') {
+      log = validation.log
+      validatedLedger = validation.ledger
+    } else if (validation.status === 'schema-invalid' || validation.status === 'registry-version-mismatch'
+      || validation.status === 'invalid-registry' || validation.status === 'invalid-state') {
+      const rejected = rejectAiCandidate(log, candidateId, validation.status, 'rule:preview-generated-event')
+      return { status: 'rejected', session: unchanged(rejected.status === 'rejected' ? rejected.log : log), reason: validation.status }
+    } else {
+      return { status: 'rejected', session: unchanged(), reason: validation.status }
+    }
+  }
+
+  const fact = await appendValidatedAiCandidateFact(
+    log, validatedLedger, session.registry, candidateId, now, now,
+  )
+  if (fact.status === 'rejected') {
+    return { status: 'rejected', session: unchanged(), reason: fact.reason }
+  }
+  const state = projectionState(session.worldId, fact.ledger, session.registry)
+  if (!state) return { status: 'rejected', session: unchanged(), reason: 'replay-rejected' }
+  const next: PreviewRuntimeSession = Object.freeze({
+    ...session,
+    ledger: fact.ledger,
+    state,
+    candidateLog: log,
+    requestSequence: session.requestSequence + 1,
+  })
+  return { status: fact.status, session: next, event: fact.event }
 }
