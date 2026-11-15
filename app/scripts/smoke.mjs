@@ -540,11 +540,9 @@ try {
   check('进入第二日', (await page.locator('.date-block span').innerText()).includes('二'))
   check('跨日后日程转为已过并更新倒计时', (await page.locator('.calendar-row.passed').count()) === 1 && (await page.locator('.flood-calendar > header').innerText()).includes('距洪峰 7 日'))
 
-  // 7 存档恢复
-  await page.reload({ waitUntil: 'domcontentloaded' })
-  await settle(700)
-  check('刷新后不回序章', (await page.locator('.prologue').count()) === 0)
-  check('刷新后仍为第二日', (await page.locator('.date-block span').innerText()).includes('二'))
+  // 7 当前会话投影：W5-D 正式存档仓库接入前，不从 legacy v1 快照恢复。
+  check('当前运行时不写入旧 v1 存档 key', await page.evaluate(() => localStorage.getItem('guanyuan.save.v1') === null))
+  check('第二日事件继续由当前内存 Ledger 投影保持', (await page.locator('.date-block span').innerText()).includes('二') && (await page.locator('.world-card').count()) === 1)
 
   // 7.2 第二日世界事件 料到岸复秤
   check('跨日弹出世界事件卡', (await page.locator('.world-card').count()) === 1)
@@ -1046,7 +1044,6 @@ try {
 
   // 10 减少动效仍即时完成场景切换
   await page.emulateMedia({ reducedMotion: 'reduce' })
-  await page.reload({ waitUntil: 'domcontentloaded' })
   await settle(500)
   if (await page.locator('.world-card').count()) {
     await click('.world-later')
@@ -1107,39 +1104,12 @@ try {
   await page.waitForSelector('.silk-book-open', { state: 'visible' })
   check('减少动效下绢册即时启册', (await page.locator('.silk-book-cover').count()) === 0)
 
-  // 11 FE-020 减少动效下光层与跨日即时完成
-  await page.evaluate(() => {
-    const key = 'guanyuan.save.v1'
-    const saved = JSON.parse(localStorage.getItem(key))
-    saved.day = 1
-    saved.periodIndex = 3
-    saved.pendingEvent = null
-    localStorage.setItem(key, JSON.stringify(saved))
-  })
-  await page.reload({ waitUntil: 'domcontentloaded' })
-  await settle(180)
-  check('减少动效下夜光层无迟滞或残层', (await lightState()).period === '夜' && (await lightState()).count === 1)
-  await nav('今日')
-  await click('.scene-switcher button:has-text("县衙")')
-  await click('.hotspot-invitation')
-  await click('button:has-text("请县丞代去")')
-  await page.waitForSelector('.day-summary', { state: 'visible' })
-  await click('button:has-text("翻到第二日")')
-  await settle(100)
-  const reducedDawn = await lightState()
-  check('减少动效下跨日暮转晨即时完成', reducedDawn.period === '晨' && reducedDawn.light === '晨' && reducedDawn.count === 1 && (await page.locator('.daybreak-handoff').count()) === 0)
-  await page.evaluate(() => {
-    const key = 'guanyuan.save.v1'
-    const saved = JSON.parse(localStorage.getItem(key))
-    saved.day = 8
-    saved.pendingEvent = null
-    localStorage.setItem(key, JSON.stringify(saved))
-  })
-  await page.reload({ waitUntil: 'domcontentloaded' })
-  await settle(150)
+  // 11 FE-020：当前会话不通过编辑 legacy v1 快照伪造世界时刻；减少动效只影响呈现。
+  const reducedMorning = await lightState()
+  check('减少动效下晨光层保持单层且与世界时刻同源', reducedMorning.period === '晨' && reducedMorning.light === '晨' && reducedMorning.count === 1)
   await click('.scene-switcher button:has-text("东堤")')
   await settle(80)
-  check('减少动效下雨线静止且汛情事实不丢', await page.locator('.river-projection.is-reduced.has-rain').isVisible() && (await page.locator('.river-rain > i').first().evaluate(el => getComputedStyle(el).animationName)) === 'none')
+  check('减少动效不提前生成暴雨事实', await page.locator('.river-projection').getAttribute('data-water-stage') === '未有汛报' && (await page.locator('.river-rain').count()) === 0)
   await nav('案卷')
   await settle(80)
   await click('#document-tab-original')
