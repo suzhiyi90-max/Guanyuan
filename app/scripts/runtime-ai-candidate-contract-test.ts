@@ -43,6 +43,30 @@ async function run(): Promise<void> {
     retry.status === 'duplicate' && retry.session.ledger.head === 2
       && retry.event.id === first.event.id)
 
+  let actionSession = createPreviewRuntimeSession('w5-c2a-costed-effect-world')
+  const planned = dispatchPreviewRuntimeIntent(actionSession, {
+    kind: 'river.plan.confirmed',
+    payload: { plan: {
+      leader: 'foreman', leaderName: '赵九河', material: 8, labor: 30,
+      supervisor: '县丞会勘 · 工头监作', detail: '先行抢护计划',
+    } },
+  }, 'create-plan-for-ai-effect')
+  if (planned.status === 'rejected') throw new Error('costed-effect-plan-fixture-failed')
+  actionSession = planned.session
+  const costedEvent = event(1, 'unlock-e008')
+  const costed = await dispatchPreviewRuntimeCandidate(actionSession, costedEvent, 'jia')
+  check('AI official effect reuses the existing action-cost rule and unlocks its evidence',
+    costed.status === 'appended' && costed.session.state.unlocked.includes('E-008')
+      && costed.session.state.periodIndex === 2)
+  if (costed.status !== 'appended') throw new Error('costed-effect-fixture-failed')
+  const costedRetry = await dispatchPreviewRuntimeCandidate(costed.session, costedEvent, 'jia')
+  check('costed AI retry remains duplicate after world time advanced and effect became unavailable',
+    costedRetry.status === 'duplicate' && costedRetry.session.ledger.head === costed.session.ledger.head)
+  const alteredRetry = await dispatchPreviewRuntimeCandidate(costed.session, event(1, 'log-done'), 'jia')
+  check('same candidate identity cannot replace its validated payload',
+    alteredRetry.status === 'rejected' && alteredRetry.reason === 'candidate-payload-conflict'
+      && alteredRetry.session.ledger.head === costed.session.ledger.head)
+
   const invalidEffect = await dispatchPreviewRuntimeCandidate(
     createPreviewRuntimeSession('w5-c2a-invalid-effect'), event(1, 'unregistered-effect'), 'jia',
   )
