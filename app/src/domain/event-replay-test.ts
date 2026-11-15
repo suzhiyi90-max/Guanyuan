@@ -158,6 +158,48 @@ const forged = replayEventRange({
 check('candidate validation receipt cannot use non-rule source', forged.status === 'rejected'
   && forged.issue === 'replay-system-receipt-invalid')
 
+const fakeFact: LedgerEvent<Kind> = Object.freeze({
+  worldId, id: brandedId<'EventId'>('evt:replay-world:2'), seq: 2,
+  source: 'ai-candidate', kind: 'person.created', intentKind: 'ai-person-create',
+  actor: 'ai:candidate', requestWorldTime: t1, committedAt: t2,
+  clientRequestId: 'ai-fact-001', candidateRef: 'c1', validationRef: fakeReceipt.id,
+  payload: { name: '丙' },
+})
+const factCursor: StreamCursor = { kind: 'event', seq: 2, eventId: fakeFact.id }
+const replayAiFact = replayEventRange({
+  worldId, fromExclusive: genesis, toInclusive: factCursor, events: [fakeReceipt, fakeFact],
+  registry, initialState: [], reduce: addNames,
+})
+check('AI fact replay requires and accepts its earlier validation receipt', replayAiFact.status === 'replayed'
+  && JSON.stringify(replayAiFact.state) === '["丙"]')
+
+const partialAiFact = replayEventRange({
+  worldId, fromExclusive: receiptCursor, toInclusive: factCursor, anchorEvent: fakeReceipt,
+  events: [fakeFact], registry, initialState: [], reduce: addNames,
+})
+check('checkpoint replay resolves AI validation receipt at the anchor cursor', partialAiFact.status === 'replayed')
+
+const checkpointAfterFact = replayEventRange({
+  worldId, fromExclusive: factCursor, toInclusive: factCursor, anchorEvent: fakeFact,
+  priorReceipts: [fakeReceipt], events: [], registry, initialState: ['丙'], reduce: addNames,
+})
+check('checkpoint can supply earlier candidate receipts for anchor validation', checkpointAfterFact.status === 'replayed')
+
+const missingReceipt = replayEventRange({
+  worldId, fromExclusive: factCursor, toInclusive: factCursor, anchorEvent: fakeFact,
+  events: [], registry, initialState: ['丙'], reduce: addNames,
+})
+check('AI fact anchor without prior validation receipt is rejected', missingReceipt.status === 'rejected'
+  && missingReceipt.issue === 'replay-ai-candidate-receipt-invalid')
+
+const wrongReceiptFact = { ...fakeFact, validationRef: brandedId<'EventId'>('evt:replay-world:99') as EventId }
+const wrongReceiptLink = replayEventRange({
+  worldId, fromExclusive: genesis, toInclusive: factCursor, events: [fakeReceipt, wrongReceiptFact],
+  registry, initialState: [], reduce: addNames,
+})
+check('AI fact cannot point to a missing or fabricated receipt', wrongReceiptLink.status === 'rejected'
+  && wrongReceiptLink.issue === 'replay-ai-candidate-receipt-invalid')
+
 const anchorMismatch = replayEventRange({
   worldId, fromExclusive: { kind: 'event', seq: 1, eventId: brandedId<'EventId'>('evt:replay-world:99') as EventId },
   toInclusive: c2, anchorEvent: first.event, events: [second.event], registry,
