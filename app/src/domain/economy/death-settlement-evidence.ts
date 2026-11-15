@@ -7,6 +7,8 @@ import type {
   AuthorizationId,
 } from '../shared/ids'
 import type { DebtDeathInventory } from './debt-death-inventory'
+import type { DeathOfficeInventory } from '../identity/death-inventory'
+import type { MembershipDeathInventory } from '../relations/death-inventory'
 import { compareWorldTime, isValidWorldTime } from '../shared/world-time'
 import type { WorldTime } from '../shared/world-time'
 
@@ -115,6 +117,46 @@ function domainItemRefs(evidence: DeathSettlementDomainEvidence): string[] {
       return evidence.relations.map(id => `relation:${id}`)
     case 'goal':
       return evidence.goals.map(id => `goal:${id}`)
+  }
+}
+
+/** Project the office domain's canonical appointment and authorization inventory. */
+export function projectDeathOfficeInventoryEvidence(
+  id: DeathSettlementEvidenceId,
+  inventory: DeathOfficeInventory,
+): Extract<DeathSettlementDomainEvidence, { readonly domain: 'office' }> {
+  return {
+    id,
+    deceased: inventory.deceased,
+    deathEvent: inventory.deathEvent,
+    inventoryEvent: inventory.inventoryEvent,
+    domain: 'office',
+    inventory: inventory.id,
+    status: inventory.status,
+    entries: [
+      ...inventory.appointments.map(entry => ({ id: entry.id })),
+      ...inventory.authorizations.map(entry => ({ id: entry.id })),
+    ],
+    appointments: inventory.appointments.map(entry => entry.appointment),
+    authorizations: inventory.authorizations.map(entry => entry.authorization),
+  }
+}
+
+/** Project the organization domain's canonical membership inventory. */
+export function projectMembershipDeathInventoryEvidence(
+  id: DeathSettlementEvidenceId,
+  inventory: MembershipDeathInventory,
+): Extract<DeathSettlementDomainEvidence, { readonly domain: 'membership' }> {
+  return {
+    id,
+    deceased: inventory.deceased,
+    deathEvent: inventory.deathEvent,
+    inventoryEvent: inventory.inventoryEvent,
+    domain: 'membership',
+    inventory: inventory.id,
+    status: inventory.status,
+    entries: inventory.memberships.map(entry => ({ id: entry.id })),
+    memberships: inventory.memberships.map(entry => entry.membership),
   }
 }
 
