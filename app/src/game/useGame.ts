@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { people } from '../data'
-import { type TaskOutcome } from './schedule'
 import { advanceDay, advancePeriod, goalReckoningOf, officialAvailableOf, periods, spendAction, verdictOf } from './engine'
-import type { Clue, Comparison, GameLog, OfficialActionId, Period, RiverPlan, TaskStage, ToastMessage } from '../types'
+import type { TaskStage, ToastMessage } from '../types'
+import { createInitialGameState } from './initial-state'
+import type { GameState } from './model'
+export type { GameState } from './model'
 import { executeCommand } from './commands'
 import type { GeneratedEvent } from '../narrative/types'
 
@@ -10,66 +12,7 @@ export { periods, goalReckoningOf, verdictOf, officialAvailableOf }
 export type { ReckoningRow, GoalReckoning, Verdict } from './engine'
 const SAVE_KEY = 'guanyuan.save.v1'
 
-export interface GameState {
-  goalId: string | null
-  day: number
-  periodIndex: number
-  clues: Clue[]
-  comparisons: Comparison[]
-  unlocked: string[]
-  asked: string[]
-  completedActions: string[]
-  plan: RiverPlan | null
-  officialActions: OfficialActionId[]
-  officialRead: boolean
-  material: { arrived: number; transit: number; unsent: number }
-  outcome: TaskOutcome | null
-  handledEvents: string[]
-  pendingEvent: string | null
-  probeKnown: boolean
-  privateFunds: number
-  giftEntries: string[]
-  log: GameLog
-}
-
-const initialState: GameState = {
-  goalId: null,
-  day: 1,
-  periodIndex: 0,
-  clues: [],
-  comparisons: [],
-  unlocked: ['E-001', 'P-006'],
-  asked: [],
-  completedActions: [],
-  plan: null,
-  officialActions: [],
-  officialRead: false,
-  material: { arrived: 30, transit: 10, unsent: 10 },
-  outcome: null,
-  handledEvents: [],
-  pendingEvent: null,
-  probeKnown: false,
-  privateFunds: 60,
-  giftEntries: [],
-  log: {
-    done: '接印，收东堤渗水呈文一件',
-    stuck: '渗水因由未明，三人口供尚待接触',
-    rumor: '茶楼有人说“修衙署”，暂无凭据',
-  },
-}
-
-function loadSave(): GameState | null {
-  try {
-    const raw = localStorage.getItem(SAVE_KEY)
-    if (!raw) return null
-    const parsed = JSON.parse(raw) as GameState
-    if (!parsed || typeof parsed.day !== 'number' || !Array.isArray(parsed.clues)) return null
-    return { ...initialState, ...parsed }
-  } catch {
-    return null
-  }
-}
-
+const initialState = createInitialGameState()
 export function taskStageOf(state: GameState): TaskStage {
   if (state.plan) {
     if (state.day >= 10) return '结'
