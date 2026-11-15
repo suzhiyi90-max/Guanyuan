@@ -30,25 +30,25 @@ const refs = {
   events: [deathEvent, reviewEvent],
   eventTimes: new Map<EventId, WorldTime>([[deathEvent, deathAt], [reviewEvent, reviewAt]]),
 }
-const evidence = projectDebtDeathInventoryEvidence(evidenceId, inventory)
+const evidence = projectDebtDeathInventoryEvidence(evidenceId, inventory)\nconst canonical = { id: inventoryId, deceased, deathEvent, inventoryEvent: reviewEvent, status: inventory.status, entryIds: inventory.entries.map(item => item.id) }
 check('debt projection preserves inventory identity and scope', evidence.inventory === inventoryId
   && evidence.deceased === deceased && evidence.entries[0].id === entryId)
 check('debt projection preserves typed creditor/debtor position', evidence.positions[0].debt === debtId
   && evidence.positions[0].role === 'creditor')
 check('valid envelope passes structural validation', validateDeathSettlementDomainEvidence(
-  evidence, true, refs, deathAt,
+  evidence, canonical, refs, deathAt,
 ).length === 0)
 check('missing canonical inventory is rejected', validateDeathSettlementDomainEvidence(
-  evidence, false, refs, deathAt,
+  evidence, null, refs, deathAt,
 ).includes('death-settlement-evidence-inventory-reference-missing'))
 check('review event before death is rejected', validateDeathSettlementDomainEvidence(
-  evidence, true, { ...refs, eventTimes: new Map([[deathEvent, deathAt], [reviewEvent, { day: 2, period: '夜' }]]) }, deathAt,
+  evidence, canonical, { ...refs, eventTimes: new Map([[deathEvent, deathAt], [reviewEvent, { day: 2, period: '夜' }]]) }, deathAt,
 ).includes('death-settlement-evidence-inventory-before-death'))
 check('duplicate evidence entry IDs are rejected', validateDeathSettlementDomainEvidence(
-  { ...evidence, entries: [evidence.entries[0], evidence.entries[0]] }, true, refs, deathAt,
+  { ...evidence, entries: [evidence.entries[0], evidence.entries[0]] }, canonical, refs, deathAt,
 ).includes('death-settlement-evidence-entry-id-duplicate'))
 check('domain references and entries must align one-to-one', validateDeathSettlementDomainEvidence(
-  { ...evidence, positions: [] }, true, refs, deathAt,
+  { ...evidence, positions: [] }, canonical, refs, deathAt,
 ).includes('death-settlement-evidence-domain-entry-count-mismatch'))
 check('open or challenged state is carried, not promoted', projectDebtDeathInventoryEvidence(
   evidenceId, { ...inventory, status: 'challenged' },
