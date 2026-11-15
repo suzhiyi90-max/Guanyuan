@@ -117,7 +117,9 @@ async function validateAtDepth<Kind extends string>(
   }
 
   const baseResult = await validateAtDepth(value.basePackage, verification, depth + 1)
-  if (baseResult.status !== 'valid') return { status: 'rejected', issue: 'save-package-base-invalid' }
+  if (baseResult.status !== 'valid') return baseResult.issue === 'save-package-chain-too-deep'
+    ? { status: 'rejected', issue: 'save-package-chain-too-deep' }
+    : { status: 'rejected', issue: 'save-package-base-invalid' }
   const basePackage = baseResult.package
   if (basePackage.worldId !== value.worldId) return { status: 'rejected', issue: 'save-package-base-world-mismatch' }
   if (basePackage.schemaVersion !== value.schemaVersion) return { status: 'rejected', issue: 'save-package-base-schema-mismatch' }
