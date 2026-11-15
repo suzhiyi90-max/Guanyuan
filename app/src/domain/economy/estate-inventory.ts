@@ -110,6 +110,7 @@ function recordedTransferIsValid(
   asset: Asset,
   transfer: AssetInheritanceTransfer,
   deceased: PersonId,
+  deathEvent: EventId,
   deathAt: WorldTime,
   refs: EstateAssetInventoryReferences,
 ): boolean {
@@ -118,7 +119,7 @@ function recordedTransferIsValid(
   const revocations = refs.revocations.filter(item => item.grant === transfer.sourceGrant)
   const successor = refs.persons.filter(person => person.id === transfer.successor)
   const transferAt = refs.eventTimes.get(transfer.transferEvent)
-  if (transfer.deceased !== deceased || transfer.deathEvent !== refs.persons.find(person => person.id === deceased)?.death.value?.causeEvent
+  if (transfer.deceased !== deceased || transfer.deathEvent !== deathEvent
     || transfer.asset !== asset.id || transfer.successor === deceased) return false
   if (source.length !== 1 || successorGrants.length !== 1 || revocations.length !== 1 || successor.length !== 1) return false
   const sourceGrant = source[0]
@@ -261,7 +262,7 @@ export function validateEstateAssetInventory(
         issues.push('estate-inventory-transfer-not-matching')
       }
       if (ownership !== 'deceased') issues.push('estate-inventory-transfer-not-supported')
-      if (!recordedTransferIsValid(asset, transfer, inventory.deceased, death.at, refs)) {
+      if (!recordedTransferIsValid(asset, transfer, inventory.deceased, inventory.deathEvent, death.at, refs)) {
         issues.push('estate-inventory-transfer-invalid')
       }
     } else {
