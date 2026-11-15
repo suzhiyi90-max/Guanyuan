@@ -198,7 +198,7 @@ const openInventory: DeathSettlementDomainAssessment = {
   canonical: {
     id: 'i-asset', deceased, deathEvent, inventoryEvent, status: 'open', entries: [],
   },
-  domainIssues: ['estate-inventory-open'],
+  domainIssues: [],
   readiness: 'blocked',
 }
 check('open inventory cannot be promoted by an otherwise valid evidence envelope',
