@@ -175,7 +175,8 @@ export function replayEventRange<Kind extends string>(
   }
   const from = input.fromExclusive
   const to = input.toInclusive
-  if (!Array.isArray(input.events) || !cursorIsValid(from) || !cursorIsValid(to)
+  if (!Array.isArray(input.events) || (input.priorReceipts !== undefined && !Array.isArray(input.priorReceipts))
+    || !cursorIsValid(from) || !cursorIsValid(to)
     || (from.kind === 'event' && to.kind === 'genesis')
     || to.seq < from.seq) return { status: 'rejected', issue: 'replay-range-invalid' }
 
@@ -185,7 +186,7 @@ export function replayEventRange<Kind extends string>(
       || receipt.seq <= 0 || receipt.seq >= from.seq
       || receipt.id !== brandedId<'EventId'>('evt:' + input.worldId + ':' + receipt.seq)
       || !isSystemReceipt(receipt) || receipts.has(receipt.id)) {
-      return { status: 'rejected', issue: 'replay-ai-candidate-receipt-invalid', seq: receipt.seq, eventId: receipt.id }
+      return { status: 'rejected', issue: 'replay-ai-candidate-receipt-invalid', seq: receipt?.seq, eventId: receipt?.id }
     }
     const issue = validateEvent(receipt, input.worldId, receipt.seq, input.registry, receipts)
     if (issue) return { status: 'rejected', issue, seq: receipt.seq, eventId: receipt.id }
