@@ -195,7 +195,7 @@ const debtBlocked: DeathSettlementDomainAssessment = {
     id: 'i-debt', deceased, deathEvent, inventoryEvent, status: 'complete',
     entries: [{ id: 'debt-entry', itemRef: 'debt:unpaid-debt:debtor' }],
   },
-  domainIssues: ['debt-death-inventory-entry-pending'],
+  domainIssues: ['debt-death-inventory-pending-status-mismatch'],
   readiness: 'blocked',
 }
 const blocked = coordinateDeathSettlement(scope, assessments.map((item, index) =>
@@ -233,7 +233,7 @@ const contradictoryReady: DeathSettlementDomainAssessment = {
   canonical: {
     id: 'i-debt', deceased, deathEvent, inventoryEvent, status: 'complete', entries: [],
   },
-  domainIssues: ['debt-death-inventory-invalid'],
+  domainIssues: ['debt-death-inventory-invalid-status'],
   readiness: 'ready',
 }
 check('ready result contradicting domain validator issues is invalid',
