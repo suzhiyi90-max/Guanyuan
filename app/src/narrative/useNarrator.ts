@@ -6,7 +6,7 @@
  * 失败不弹错、不暴露厂家与模型名，只落一枚世界内的「笔墨未至」小签，本日照旧。
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { GameState } from '../game/useGame'
+import type { GameState } from '../game/model'
 import type { Period, SceneId } from '../types'
 import { buildContext, contextHash } from './context'
 import { createProvider, readableFailure } from './providers'
