@@ -97,6 +97,8 @@ function cloneFreezeJson(value: unknown, ancestors = new Set<object>()): JsonVal
 
 function cursorIsValidForWorld(cursor: unknown, worldId: string): cursor is StreamCursor {
   if (cursor === null || typeof cursor !== 'object' || Array.isArray(cursor)) return false
+  const prototype = Object.getPrototypeOf(cursor)
+  if (prototype !== Object.prototype && prototype !== null) return false
   const value = cursor as Record<string, unknown>
   if (value.kind === 'genesis') return value.seq === 0
     && Object.keys(value).every(key => key === 'kind' || key === 'seq')
