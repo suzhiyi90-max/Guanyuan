@@ -63,6 +63,7 @@ export type DeathOfficeInventoryIssue =
   | 'death-office-inventory-event-time-missing'
   | 'death-office-inventory-before-death'
   | 'death-office-inventory-appointment-duplicate-id'
+  | 'death-office-inventory-entry-duplicate-id'
   | 'death-office-inventory-appointment-reference-missing'
   | 'death-office-inventory-appointment-reference-duplicate'
   | 'death-office-inventory-appointment-person-mismatch'
@@ -197,6 +198,9 @@ export function validateDeathOfficeInventory(
   }
   if (!unique(authorizations.map(item => item.id))) {
     issues.push('death-office-inventory-authorization-duplicate-id')
+  }
+  if (!unique([...inventory.appointments.map(item => item.id), ...inventory.authorizations.map(item => item.id)])) {
+    issues.push('death-office-inventory-entry-duplicate-id')
   }
   if (!unique(inventory.appointments.map(item => item.id))
     || !unique(inventory.appointments.map(item => item.appointment))) {
