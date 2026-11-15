@@ -34,7 +34,7 @@ const deceasedShareGrantId = brandedId<'RightGrantId'>('estate-deceased-share-gr
 const successorGrantId = brandedId<'RightGrantId'>('estate-successor-grant')
 const transferId = brandedId<'AssetInheritanceId'>('estate-transfer-record')
 const deathAt = { day: 5, period: '午' } as const
-const inventoryAt = { day: 6, period: '晨' } as const
+const inventoryAt = { day: 7, period: '晨' } as const
 const transferAt = { day: 6, period: '午' } as const
 
 function person(id: PersonId, lifeState: 'alive' | 'dead'): Person {
@@ -167,11 +167,15 @@ check('transfer cannot be referenced twice',
   validateEstateAssetInventory({ ...inventory, entries: [transferredEntry, { ...transferredEntry, id: brandedId<'EstateAssetInventoryEntryId'>('duplicate-transfer-entry') }, excludedEntry, disputedEntry] }, assets, refs)
     .includes('estate-inventory-duplicate-asset-entry'))
 check('inventory event cannot predate death',
-  validateEstateAssetInventory({ ...inventory, inventoryEvent: deathEvent }, assets, refs)
+  validateEstateAssetInventory({ ...inventory, inventoryEvent: acquisitionEvent }, assets, refs)
     .includes('estate-inventory-before-death'))
 check('death event must match death record',
   validateEstateAssetInventory({ ...inventory, deathEvent: brandedId<'EventId'>('wrong-death') }, assets, refs)
     .includes('estate-inventory-death-event-mismatch'))
+check('resolution after inventory snapshot is rejected',
+  validateEstateAssetInventory(inventory, assets, {
+    ...refs, eventTimes: new Map(refs.eventTimes).set(inventoryEvent, { day: 6, period: '晨' }),
+  }).includes('estate-inventory-resolution-after-inventory'))
 check('orphan asset transfer must be linked into inventory',
   validateEstateAssetInventory({ ...inventory, entries: [excludedEntry, disputedEntry] }, assets, refs)
     .includes('estate-inventory-orphan-transfer'))
@@ -179,10 +183,12 @@ check('inventory validation does not mutate assets or death settlement status',
   asset.owner.kind === 'value' && asset.owner.value === successorId
   && deceased.death.kind === 'value'
   && deceased.death.value.estateSettlements.find(item => item.domain === 'asset')?.status === 'pending')
-check('empty complete inventory is ready when no assets are in the supplied universe',
-  isEstateAssetInventoryReadyForSettlement({
-    ...inventory, entries: [],
-  }, []))
+check('empty complete inventory is ready when no assets are in the supplied universe', (() => {
+  const emptyInventory = { ...inventory, entries: [] }
+  const emptyRefs = { ...refs, transfers: [] }
+  const issues = validateEstateAssetInventory(emptyInventory, [], emptyRefs)
+  return isEstateAssetInventoryReadyForSettlement(emptyInventory, issues)
+})())
 check('invalid runtime inventory status is rejected',
   validateEstateAssetInventory({ ...inventory, status: 'finished' as EstateAssetInventory['status'] }, assets, refs)
     .includes('estate-inventory-invalid-status'))

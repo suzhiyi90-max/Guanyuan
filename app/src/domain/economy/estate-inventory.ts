@@ -56,6 +56,7 @@ export type EstateAssetInventoryIssue =
   | 'estate-inventory-resolution-event-missing'
   | 'estate-inventory-resolution-time-invalid'
   | 'estate-inventory-resolution-before-death'
+  | 'estate-inventory-resolution-after-inventory'
   | 'estate-inventory-exclusion-not-supported'
   | 'estate-inventory-transfer-not-supported'
   | 'estate-inventory-complete-coverage-missing'
@@ -166,8 +167,16 @@ function classifyOwnership(
     revocations: refs.revocations,
   }
   const owner = deriveAssetOwner(asset.rights.ownership, at, economyRefs)
-  if (owner.kind !== 'value') return 'undetermined'
-  return owner.value === deceased ? 'deceased' : 'other'
+  if (owner.kind === 'value') return owner.value === deceased ? 'deceased' : 'other'
+  const activeHolders = new Set(asset.rights.ownership
+    .filter(grant => isAssetRightGrantEffectiveAt(grant, at, economyRefs))
+    .map(grant => grant.holder))
+  if (activeHolders.size === 1) {
+    const holder = [...activeHolders][0]
+    if (holder !== deceased && (refs.persons.some(person => person.id === holder)
+      || refs.organizations.includes(holder as import('../shared/ids').OrgId))) return 'other'
+  }
+  return 'undetermined'
 }
 
 /**
@@ -265,6 +274,10 @@ export function validateEstateAssetInventory(
       if (!recordedTransferIsValid(asset, transfer, inventory.deceased, inventory.deathEvent, death.at, refs)) {
         issues.push('estate-inventory-transfer-invalid')
       }
+      const transferAt = refs.eventTimes.get(transfer.transferEvent)
+      if (inventoryAt && transferAt && compareTime(transferAt, inventoryAt) > 0) {
+        issues.push('estate-inventory-resolution-after-inventory')
+      }
     } else {
       if (entry.transfer !== null) issues.push('estate-inventory-transfer-reference-invalid')
       if (entry.disposition === 'excluded' && ownership !== 'other') {
@@ -279,6 +292,8 @@ export function validateEstateAssetInventory(
             issues.push('estate-inventory-resolution-time-invalid')
           } else if (compareTime(resolutionAt, death.at) < 0) {
             issues.push('estate-inventory-resolution-before-death')
+          } else if (inventoryAt && compareTime(resolutionAt, inventoryAt) > 0) {
+            issues.push('estate-inventory-resolution-after-inventory')
           }
         }
       }
