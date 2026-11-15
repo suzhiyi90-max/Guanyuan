@@ -1025,7 +1025,8 @@ try {
   await nav('今日')
   await settle(350)
   await click('.scene-switcher button:has-text("东堤")')
-  await settle(80)
+  await page.locator('.scene-river').waitFor({ state: 'visible', timeout: 3000 })
+  await page.locator('.scene-county').waitFor({ state: 'detached', timeout: 3000 })
   check('减少动效下场景即时切换', await page.locator('.scene-river').isVisible() && (await page.locator('.scene-county').count()) === 0)
   await click('.nav-intel')
   await settle(100)
@@ -1082,8 +1083,11 @@ try {
   // 11 FE-020：当前会话不通过编辑 legacy v1 快照伪造世界时刻；减少动效只影响呈现。
   const reducedMorning = await lightState()
   check('减少动效下晨光层保持单层且与世界时刻同源', reducedMorning.period === '晨' && reducedMorning.light === '晨' && reducedMorning.count === 1)
+  // 上一段已切入人情绢册；先返回今日工作面，再查验场景切换。
+  await nav('今日')
+  await settle(120)
   await click('.scene-switcher button:has-text("东堤")')
-  await settle(80)
+  await page.locator('.scene-river').waitFor({ state: 'visible', timeout: 3000 })
   const reducedWaterStage = await page.locator('.river-projection').getAttribute('data-water-stage')
   check('减少动效不提前生成暴雨或洪峰事实', Boolean(reducedWaterStage) && reducedWaterStage !== '暴雨涨水' && reducedWaterStage !== '洪峰过境' && (await page.locator('.river-rain').count()) === 0)
   await nav('案卷')
