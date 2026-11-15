@@ -102,9 +102,13 @@ check('no succession is not silently treated as complete', validateDebtDeathInve
   inventory([entry('pending-position', baseDebt, 'creditor', 'pending')]), [baseDebt], [], refs).length === 0
   && !isDebtDeathInventoryReadyForSettlement(
     inventory([entry('pending-position-2', baseDebt, 'creditor', 'pending')]), []))
-check('partial succession remains pending, not settled', validateDebtDeathInventory(
-  inventory([entry('partial-position', baseDebt, 'creditor', 'pending', [successions[0].id])]),
-  [baseDebt], [{ ...successions[0], shareNumerator: 1, shareDenominator: 2 }], refs).length > 0)
+const partialSuccession = { ...successions[0], shareNumerator: 1, shareDenominator: 2 }
+const partialEntry = entry('partial-position', baseDebt, 'creditor', 'pending', [partialSuccession.id])
+const partialInventory = inventory([partialEntry])
+check('partial succession remains explicitly pending, not settled', validateDebtDeathInventory(
+  partialInventory, [baseDebt], [partialSuccession], refs).length === 0
+  && !isDebtDeathInventoryReadyForSettlement(partialInventory,
+    validateDebtDeathInventory(partialInventory, [baseDebt], [partialSuccession], refs)))
 check('a complete inventory must cover creditor and debtor roles separately', validateDebtDeathInventory(
   inventory([fullCreditorEntry]), [baseDebt, secondDebt], successions, refs)
   .includes('debt-death-inventory-complete-coverage-missing'))
