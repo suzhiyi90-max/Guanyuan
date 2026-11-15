@@ -81,8 +81,8 @@ const deceasedShareGrant: RightGrant = {
 }
 const asset: Asset = {
   id: assetId, kind: '宅院', quantity: 1,
-  rights: { ownership: [sourceGrant], control: [], handling: [], disposal: [] },
-  owner: field.value(deceasedId), custody: field.value(deceasedId), valuation: field.value(500),
+  rights: { ownership: [sourceGrant, { ...sourceGrant, id: successorGrantId, holder: successorId, grantedBy: transferEvent }], control: [], handling: [], disposal: [] },
+  owner: field.value(successorId), custody: field.value(deceasedId), valuation: field.value(500),
 }
 const otherAsset: Asset = {
   id: otherAssetId, kind: '铺面', quantity: 1,
@@ -111,7 +111,7 @@ const refs: AssetInheritanceReferences & { readonly transfers: readonly AssetInh
     [exclusionEvent, inventoryAt],
     [disputeEvent, inventoryAt],
   ]),
-  revocations: [],
+  revocations: [{ grant: sourceGrantId, revokedBy: transferEvent }],
   transfers: [transfer],
 }
 const transferredEntry: EstateAssetInventoryEntry = {
@@ -176,7 +176,7 @@ check('orphan asset transfer must be linked into inventory',
   validateEstateAssetInventory({ ...inventory, entries: [excludedEntry, disputedEntry] }, assets, refs)
     .includes('estate-inventory-orphan-transfer'))
 check('inventory validation does not mutate assets or death settlement status',
-  asset.owner.kind === 'value' && asset.owner.value === deceasedId
+  asset.owner.kind === 'value' && asset.owner.value === successorId
   && deceased.death.kind === 'value'
   && deceased.death.value.estateSettlements.find(item => item.domain === 'asset')?.status === 'pending')
 check('empty complete inventory is ready when no assets are in the supplied universe',

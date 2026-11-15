@@ -2,7 +2,6 @@ import type { WorldTime } from '../shared/world-time'
 import type { AssetInheritanceId, AssetId, EventId, EstateAssetInventoryEntryId, EstateAssetInventoryId, PersonId, RightGrantId } from '../shared/ids'
 import type { Asset, RightGrant } from './model'
 import type { AssetInheritanceReferences, AssetInheritanceTransfer } from './inheritance'
-import { applyAssetInheritance } from './inheritance'
 import { deriveAssetOwner, isAssetRightGrantEffectiveAt } from './validation'
 
 export type EstateAssetOwnershipAtDeath = 'deceased' | 'other' | 'undetermined'
@@ -89,6 +88,50 @@ function compareTime(left: WorldTime, right: WorldTime): number {
 
 function unique(values: readonly string[]): boolean {
   return new Set(values).size === values.length
+}
+
+
+function sameExpiry(left: RightGrant['expires'], right: RightGrant['expires']): boolean {
+  if (left.kind !== right.kind) return false
+  if (left.kind !== 'value') return true
+  return right.kind === 'value' && sameTime(left.value, right.value)
+}
+
+function personAliveAt(person: EstateAssetInventoryReferences['persons'][number], at: WorldTime): boolean {
+  if (!Number.isSafeInteger(at.day) || !orderIsValid(at.period)) return false
+  if (person.birth.kind === 'value'
+    && (!Number.isSafeInteger(person.birth.value.day) || !orderIsValid(person.birth.value.period)
+      || compareTime(at, person.birth.value) < 0)) return false
+  if (person.lifeState === 'alive') return person.death.kind === 'n/a'
+  return person.death.kind === 'value' && compareTime(at, person.death.value.at) < 0
+}
+
+function recordedTransferIsValid(
+  asset: Asset,
+  transfer: AssetInheritanceTransfer,
+  deceased: PersonId,
+  deathAt: WorldTime,
+  refs: EstateAssetInventoryReferences,
+): boolean {
+  const source = asset.rights.ownership.filter(grant => grant.id === transfer.sourceGrant)
+  const successorGrants = asset.rights.ownership.filter(grant => grant.id === transfer.successorGrant)
+  const revocations = refs.revocations.filter(item => item.grant === transfer.sourceGrant)
+  const successor = refs.persons.filter(person => person.id === transfer.successor)
+  const transferAt = refs.eventTimes.get(transfer.transferEvent)
+  if (transfer.deceased !== deceased || transfer.deathEvent !== refs.persons.find(person => person.id === deceased)?.death.value?.causeEvent
+    || transfer.asset !== asset.id || transfer.successor === deceased) return false
+  if (source.length !== 1 || successorGrants.length !== 1 || revocations.length !== 1 || successor.length !== 1) return false
+  const sourceGrant = source[0]
+  const successorGrant = successorGrants[0]
+  if (sourceGrant.holder !== deceased || sourceGrant.transferable !== true || sourceGrant.revocable !== true) return false
+  if (successorGrant.holder !== transfer.successor || successorGrant.grantedBy !== transfer.transferEvent
+    || successorGrant.scope !== sourceGrant.scope || successorGrant.revocable !== sourceGrant.revocable
+    || successorGrant.transferable !== sourceGrant.transferable || !sameExpiry(successorGrant.expires, sourceGrant.expires)) return false
+  if (revocations[0].revokedBy !== transfer.transferEvent) return false
+  if (!refs.events.includes(transfer.transferEvent) || !transferAt
+    || !Number.isSafeInteger(transferAt.day) || !orderIsValid(transferAt.period)
+    || compareTime(transferAt, deathAt) < 0) return false
+  return personAliveAt(successor[0], transferAt)
 }
 
 function effectiveDeceasedGrants(
@@ -218,8 +261,9 @@ export function validateEstateAssetInventory(
         issues.push('estate-inventory-transfer-not-matching')
       }
       if (ownership !== 'deceased') issues.push('estate-inventory-transfer-not-supported')
-      const result = applyAssetInheritance(asset, transfer, refs)
-      if (result.issues.length > 0) issues.push('estate-inventory-transfer-invalid')
+      if (!recordedTransferIsValid(asset, transfer, inventory.deceased, death.at, refs)) {
+        issues.push('estate-inventory-transfer-invalid')
+      }
     } else {
       if (entry.transfer !== null) issues.push('estate-inventory-transfer-reference-invalid')
       if (entry.disposition === 'excluded' && ownership !== 'other') {
