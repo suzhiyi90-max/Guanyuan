@@ -4,12 +4,14 @@ import type { DeathOfficeInventory } from '../identity/death-inventory'
 import type { MembershipDeathInventory } from '../relations/death-inventory'
 import type { RelationDeathInventory } from '../relations/relation-death-inventory'
 import type { GoalDeathInventory } from '../planning/death-inventory'
+import type { EstateAssetInventory } from './estate-inventory'
 import {
   projectDebtDeathInventoryEvidence,
   projectDeathOfficeInventoryEvidence,
   projectMembershipDeathInventoryEvidence,
   projectRelationDeathInventoryEvidence,
   projectGoalDeathInventoryEvidence,
+  projectEstateAssetDeathInventoryEvidence,
   validateDeathSettlementDomainEvidence,
 } from './death-settlement-evidence'
 import type { EventId } from '../shared/ids'
@@ -179,6 +181,35 @@ check('relation and goal inventory states are carried without promotion',
   projectRelationDeathInventoryEvidence(evidenceId, { ...relationInventory, status: 'challenged' }).status === 'challenged'
   && projectGoalDeathInventoryEvidence(evidenceId, { ...goalInventory, status: 'open' }).status === 'open')
 
+
+
+const estateAssetId = brandedId<'AssetId'>('estate-asset')
+const estateInventoryId = brandedId<'EstateAssetInventoryId'>('estate-inventory')
+const estateEntryId = brandedId<'EstateAssetInventoryEntryId'>('estate-entry')
+const estateInventory: EstateAssetInventory = {
+  id: estateInventoryId, deceased, deathEvent, inventoryEvent: reviewEvent, status: 'complete',
+  entries: [{
+    id: estateEntryId, asset: estateAssetId, ownershipAtDeath: 'deceased',
+    sourceOwnershipGrants: [], disposition: 'pending', resolutionEvent: null, transfer: null,
+  }],
+}
+const estateEvidence = projectEstateAssetDeathInventoryEvidence(evidenceId, estateInventory)
+const estateCanonical = {
+  id: estateInventoryId, deceased, deathEvent, inventoryEvent: reviewEvent, status: 'complete' as const,
+  entries: [{ id: estateEntryId, itemRef: `asset:${estateAssetId}` }],
+}
+check('asset projection preserves canonical asset identity and entry', estateEvidence.assets[0] === estateAssetId
+  && estateEvidence.entries[0].id === estateEntryId)
+check('asset evidence aligns with canonical typed estate inventory', validateDeathSettlementDomainEvidence(
+  estateEvidence, estateCanonical, refs, deathAt,
+).length === 0)
+check('asset evidence rejects wrong canonical asset reference', validateDeathSettlementDomainEvidence(
+  estateEvidence, { ...estateCanonical, entries: [{ id: estateEntryId, itemRef: 'asset:other' }] }, refs, deathAt,
+).includes('death-settlement-evidence-domain-reference-mismatch'))
+check('asset inventory status is carried without promotion',
+  projectEstateAssetDeathInventoryEvidence(evidenceId, { ...estateInventory, status: 'challenged' }).status === 'challenged')
+check('asset disposition remains solely in canonical estate inventory',
+  estateInventory.entries[0].disposition === 'pending' && !('dispositions' in estateEvidence))
 
 if (failed) throw new Error('Death evidence envelope tests failed: ' + failed + '/' + (passed + failed))
 console.log('Death evidence envelope contracts: ' + passed + '/' + (passed + failed) + ' passed')
