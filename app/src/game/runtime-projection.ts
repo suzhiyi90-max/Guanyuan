@@ -134,7 +134,7 @@ export function reducePreviewRuntimeEvent(
       if (choice === 'delegate') {
         return {
           ...state,
-          completedActions: [...state.completedActions, actionKey],
+          handledEvents: [...state.handledEvents, actionKey],
           privateFunds: state.privateFunds - 6,
           giftEntries: [...state.giftEntries, '桑宅接风宴 · 县丞代往，备礼六两'],
           asked: [...new Set([...state.asked, 'xiancheng'])],
@@ -144,7 +144,7 @@ export function reducePreviewRuntimeEvent(
       if (choice === 'audit') {
         return {
           ...state,
-          completedActions: [...state.completedActions, actionKey],
+          handledEvents: [...state.handledEvents, actionKey],
           unlocked: [...new Set([...state.unlocked, 'E-002'])],
           giftEntries: [...state.giftEntries, '桑宅接风宴 · 未赴，闭门查旧册'],
           log: { done: '闭门查旧册，取得主簿三百两借领状', stuck: '借领用途已见，粮商旧欠与现场抢护仍待核', rumor: '桑宅面上无光；主簿连夜打听谁动过旧册' },
