@@ -34,6 +34,16 @@ export type SavePackageIssue =
   | 'save-package-checksum-unavailable'
   | 'save-package-event-replay-rejected'
   | 'save-package-snapshot-state-mismatch'
+  | 'save-package-base-missing'
+  | 'save-package-base-invalid'
+  | 'save-package-base-world-mismatch'
+  | 'save-package-base-schema-mismatch'
+  | 'save-package-base-head-mismatch'
+  | 'save-package-incremental-range-invalid'
+  | 'save-package-incremental-event-count-mismatch'
+  | 'save-package-incremental-replay-rejected'
+  | 'save-package-incremental-snapshot-state-mismatch'
+  | 'save-package-chain-too-deep'
 
 export type SavePackageResult =
   | { readonly status: 'valid'; readonly package: FullSavePackage }
@@ -74,7 +84,7 @@ function canonicalJson(value: unknown, ancestors = new Set<object>()): string {
   }
 }
 
-function cloneFreezeJson(value: unknown, ancestors = new Set<object>()): JsonValue {
+export function cloneFreezeSavePackageJson(value: unknown, ancestors = new Set<object>()): JsonValue {
   if (value === null || typeof value === 'string' || typeof value === 'boolean') return value
   if (typeof value === 'number') {
     if (!Number.isFinite(value)) throw new Error('save-package-envelope-invalid')
@@ -83,12 +93,12 @@ function cloneFreezeJson(value: unknown, ancestors = new Set<object>()): JsonVal
   if (typeof value !== 'object' || ancestors.has(value)) throw new Error('save-package-envelope-invalid')
   ancestors.add(value)
   try {
-    if (Array.isArray(value)) return Object.freeze(value.map(item => cloneFreezeJson(item, ancestors)))
+    if (Array.isArray(value)) return Object.freeze(value.map(item => cloneFreezeSavePackageJson(item, ancestors)))
     const prototype = Object.getPrototypeOf(value)
     if (prototype !== Object.prototype && prototype !== null) throw new Error('save-package-envelope-invalid')
     const record = value as Record<string, unknown>
     const result: Record<string, JsonValue> = {}
-    for (const key of Object.keys(record).sort()) result[key] = cloneFreezeJson(record[key], ancestors)
+    for (const key of Object.keys(record).sort()) result[key] = cloneFreezeSavePackageJson(record[key], ancestors)
     return Object.freeze(result)
   } finally {
     ancestors.delete(value)
@@ -127,13 +137,21 @@ function checksumPayload(input: Omit<FullSavePackage, 'checksum'>): Omit<FullSav
   }
 }
 
-async function checksumOf(input: Omit<FullSavePackage, 'checksum'>): Promise<string | null> {
+export function canonicalSavePackageJson(value: unknown): string {
+  return canonicalJson(value)
+}
+
+export async function calculateSavePackageChecksum(payload: unknown): Promise<string | null> {
   const cryptoApi = globalThis.crypto
   if (!cryptoApi?.subtle) return null
-  const bytes = new TextEncoder().encode(canonicalJson(checksumPayload(input)))
+  const bytes = new TextEncoder().encode(canonicalJson(payload))
   const digest = await cryptoApi.subtle.digest('SHA-256', bytes)
   const hex = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('')
   return `sha256:${hex}`
+}
+
+async function checksumOf(input: Omit<FullSavePackage, 'checksum'>): Promise<string | null> {
+  return calculateSavePackageChecksum(checksumPayload(input))
 }
 
 const topLevelKeys = ['packageKind', 'worldId', 'schemaVersion', 'streamRange', 'events', 'snapshot', 'checksum']
@@ -232,7 +250,7 @@ export async function validateFullSavePackage<Kind extends string>(
         ? { kind: 'genesis' as const, seq: 0 as const }
         : { kind: 'event' as const, seq: to.seq, eventId: to.eventId }),
     }),
-    events: Object.freeze(value.events.map(event => cloneFreezeJson(event) as unknown as LedgerEvent)),
+    events: Object.freeze(value.events.map(event => cloneFreezeSavePackageJson(event) as unknown as LedgerEvent)),
     snapshot: snapshotResult.snapshot,
     checksum: value.checksum,
   })
