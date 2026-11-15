@@ -17,7 +17,7 @@
 - `checksum`：固定算法 `sha-256/canonical-json-v1` 的 `sha256:{64位小写hex}`。
 - full 包不得携带 `basePackage`；不接受未登记的顶层字段。
 
-Checksum 覆盖 packageKind、worldId、schemaVersion、streamRange、events 与 snapshot，不包含 checksum 自身。对象键按 Unicode code point 顺序排序（JavaScript 默认字符串排序），数组保持原顺序；只接受严格 JSON 值，拒绝循环、稀疏数组、非有限数字、undefined、函数与非普通对象。
+Checksum 覆盖 packageKind、worldId、schemaVersion、streamRange、events 与 snapshot，不包含 checksum 自身。对象键按 JavaScript 字符串默认升序（UTF-16 code unit）排序，数组保持原顺序；只接受严格 JSON 值，拒绝循环、稀疏数组、非有限数字、undefined、函数与非普通对象。
 
 ## 3. Full 包完整性门禁
 
