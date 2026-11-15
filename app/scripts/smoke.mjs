@@ -4,6 +4,7 @@ import { mkdirSync } from 'node:fs'
 const BASE = process.env.GUANYUAN_URL ?? 'http://127.0.0.1:5199'
 const OUT = process.env.SMOKE_OUT ?? `${process.env.TEMP}/guanyuan-smoke`
 const smokeFixtureUrl = name => { const url = new URL(BASE); url.searchParams.set('smoke', name); return url.toString() }
+const legacyDraft = JSON.stringify({ schema: 'guanyuan.save.v1', state: { day: 7, periodIndex: 2, goalId: 'integrity', clues: [] } })
 mkdirSync(OUT, { recursive: true })
 
 const results = []
@@ -47,9 +48,11 @@ const lightState = () => page.evaluate(() => {
 
 try {
   await page.goto(BASE, { waitUntil: 'domcontentloaded' })
-  await page.evaluate(() => localStorage.clear())
+  await page.evaluate(raw => { localStorage.clear(); localStorage.setItem('guanyuan.save.v1', raw) }, legacyDraft)
   await page.reload({ waitUntil: 'domcontentloaded' })
   await settle(600)
+  check('旧版 v1 底稿不自动恢复', (await page.locator('.prologue').count()) > 0 && (await page.locator('.date-block span').innerText()).includes('一'))
+  check('旧版 v1 底稿保留且未被覆盖', await page.evaluate(expected => localStorage.getItem('guanyuan.save.v1') === expected, legacyDraft))
 
   // 1 立志
   await click('.goal-card')
@@ -541,7 +544,7 @@ try {
   check('跨日后日程转为已过并更新倒计时', (await page.locator('.calendar-row.passed').count()) === 1 && (await page.locator('.flood-calendar > header').innerText()).includes('距洪峰 7 日'))
 
   // 7 当前会话投影：W5-D 正式存档仓库接入前，不从 legacy v1 快照恢复。
-  check('当前运行时不写入旧 v1 存档 key', await page.evaluate(() => localStorage.getItem('guanyuan.save.v1') === null))
+  check('当前运行时不覆盖旧 v1 底稿', await page.evaluate(expected => localStorage.getItem('guanyuan.save.v1') === expected, legacyDraft))
   check('第二日事件继续由当前内存 Ledger 投影保持', (await page.locator('.date-block span').innerText()).includes('二') && (await page.locator('.world-card').count()) === 1)
 
   // 7.2 第二日世界事件 料到岸复秤
