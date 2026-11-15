@@ -163,7 +163,7 @@ async function validateAtDepth<Kind extends string>(
     fromExclusive: from,
     toInclusive: to,
     anchorEvent: anchorEvent as LedgerEvent<Kind> | undefined,
-    priorReceipts: priorReceipts as readonly LedgerEvent<Kind>[],
+    priorReceipts: priorReceipts as unknown as readonly LedgerEvent<Kind>[],
     events: value.events as readonly LedgerEvent<Kind>[],
     registry: verification.registry,
     initialState: basePackage.snapshot.materialized,
