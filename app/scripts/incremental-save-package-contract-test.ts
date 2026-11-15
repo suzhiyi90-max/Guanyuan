@@ -83,13 +83,14 @@ const baseSnapshot = createWorldSnapshot({
   schemaVersion: 1, worldId, streamHead: head2, checkpointAt: t2, materialized: baseReplay.state,
 })
 if (baseSnapshot.status !== 'valid') throw new Error('incremental-test-base-snapshot-failed')
+const baseSnapshotValue = baseSnapshotValue
 const verification = { registry, initialState: [] as JsonValue, reduce }
 
 async function main(): Promise<void> {
   const fullInput: FullSavePackageInput = {
     packageKind: 'full', worldId, schemaVersion: 1,
     streamRange: { fromExclusive: genesis, toInclusive: head2 },
-    events: [firstEvent, secondEvent], snapshot: baseSnapshot.snapshot,
+    events: [firstEvent, secondEvent], snapshot: baseSnapshotValue,
   }
   const base = await createFullSavePackage(fullInput, verification)
   if (base.status !== 'valid') throw new Error('incremental-test-full-base-package-failed')
@@ -97,7 +98,7 @@ async function main(): Promise<void> {
   const incrementalReplay = replayEventRange({
     worldId, fromExclusive: head2, toInclusive: head3,
     anchorEvent: secondEvent, events: [thirdEvent], registry,
-    initialState: baseSnapshot.snapshot.materialized, reduce,
+    initialState: baseSnapshotValue.materialized, reduce,
   })
   if (incrementalReplay.status !== 'replayed') throw new Error('incremental-test-range-replay-failed')
   const nextSnapshot = createWorldSnapshot({
@@ -120,6 +121,7 @@ async function main(): Promise<void> {
   check('incremental package and nested base chain are immutable', created.status === 'valid'
     && Object.isFrozen(created.package) && Object.isFrozen(created.package.events)
     && Object.isFrozen(created.package.events[0].payload)
+    && created.package.packageKind === 'incremental'
     && Object.isFrozen(created.package.basePackage)
     && Object.isFrozen(created.package.basePackage.snapshot.materialized))
   check('incremental chain validates recursively', created.status === 'valid'
@@ -127,6 +129,7 @@ async function main(): Promise<void> {
 
   if (created.status !== 'valid') throw new Error('incremental-test-cannot-continue-without-valid-package')
   const valid = created.package
+  if (valid.packageKind !== 'incremental') throw new Error('incremental-test-package-kind-invalid')
   const head4: StreamCursor = { kind: 'event', seq: 4, eventId: fourthEvent.id }
   const secondReplay = replayEventRange({
     worldId, fromExclusive: head3, toInclusive: head4,
@@ -198,7 +201,7 @@ async function main(): Promise<void> {
     ...incrementalInput,
     streamRange: { fromExclusive: head2, toInclusive: head2 },
     events: [],
-    snapshot: baseSnapshot.snapshot,
+    snapshot: baseSnapshotValue,
   }, verification)
   check('empty incremental checkpoint preserves the base snapshot and cursor', emptyIncremental.status === 'valid'
     && emptyIncremental.package.streamRange.fromExclusive.seq === emptyIncremental.package.streamRange.toInclusive.seq)
