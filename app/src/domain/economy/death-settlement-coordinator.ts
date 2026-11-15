@@ -61,6 +61,7 @@ export type DeathSettlementCoordinationIssue =
   | 'death-settlement-scope-death-time-invalid'
   | 'death-settlement-scope-death-time-mismatch'
   | 'death-settlement-scope-domain-duplicate'
+  | 'death-settlement-scope-domain-unknown'
   | 'death-settlement-assessment-domain-duplicate'
   | 'death-settlement-assessment-domain-undeclared'
   | 'death-settlement-assessment-deceased-mismatch'
@@ -100,7 +101,13 @@ export function coordinateDeathSettlement(
   if (!scope.deathEvent.trim() || !refs.events.includes(scope.deathEvent)) {
     issues.push('death-settlement-scope-death-event-missing')
   }
+  const knownDomains: readonly EstateSettlementDomain[] = [
+    'office', 'debt', 'asset', 'membership', 'relation', 'goal',
+  ]
   if (scope.domains.length === 0) issues.push('death-settlement-scope-empty')
+  if (scope.domains.some(domain => !knownDomains.includes(domain))) {
+    issues.push('death-settlement-scope-domain-unknown')
+  }
   if (new Set(scope.domains).size !== scope.domains.length) {
     issues.push('death-settlement-scope-domain-duplicate')
   }
