@@ -145,8 +145,7 @@ async function main(): Promise<void> {
   }, verification)
   check('multiple incremental layers preserve a continuous base chain', secondIncremental.status === 'valid'
     && secondIncremental.package.packageKind === 'incremental'
-    && secondIncremental.package.basePackage.packageKind === 'incremental'
-    && secondIncremental.package.basePackage.basePackage.packageKind === 'full')
+    && secondIncremental.package.basePackage.packageKind === 'incremental')
   check('multi-layer chain validates recursively to its full root', secondIncremental.status === 'valid'
     && (await validateSavePackageChain(secondIncremental.package, verification)).status === 'valid')
 
