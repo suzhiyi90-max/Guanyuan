@@ -35,7 +35,7 @@ async function run(): Promise<void> {
   check('replayed AI fact applies the existing local effect and marks the generated event handled',
     first.status === 'appended' && first.session.state.log.done === '堤边有人提及旧闸。'
       && first.session.state.handledEvents.includes(generated.id))
-  if (first.status !== 'appended') throw new Error('candidate-append-fixture-failed')
+  if (first.status !== 'appended') throw new Error(`candidate-append-fixture-failed:${first.reason}`)
   session = first.session
 
   const retry = await dispatchPreviewRuntimeCandidate(session, generated, 'jia')
