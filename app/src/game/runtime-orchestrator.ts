@@ -9,11 +9,11 @@ import {
 } from '../domain/ai-candidate'
 import type { GeneratedEvent } from '../narrative/types'
 import { effectById } from '../narrative/effects'
-import { officialAvailableOf } from './engine'
 import { validateEventPayload, type EventRegistry } from '../domain/event-registry'
+import { evidenceIds } from '../narrative/lexicon'
 import { brandedId } from '../domain/shared/ids'
 import type { WorldTime } from '../domain/shared/world-time'
-import { periods } from './engine'
+import { officialAvailableOf, periods } from './engine'
 import type { RiverPlan } from '../types'
 import { createInitialGameState } from './initial-state'
 import type { GameState } from './model'
@@ -165,19 +165,25 @@ export async function dispatchPreviewRuntimeCandidate(
   if (session.state.pendingEvent && session.state.pendingEvent !== generated.id) {
     return { status: 'rejected', session: unchanged(), reason: 'world-event-pending' }
   }
-  if (session.state.handledEvents.includes(generated.id)) {
-    return { status: 'rejected', session: unchanged(), reason: 'already-handled' }
-  }
   const option = generated.options.find(item => item.id === optionId)
   if (!option) return { status: 'rejected', session: unchanged(), reason: 'unknown-option' }
+  const candidateId = `${generated.id}:${option.id}`
+  const existing = session.candidateLog.candidates.find(item => item.candidateId === candidateId)
+  if (session.state.handledEvents.includes(generated.id) && existing?.status !== 'validated') {
+    return { status: 'rejected', session: unchanged(), reason: 'already-handled' }
+  }
+  if (!['jia', 'yi'].includes(option.id) || typeof option.result !== 'string'
+    || option.result.trim().length === 0 || option.result.length > 140
+    || !Array.isArray(option.refs) || option.refs.length > 4
+    || option.refs.some(ref => !evidenceIds.includes(ref))) {
+    return { status: 'rejected', session: unchanged(), reason: 'candidate-payload-invalid' }
+  }
   const effect = effectById(option.effect)
   if (!effect) return { status: 'rejected', session: unchanged(), reason: 'unknown-effect' }
   if (!effect.available(session.state, officialAvailableOf(session.state))) {
     return { status: 'rejected', session: unchanged(), reason: 'effect-unavailable' }
   }
 
-  const candidateId = `${generated.id}:${option.id}`
-  const existing = session.candidateLog.candidates.find(item => item.candidateId === candidateId)
   let log = session.candidateLog
   if (!existing) {
     const submitted = submitAiCandidate(log, {
