@@ -1,4 +1,5 @@
 import type { WorldTime } from '../shared/world-time'
+import { isValidWorldTime } from '../shared/world-time'
 import type { AssetInheritanceId, AssetId, EventId, EstateAssetInventoryEntryId, EstateAssetInventoryId, PersonId, RightGrantId } from '../shared/ids'
 import type { Asset, RightGrant } from './model'
 import type { AssetInheritanceReferences, AssetInheritanceTransfer } from './inheritance'
@@ -38,6 +39,7 @@ export type EstateAssetInventoryIssue =
   | 'estate-inventory-death-event-mismatch'
   | 'estate-inventory-death-event-missing'
   | 'estate-inventory-death-time-mismatch'
+  | 'estate-inventory-death-time-invalid'
   | 'estate-inventory-event-missing'
   | 'estate-inventory-event-time-missing'
   | 'estate-inventory-before-death'
@@ -72,9 +74,7 @@ function sameTime(left: WorldTime, right: WorldTime): boolean {
     const order = ['晨', '午', '暮', '夜']
     return order.indexOf(a.period) - order.indexOf(b.period)
   }
-  return Number.isSafeInteger(left.day) && Number.isSafeInteger(right.day)
-    && orderIsValid(left.period) && orderIsValid(right.period)
-    && compare(left, right) === 0
+  return isValidWorldTime(left) && isValidWorldTime(right) && compare(left, right) === 0
 }
 
 function orderIsValid(period: string): boolean {
@@ -99,12 +99,12 @@ function sameExpiry(left: RightGrant['expires'], right: RightGrant['expires']): 
 }
 
 function personAliveAt(person: EstateAssetInventoryReferences['persons'][number], at: WorldTime): boolean {
-  if (!Number.isSafeInteger(at.day) || !orderIsValid(at.period)) return false
+  if (!isValidWorldTime(at)) return false
   if (person.birth.kind === 'value'
-    && (!Number.isSafeInteger(person.birth.value.day) || !orderIsValid(person.birth.value.period)
-      || compareTime(at, person.birth.value) < 0)) return false
+    && (!isValidWorldTime(person.birth.value) || compareTime(at, person.birth.value) < 0)) return false
   if (person.lifeState === 'alive') return person.death.kind === 'n/a'
-  return person.death.kind === 'value' && compareTime(at, person.death.value.at) < 0
+  return person.death.kind === 'value' && isValidWorldTime(person.death.value.at)
+    && compareTime(at, person.death.value.at) < 0
 }
 
 function recordedTransferIsValid(
@@ -120,6 +120,7 @@ function recordedTransferIsValid(
   const revocations = refs.revocations.filter(item => item.grant === transfer.sourceGrant)
   const successor = refs.persons.filter(person => person.id === transfer.successor)
   const transferAt = refs.eventTimes.get(transfer.transferEvent)
+  if (!isValidWorldTime(deathAt)) return false
   if (transfer.deceased !== deceased || transfer.deathEvent !== deathEvent
     || transfer.asset !== asset.id || transfer.successor === deceased) return false
   if (source.length !== 1 || successorGrants.length !== 1 || revocations.length !== 1 || successor.length !== 1) return false
@@ -204,6 +205,7 @@ export function validateEstateAssetInventory(
 
   const death = deceased.death.value
   if (death.causeEvent !== inventory.deathEvent) issues.push('estate-inventory-death-event-mismatch')
+  if (!isValidWorldTime(death.at)) issues.push('estate-inventory-death-time-invalid')
   if (!refs.events.includes(inventory.deathEvent)) issues.push('estate-inventory-death-event-missing')
   const deathEventAt = refs.eventTimes.get(inventory.deathEvent)
   if (!deathEventAt || !sameTime(deathEventAt, death.at)) {
@@ -214,7 +216,7 @@ export function validateEstateAssetInventory(
     issues.push('estate-inventory-event-missing')
   }
   const inventoryAt = refs.eventTimes.get(inventory.inventoryEvent)
-  if (!inventoryAt || !orderIsValid(inventoryAt.period) || !Number.isSafeInteger(inventoryAt.day)) {
+  if (!inventoryAt || !isValidWorldTime(inventoryAt)) {
     issues.push('estate-inventory-event-time-missing')
   } else if (compareTime(inventoryAt, death.at) < 0) {
     issues.push('estate-inventory-before-death')
@@ -288,7 +290,7 @@ export function validateEstateAssetInventory(
           issues.push('estate-inventory-resolution-event-missing')
         } else {
           const resolutionAt = refs.eventTimes.get(entry.resolutionEvent)
-          if (!resolutionAt || !orderIsValid(resolutionAt.period) || !Number.isSafeInteger(resolutionAt.day)) {
+          if (!resolutionAt || !isValidWorldTime(resolutionAt)) {
             issues.push('estate-inventory-resolution-time-invalid')
           } else if (compareTime(resolutionAt, death.at) < 0) {
             issues.push('estate-inventory-resolution-before-death')

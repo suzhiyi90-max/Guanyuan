@@ -1,6 +1,6 @@
 # W2-J 产业遗产清点与权利承接契约 v0.1
 
-状态：W2-J 施工契约；基线为 W2-I \`work/w2-i-debt-death-continuity\`。
+状态：W2-J 施工契约；基线为 W2-I `work/w2-i-debt-death-continuity`。
 
 ## 1. 目标与边界
 
