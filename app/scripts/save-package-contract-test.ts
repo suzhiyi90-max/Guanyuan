@@ -129,7 +129,6 @@ async function main(): Promise<void> {
   check('unknown package envelope fields are rejected', withUnknownField.status === 'rejected'
     && withUnknownField.issue === 'save-package-envelope-invalid')
 
-  let emptyLedger = createEventLedger<Kind>(worldId)
   const emptySnapshot = createWorldSnapshot({
     schemaVersion: 1, worldId, streamHead: genesis, checkpointAt: t1, materialized: [],
   })
