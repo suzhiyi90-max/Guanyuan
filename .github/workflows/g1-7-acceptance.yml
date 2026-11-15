@@ -8,6 +8,7 @@ on:
       - work/w2-m-goal-death-continuity
       - work/w2-n-goal-status-history
       - work/w2-o-death-settlement-readiness-audit
+      - work/w2-p-debt-death-inventory
   pull_request:
     branches:
       - feat/g1-engine
@@ -31,6 +32,7 @@ on:
       - work/w2-m-goal-death-continuity
       - work/w2-n-goal-status-history
       - work/w2-o-death-settlement-readiness-audit
+      - work/w2-p-debt-death-inventory
   workflow_dispatch:
 
 permissions:
@@ -73,6 +75,8 @@ jobs:
         run: npm run test:domain:planning-economy
       - name: Debt party death continuity contracts
         run: npm run test:domain:debt-death
+      - name: Debt death inventory completeness contracts
+        run: npm run test:domain:debt-death-inventory
       - name: Estate asset inventory contracts
         run: npm run test:domain:estate-inventory
       - name: Membership death continuity contracts
