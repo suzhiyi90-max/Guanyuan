@@ -37,14 +37,14 @@ const first = appendLedgerEvent(ledger, {
 }, t1)
 if (first.status !== 'appended') throw new Error('save-test-first-event-failed')
 ledger = first.ledger
-const firstEvent = firstEvent
+const firstEvent = first.event
 const second = appendLedgerEvent(ledger, {
   source: 'rule', kind: 'person.created', intentKind: 'create-person',
   actor: 'system', requestWorldTime: t2, clientRequestId: 's2', payload: { name: '乙' },
 }, t2)
 if (second.status !== 'appended') throw new Error('save-test-second-event-failed')
 ledger = second.ledger
-const secondEvent = secondEvent
+const secondEvent = second.event
 
 const head: StreamCursor = { kind: 'event', seq: 2, eventId: secondEvent.id }
 const reduce = (state: import('../src/domain/event-ledger').JsonValue, event: LedgerEvent<Kind>) => [
