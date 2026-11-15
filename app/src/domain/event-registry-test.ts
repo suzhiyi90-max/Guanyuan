@@ -89,8 +89,8 @@ const invalidDefinition = registerEventSchema(registry, {
 })
 check('frozen registry rejects even malformed definitions as frozen', invalidDefinition.status === 'registry-frozen')
 
-const malformedIdentity = { registryId: 7, registryVersion: '1', frozen: true, schemas: [] }
-  as unknown as EventRegistry<Kind>
+const malformedIdentity = ({ registryId: 7, registryVersion: '1', frozen: true, schemas: [] }
+  as unknown) as EventRegistry<Kind>
 check('malformed registry identity returns a typed invalid-registry result',
   validateEventPayload(malformedIdentity, 'person.created', {}).status === 'invalid-registry')
 check('malformed registry cannot be frozen',
