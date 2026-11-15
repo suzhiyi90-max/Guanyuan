@@ -29,6 +29,7 @@ on:
       - work/w5-a-runtime-connection-audit
       - work/w5-b-runtime-event-catalog-projection
       - work/w5-c-runtime-command-orchestration
+      - work/w5-c2-ai-candidate-runtime-integration
   pull_request:
     branches:
       - feat/g1-engine
@@ -72,6 +73,7 @@ on:
       - work/w4-c-incremental-save-chain
       - work/w5-a-runtime-connection-audit
       - work/w5-b-runtime-event-catalog-projection
+      - work/w5-c-runtime-command-orchestration
   workflow_dispatch:
 
 permissions:
