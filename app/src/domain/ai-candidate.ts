@@ -163,7 +163,7 @@ export async function validateAiCandidate(
   } catch {
     return { status: 'digest-unavailable', log }
   }
-  const append = appendCandidateValidationReceipt(ledger, {
+  const append = await appendCandidateValidationReceipt(ledger, registry, {
     candidateId,
     targetKind: candidate.targetKind,
     candidatePayload: candidate.payload,
