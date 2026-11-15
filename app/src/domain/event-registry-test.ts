@@ -107,5 +107,24 @@ const malformedSchema = {
 check('malformed schema entry is rejected without throwing',
   validateEventPayload(malformedSchema, 'person.created', {}).status === 'invalid-registry')
 
+
+const mutableSchemaEntry = {
+  kind: 'person.created' as Kind,
+  schemaVersion: 1,
+  registryId: 'mutable-runtime',
+  registryVersion: '1',
+  validate: personCreated,
+}
+const mutableRuntimeRegistry = {
+  registryId: 'mutable-runtime',
+  registryVersion: '1',
+  frozen: true,
+  schemas: [mutableSchemaEntry],
+} as unknown as EventRegistry<Kind>
+check('mutable runtime registry cannot claim frozen validation authority',
+  validateEventPayload(mutableRuntimeRegistry, 'person.created', {}).status === 'invalid-registry')
+check('mutable runtime registry cannot be frozen into an authority',
+  freezeEventRegistry(mutableRuntimeRegistry).status === 'invalid-registry')
+
 if (failed > 0) throw new Error(`Event registry contracts failed: ${failed}/${passed + failed}`)
 console.log(`Event registry contracts: ${passed}/${passed + failed} passed`)
