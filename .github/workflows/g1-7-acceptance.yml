@@ -10,6 +10,7 @@ on:
       - work/w2-o-death-settlement-readiness-audit
       - work/w2-p-debt-death-inventory
       - work/w2-q-office-death-inventory
+      - work/w2-r-membership-death-inventory
   pull_request:
     branches:
       - feat/g1-engine
@@ -35,6 +36,7 @@ on:
       - work/w2-o-death-settlement-readiness-audit
       - work/w2-p-debt-death-inventory
       - work/w2-q-office-death-inventory
+      - work/w2-r-membership-death-inventory
   workflow_dispatch:
 
 permissions:
@@ -107,6 +109,8 @@ jobs:
         run: npm run test:domain:death-office
       - name: Death office inventory completeness contracts
         run: npm run test:domain:death-office-inventory
+      - name: Membership death inventory completeness contracts
+        run: npm run test:domain:membership-death-inventory
       - name: Review index integrity
         run: npm run check:docs
       - name: Patch whitespace integrity
