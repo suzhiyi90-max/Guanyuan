@@ -47,6 +47,7 @@ async function main(): Promise<void> {
   const digestB = await candidatePayloadDigest('person.created', '3.1.0', { rank: 7, name: '甲' })
   check('canonical-json-v1 digest ignores object key insertion order', digestA === digestB)
   check('digest uses declared algorithm prefix', digestA.startsWith('sha256:'))
+  check('canonical-json-v1 matches the fixed UTF-8 SHA-256 vector', digestA === 'sha256:698b6c00d91d7a34f904ce677f3fb795f3e29ef4c3ab585de88fc6ebe1780210')
 
   let log = createCandidateLog()
   let submitted = submitAiCandidate(log, {
