@@ -67,6 +67,7 @@ export type DebtDeathInventoryIssue =
   | 'debt-death-inventory-succession-share-incomplete'
   | 'debt-death-inventory-succession-share-overallocated'
   | 'debt-death-inventory-settlement-reference-missing'
+  | 'debt-death-inventory-settlement-reference-duplicate'
   | 'debt-death-inventory-settlement-time-missing'
   | 'debt-death-inventory-settlement-after-inventory'
   | 'debt-death-inventory-settlement-disposition-mismatch'
@@ -84,21 +85,21 @@ function unique(values: readonly string[]): boolean {
   return new Set(values).size === values.length
 }
 
-function exactShareIsOne(successions: readonly DebtPartySuccession[]): boolean {
+function classifyShare(successions: readonly DebtPartySuccession[]): 'complete' | 'partial' | 'overallocated' | 'invalid' {
   let numerator = 0n
   let denominator = 1n
   for (const succession of successions) {
     if (!Number.isSafeInteger(succession.shareNumerator)
       || !Number.isSafeInteger(succession.shareDenominator)
-      || succession.shareNumerator <= 0 || succession.shareDenominator <= 0) return false
+      || succession.shareNumerator <= 0 || succession.shareDenominator <= 0) return 'invalid'
     const nextNumerator = numerator * BigInt(succession.shareDenominator)
       + BigInt(succession.shareNumerator) * denominator
     const nextDenominator = denominator * BigInt(succession.shareDenominator)
     numerator = nextNumerator
     denominator = nextDenominator
-    if (numerator > denominator) return false
+    if (numerator > denominator) return 'overallocated'
   }
-  return numerator === denominator
+  return numerator === denominator ? 'complete' : 'partial'
 }
 
 function matchingParty(debt: Debt, deceased: PersonId, role: DebtDeathRole): boolean {
@@ -217,13 +218,11 @@ export function validateDebtDeathInventory(
 
     const partySuccessions = expectedSuccessions
     if (entry.disposition === 'succession-recorded') {
-      if (debt.status === 'settled') issues.push('debt-death-inventory-pending-status-mismatch')
-      if (!exactShareIsOne(partySuccessions)) {
-        const allocated = partySuccessions.reduce((sum, item) =>
-          sum + item.shareNumerator / item.shareDenominator, 0)
-        issues.push(allocated > 1 ? 'debt-death-inventory-succession-share-overallocated'
-          : 'debt-death-inventory-succession-share-incomplete')
-      }
+      if (debt.status !== 'open') issues.push('debt-death-inventory-pending-status-mismatch')
+      const shareState = classifyShare(partySuccessions)
+      if (shareState === 'overallocated') issues.push('debt-death-inventory-succession-share-overallocated')
+      else if (shareState === 'partial') issues.push('debt-death-inventory-succession-share-incomplete')
+      else if (shareState === 'invalid') issues.push('debt-death-inventory-succession-invalid')
     } else if (entry.disposition === 'pending') {
       if (debt.status === 'settled' || debt.status === 'disputed') {
         issues.push('debt-death-inventory-pending-status-mismatch')
@@ -237,6 +236,7 @@ export function validateDebtDeathInventory(
       if (debt.settlements.length === 0) {
         issues.push('debt-death-inventory-settlement-reference-missing')
       }
+      if (!unique(debt.settlements)) issues.push('debt-death-inventory-settlement-reference-duplicate')
       let sawAfterDeath = false
       for (const eventId of debt.settlements) {
         if (!refs.events.includes(eventId)) {
