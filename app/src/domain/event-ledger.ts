@@ -2,7 +2,7 @@ import { brandedId, type EventId, type BrandedId } from './shared/ids'
 import { isValidWorldTime, type WorldTime } from './shared/world-time'
 
 export type WorldId = BrandedId<'WorldId'>
-export type LedgerSource = 'player-command' | 'rule' | 'schedule'
+export type LedgerSource = 'player-command' | 'rule' | 'schedule' | 'ai-candidate'
 
 export type JsonPrimitive = string | number | boolean | null
 export type JsonValue = JsonPrimitive | readonly JsonValue[] | { readonly [key: string]: JsonValue }
@@ -15,6 +15,8 @@ export interface LedgerEventInput<Kind extends string = string> {
   readonly requestWorldTime: WorldTime
   readonly clientRequestId: string
   readonly payload: JsonValue
+  readonly candidateRef?: string
+  readonly validationRef?: EventId
 }
 
 export interface LedgerEvent<Kind extends string = string> extends LedgerEventInput<Kind> {
@@ -49,6 +51,8 @@ export type LedgerIssue =
   | 'ledger-commit-time-before-request'
   | 'ledger-payload-not-json'
   | 'ledger-state-corrupt'
+  | 'ledger-ai-candidate-receipt-invalid'
+  | 'ledger-ai-candidate-metadata-invalid'
 
 export type AppendLedgerResult<Kind extends string = string> =
   | { readonly status: 'appended'; readonly ledger: EventLedger<Kind>; readonly event: LedgerEvent<Kind> }
@@ -128,7 +132,9 @@ function validateInput<Kind extends string>(
 ): LedgerIssue[] {
   const issues: LedgerIssue[] = []
   if (!ledger.worldId.trim()) issues.push('ledger-world-id-empty')
-  if (!['player-command', 'rule', 'schedule'].includes(input.source)) issues.push('ledger-event-source-invalid')
+  if (!['player-command', 'rule', 'schedule', 'ai-candidate'].includes(input.source)) issues.push('ledger-event-source-invalid')
+  if (input.source === 'ai-candidate' && (!input.candidateRef?.trim() || !input.validationRef?.trim())) issues.push('ledger-ai-candidate-metadata-invalid')
+  if (input.source !== 'ai-candidate' && (input.candidateRef !== undefined || input.validationRef !== undefined)) issues.push('ledger-ai-candidate-metadata-invalid')
   if (!input.kind.trim()) issues.push('ledger-event-kind-empty')
   if (!input.intentKind.trim()) issues.push('ledger-intent-kind-empty')
   if (!input.actor.trim()) issues.push('ledger-actor-empty')
@@ -169,16 +175,37 @@ function isLedgerConsistent<Kind extends string>(ledger: EventLedger<Kind>): boo
  * business EventRegistry and does not accept ai-candidate input; W3-B/W3-D
  * add frozen domain schemas and the validated-candidate submission path.
  */
-export function appendLedgerEvent<Kind extends string>(
+function appendLedgerEventCore<Kind extends string>(
   ledger: EventLedger<Kind>,
   input: LedgerEventInput<Kind>,
   committedAt: WorldTime,
+  allowValidationReceipt = false,
 ): AppendLedgerResult<Kind> {
   if (!isLedgerConsistent(ledger)) {
     return { status: 'rejected', ledger, issues: ['ledger-state-corrupt'] }
   }
   const issues = validateInput(ledger, input, committedAt)
   if (issues.length > 0) return { status: 'rejected', ledger, issues: [...new Set(issues)] }
+
+  if (input.kind === 'candidate.validated' && !allowValidationReceipt) {
+    return { status: 'rejected', ledger, issues: ['ledger-ai-candidate-receipt-invalid'] }
+  }
+  if (input.source === 'ai-candidate') {
+    const validationIndex = ledger.events.findIndex(event => event.id === input.validationRef)
+    const receipt = validationIndex >= 0 ? ledger.events[validationIndex] : undefined
+    const receiptPayload = receipt?.payload
+    if (!receipt || receipt.kind !== 'candidate.validated' || receipt.source !== 'rule'
+      || validationIndex >= ledger.events.length
+      || receiptPayload === null || typeof receiptPayload !== 'object' || Array.isArray(receiptPayload)
+      || receiptPayload.candidate !== input.candidateRef
+      || receiptPayload.targetKind !== input.kind
+      || receiptPayload.registryVersion === undefined
+      || receiptPayload.payloadDigest === undefined
+      || receiptPayload.digestAlgorithm !== 'sha-256/canonical-json-v1'
+      || JSON.stringify(receiptPayload.candidatePayload) !== JSON.stringify(input.payload)) {
+      return { status: 'rejected', ledger, issues: ['ledger-ai-candidate-receipt-invalid'] }
+    }
+  }
 
   const key = idempotencyKey(ledger.worldId, input)
   // Request time is part of the request's content, not its identity.
@@ -220,6 +247,52 @@ export function appendLedgerEvent<Kind extends string>(
     ]),
   })
   return { status: 'appended', ledger: next, event }
+}
+
+/** Generic append rejects reserved candidate.validated control events. */
+export function appendLedgerEvent<Kind extends string>(
+  ledger: EventLedger<Kind>,
+  input: LedgerEventInput<Kind>,
+  committedAt: WorldTime,
+): AppendLedgerResult<Kind> {
+  return appendLedgerEventCore(ledger, input, committedAt)
+}
+
+/**
+ * Trusted orchestration entry: emits the reserved validation receipt only after
+ * candidate-pipeline schema validation and digest verification have succeeded.
+ * AI candidate input must never receive this capability.
+ */
+export function appendCandidateValidationReceipt(
+  ledger: EventLedger,
+  candidate: {
+    readonly candidateId: string
+    readonly targetKind: string
+    readonly candidatePayload: JsonValue
+    readonly payloadDigest: string
+    readonly registryVersion: string
+    readonly validatedBy: string
+  },
+  requestWorldTime: WorldTime,
+  committedAt: WorldTime,
+): AppendLedgerResult {
+  return appendLedgerEventCore(ledger, {
+    source: 'rule',
+    kind: 'candidate.validated',
+    intentKind: 'candidate-validation',
+    actor: candidate.validatedBy,
+    requestWorldTime,
+    clientRequestId: `candidate-validation:${candidate.candidateId}`,
+    payload: {
+      candidate: candidate.candidateId,
+      targetKind: candidate.targetKind,
+      candidatePayload: candidate.candidatePayload,
+      payloadDigest: candidate.payloadDigest,
+      digestAlgorithm: 'sha-256/canonical-json-v1',
+      registryVersion: candidate.registryVersion,
+      validatedBy: candidate.validatedBy,
+    },
+  }, committedAt, true)
 }
 
 export function readLedgerEvents<Kind extends string>(
