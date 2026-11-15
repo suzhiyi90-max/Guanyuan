@@ -93,5 +93,23 @@ check('new WorldId starts an independent empty fact stream', resetWorld.worldId 
 check('candidate.validated remains outside the business preview registry',
   !session.registry.schemas.some(schema => schema.kind === 'candidate.validated'))
 
+let banquetSession = createPreviewRuntimeSession('w5-c1-banquet-world')
+for (const [intent, id] of [
+  [{ kind: 'person.asked', payload: { personId: 'xiancheng' } }, 'banquet-ask-1'],
+  [{ kind: 'person.asked', payload: { personId: 'zhubu' } }, 'banquet-ask-2'],
+  [{ kind: 'records.audited', payload: {} }, 'banquet-audit'],
+  [{ kind: 'banquet.choice', payload: { choice: 'audit' } }, 'banquet-first'],
+] as const) {
+  const result = dispatchPreviewRuntimeIntent(banquetSession, intent as never, id)
+  if (result.status === 'rejected') throw new Error(`banquet-fixture-failed:${result.reason}`)
+  banquetSession = result.session
+}
+const duplicateBanquet = dispatchPreviewRuntimeIntent(banquetSession, {
+  kind: 'banquet.choice', payload: { choice: 'delegate' },
+}, 'banquet-second-choice')
+check('a second banquet choice on the same world day is rejected atomically', duplicateBanquet.status === 'rejected'
+  && duplicateBanquet.session.ledger.head === banquetSession.ledger.head
+  && duplicateBanquet.session.state.giftEntries.length === 1)
+
 if (failed > 0) throw new Error(`runtime-orchestrator: ${failed} failed, ${passed} passed`)
 console.log(`runtime-orchestrator: ${passed}/${passed} passed`)
