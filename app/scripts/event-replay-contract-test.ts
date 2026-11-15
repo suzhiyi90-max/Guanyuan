@@ -44,7 +44,8 @@ ledger = second.ledger
 const genesis: StreamCursor = { kind: 'genesis', seq: 0 }
 const c1: StreamCursor = { kind: 'event', seq: 1, eventId: first.event.id }
 const c2: StreamCursor = { kind: 'event', seq: 2, eventId: second.event.id }
-const addNames = (state: import('./event-ledger').JsonValue, event: LedgerEvent<Kind>) => {
+const addNames = (state: import('../src/domain/event-ledger').JsonValue, event: LedgerEvent<Kind>) => {
+  if (event.kind === 'candidate.validated') return state
   const names = state as readonly string[]
   const payload = event.payload as { readonly name: string }
   return [...names, payload.name]
