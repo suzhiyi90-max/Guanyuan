@@ -4,7 +4,7 @@
  * FE-160 追加 verdictOf：只读既有事实的胜负投影，不引入任何新数值或新判定阈值。
  */
 import { people } from '../data'
-import type { GameState } from './useGame'
+import type { GameState } from './model'
 import type { OfficialActionId, Period } from '../types'
 import { evaluateRiverTask, materialAfterArrival, worldEvents, type TaskOutcome } from './schedule'
 
