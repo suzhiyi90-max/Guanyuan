@@ -188,11 +188,13 @@ export function replayEventRange<Kind extends string>(
       || !isSystemReceipt(receipt) || receipts.has(receipt.id)) {
       return { status: 'rejected', issue: 'replay-ai-candidate-receipt-invalid', seq: receipt?.seq, eventId: receipt?.id }
     }
-    const issue = validateEvent(receipt, input.worldId, receipt.seq, input.registry, receipts)
-    if (issue) return { status: 'rejected', issue, seq: receipt.seq, eventId: receipt.id }
-    try { receipts.set(receipt.id, cloneFreezeEvent(receipt)) } catch {
+    let immutableReceipt: LedgerEvent<Kind>
+    try { immutableReceipt = cloneFreezeEvent(receipt) } catch {
       return { status: 'rejected', issue: 'replay-ai-candidate-receipt-invalid', seq: receipt.seq, eventId: receipt.id }
     }
+    const issue = validateEvent(immutableReceipt, input.worldId, receipt.seq, input.registry, receipts)
+    if (issue) return { status: 'rejected', issue, seq: receipt.seq, eventId: receipt.id }
+    receipts.set(immutableReceipt.id, immutableReceipt)
   }
 
   if (from.kind === 'event') {
@@ -201,13 +203,13 @@ export function replayEventRange<Kind extends string>(
       || anchor.id !== brandedId<'EventId'>('evt:' + input.worldId + ':' + from.seq)) {
       return { status: 'rejected', issue: 'replay-anchor-mismatch', seq: from.seq, eventId: from.eventId }
     }
-    const issue = validateEvent(anchor, input.worldId, from.seq, input.registry, receipts)
-    if (issue) return { status: 'rejected', issue, seq: from.seq, eventId: from.eventId }
-    if (anchor.kind === 'candidate.validated') {
-      try { receipts.set(anchor.id, cloneFreezeEvent(anchor)) } catch {
-        return { status: 'rejected', issue: 'replay-system-receipt-invalid', seq: from.seq, eventId: from.eventId }
-      }
+    let immutableAnchor: LedgerEvent<Kind>
+    try { immutableAnchor = cloneFreezeEvent(anchor) } catch {
+      return { status: 'rejected', issue: 'replay-anchor-mismatch', seq: from.seq, eventId: from.eventId }
     }
+    const issue = validateEvent(immutableAnchor, input.worldId, from.seq, input.registry, receipts)
+    if (issue) return { status: 'rejected', issue, seq: from.seq, eventId: from.eventId }
+    if (immutableAnchor.kind === 'candidate.validated') receipts.set(immutableAnchor.id, immutableAnchor)
   } else if (input.anchorEvent !== undefined || (input.priorReceipts?.length ?? 0) > 0) {
     return { status: 'rejected', issue: 'replay-anchor-mismatch' }
   }
@@ -223,15 +225,14 @@ export function replayEventRange<Kind extends string>(
     const event = input.events[index]
     const seq = from.seq + index + 1
     if (!Number.isSafeInteger(seq)) return { status: 'rejected', issue: 'replay-range-invalid' }
-    const issue = validateEvent(event, input.worldId, seq, input.registry, receipts)
-    if (issue) return { status: 'rejected', issue, seq, eventId: event.id }
-    try {
-      const immutableEvent = cloneFreezeEvent(event)
-      checked.push(immutableEvent)
-      if (immutableEvent.kind === 'candidate.validated') receipts.set(immutableEvent.id, immutableEvent)
-    } catch {
+    let immutableEvent: LedgerEvent<Kind>
+    try { immutableEvent = cloneFreezeEvent(event) } catch {
       return { status: 'rejected', issue: 'replay-schema-invalid', seq, eventId: event.id }
     }
+    const issue = validateEvent(immutableEvent, input.worldId, seq, input.registry, receipts)
+    if (issue) return { status: 'rejected', issue, seq, eventId: event.id }
+    checked.push(immutableEvent)
+    if (immutableEvent.kind === 'candidate.validated') receipts.set(immutableEvent.id, immutableEvent)
   }
   if (to.kind === 'genesis') {
     if (checked.length !== 0 || from.kind !== 'genesis') return { status: 'rejected', issue: 'replay-cursor-invalid' }
