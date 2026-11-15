@@ -19,6 +19,7 @@ export type ReplayIssue =
   | 'replay-event-id-mismatch'
   | 'replay-event-metadata-invalid'
   | 'replay-system-receipt-invalid'
+  | 'replay-ai-candidate-receipt-invalid'
   | 'replay-schema-invalid'
   | 'replay-initial-state-invalid'
   | 'replay-reducer-failed'
@@ -44,6 +45,8 @@ export interface ReplayRangeInput<Kind extends string = string> {
   readonly toInclusive: StreamCursor
   /** Required when fromExclusive is an event cursor; validates its seq/eventId anchor. */
   readonly anchorEvent?: LedgerEvent<Kind>
+  /** Earlier candidate.validated receipts needed by an incremental range. */
+  readonly priorReceipts?: readonly LedgerEvent<Kind>[]
   /** Must contain exactly the events in (fromExclusive, toInclusive]. */
   readonly events: readonly LedgerEvent<Kind>[]
   readonly registry: EventRegistry<Kind>
@@ -121,6 +124,7 @@ function validateEvent<Kind extends string>(
   worldId: WorldId,
   expectedSeq: number,
   registry: EventRegistry<Kind>,
+  receipts: ReadonlyMap<string, LedgerEvent<Kind>>,
 ): ReplayIssue | null {
   if (event.worldId !== worldId) return 'replay-event-world-mismatch'
   if (event.seq !== expectedSeq) return 'replay-event-sequence-mismatch'
@@ -140,7 +144,22 @@ function validateEvent<Kind extends string>(
   }
   if (event.kind === 'candidate.validated') return isSystemReceipt(event) ? null : 'replay-system-receipt-invalid'
   const validation = validateEventPayload(registry, event.kind as Kind, event.payload)
-  return validation.status === 'valid' ? null : 'replay-schema-invalid'
+  if (validation.status !== 'valid') return 'replay-schema-invalid'
+  if (event.source === 'ai-candidate') {
+    const receipt = event.validationRef ? receipts.get(event.validationRef) : undefined
+    const receiptPayload = receipt?.payload
+    if (!receipt || receipt.seq >= event.seq || receipt.kind !== 'candidate.validated'
+      || receipt.source !== 'rule' || receiptPayload === null || typeof receiptPayload !== 'object'
+      || Array.isArray(receiptPayload)) return 'replay-ai-candidate-receipt-invalid'
+    const proof = receiptPayload as { readonly [key: string]: JsonValue }
+    if (proof.candidate !== event.candidateRef || proof.targetKind !== event.kind
+      || proof.registryVersion !== registry.registryVersion
+      || proof.digestAlgorithm !== 'sha-256/canonical-json-v1'
+      || typeof proof.payloadDigest !== 'string' || !/^sha256:[0-9a-f]{64}$/u.test(proof.payloadDigest)) {
+      return 'replay-ai-candidate-receipt-invalid'
+    }
+  }
+  return null
 }
 
 /**
@@ -160,13 +179,29 @@ export function replayEventRange<Kind extends string>(
     || (from.kind === 'event' && to.kind === 'genesis')
     || to.seq < from.seq) return { status: 'rejected', issue: 'replay-range-invalid' }
 
+  const receipts = new Map<string, LedgerEvent<Kind>>()
+  for (const receipt of input.priorReceipts ?? []) {
+    if (from.kind !== 'event' || receipt.worldId !== input.worldId || !Number.isSafeInteger(receipt.seq)
+      || receipt.seq <= 0 || receipt.seq >= from.seq
+      || receipt.id !== brandedId<'EventId'>('evt:' + input.worldId + ':' + receipt.seq)
+      || !isSystemReceipt(receipt) || receipts.has(receipt.id)) {
+      return { status: 'rejected', issue: 'replay-ai-candidate-receipt-invalid', seq: receipt.seq, eventId: receipt.id }
+    }
+    const issue = validateEvent(receipt, input.worldId, receipt.seq, input.registry, receipts)
+    if (issue) return { status: 'rejected', issue, seq: receipt.seq, eventId: receipt.id }
+    receipts.set(receipt.id, cloneFreezeEvent(receipt))
+  }
+
   if (from.kind === 'event') {
     const anchor = input.anchorEvent
     if (!anchor || anchor.worldId !== input.worldId || anchor.seq !== from.seq || anchor.id !== from.eventId
-      || anchor.id !== brandedId<'EventId'>(`evt:${input.worldId}:${from.seq}`)) {
+      || anchor.id !== brandedId<'EventId'>('evt:' + input.worldId + ':' + from.seq)) {
       return { status: 'rejected', issue: 'replay-anchor-mismatch', seq: from.seq, eventId: from.eventId }
     }
-  } else if (input.anchorEvent !== undefined) {
+    const issue = validateEvent(anchor, input.worldId, from.seq, input.registry, receipts)
+    if (issue) return { status: 'rejected', issue, seq: from.seq, eventId: from.eventId }
+    if (anchor.kind === 'candidate.validated') receipts.set(anchor.id, cloneFreezeEvent(anchor))
+  } else if (input.anchorEvent !== undefined || (input.priorReceipts?.length ?? 0) > 0) {
     return { status: 'rejected', issue: 'replay-anchor-mismatch' }
   }
 
@@ -181,9 +216,13 @@ export function replayEventRange<Kind extends string>(
     const event = input.events[index]
     const seq = from.seq + index + 1
     if (!Number.isSafeInteger(seq)) return { status: 'rejected', issue: 'replay-range-invalid' }
-    const issue = validateEvent(event, input.worldId, seq, input.registry)
+    const issue = validateEvent(event, input.worldId, seq, input.registry, receipts)
     if (issue) return { status: 'rejected', issue, seq, eventId: event.id }
-    try { checked.push(cloneFreezeEvent(event)) } catch {
+    try {
+      const immutableEvent = cloneFreezeEvent(event)
+      checked.push(immutableEvent)
+      if (immutableEvent.kind === 'candidate.validated') receipts.set(immutableEvent.id, immutableEvent)
+    } catch {
       return { status: 'rejected', issue: 'replay-schema-invalid', seq, eventId: event.id }
     }
   }
