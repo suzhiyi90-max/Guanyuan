@@ -122,7 +122,7 @@ export function SaveFolio({ summary, onExport, onReset, extra }: { summary: Save
               {armed && <div className="save-folio-countdown" aria-hidden="true"><i /></div>}
               <p className={`save-folio-note ${armed ? 'is-armed' : ''}`} id={`${panelId}-note`}>
                 {armed
-                  ? '落印即清档：志向、进度、疑点一并归零，本机不留副本。'
+                  ? '重立志会创建新世界；旧版底稿保留，不自动恢复。'
                   : '当前世界仅在本次会话内有效；刷新页面不会恢复。导出底稿仅供查阅，不是可恢复存档。'}
               </p>
               {extra}
