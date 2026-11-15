@@ -40,6 +40,7 @@ export type FreezeEventRegistryResult<Kind extends string = string> =
 
 export type EventSchemaValidationResult<Kind extends string = string> =
   | { readonly status: 'valid'; readonly schemaRef: EventSchemaRef<Kind> }
+  | { readonly status: 'invalid-registry' }
   | { readonly status: 'registry-not-frozen' }
   | { readonly status: 'schema-not-found' }
   | { readonly status: 'payload-invalid'; readonly schemaRef: EventSchemaRef<Kind> }
@@ -64,11 +65,16 @@ export function createEventRegistry<Kind extends string = string>(
 }
 
 function isValidRegistry<Kind extends string>(registry: EventRegistry<Kind>): boolean {
-  if (!registry.registryId.trim() || !registry.registryVersion.trim()) return false
-  if (!Array.isArray(registry.schemas)) return false
+  if (registry === null || typeof registry !== 'object') return false
+  if (typeof registry.registryId !== 'string' || !registry.registryId.trim()
+    || typeof registry.registryVersion !== 'string' || !registry.registryVersion.trim()
+    || typeof registry.frozen !== 'boolean'
+    || !Array.isArray(registry.schemas)) return false
   const kinds = new Set<string>()
   for (const schema of registry.schemas) {
-    if (!schema.kind.trim() || !Number.isInteger(schema.schemaVersion) || schema.schemaVersion < 1
+    if (schema === null || typeof schema !== 'object'
+      || typeof schema.kind !== 'string' || !schema.kind.trim()
+      || !Number.isInteger(schema.schemaVersion) || schema.schemaVersion < 1
       || schema.registryId !== registry.registryId
       || schema.registryVersion !== registry.registryVersion
       || typeof schema.validate !== 'function'
@@ -82,8 +88,9 @@ export function registerEventSchema<Kind extends string>(
   registry: EventRegistry<Kind>,
   definition: EventSchemaDefinition<Kind>,
 ): RegisterEventSchemaResult<Kind> {
+  if (!isValidRegistry(registry)) return { status: 'invalid-definition', registry }
   if (registry.frozen) return { status: 'registry-frozen', registry }
-  if (!isValidRegistry(registry)
+  if (definition === null || typeof definition !== 'object'
     || typeof definition.kind !== 'string'
     || !definition.kind.trim()
     || !Number.isInteger(definition.schemaVersion)
@@ -131,7 +138,8 @@ export function validateEventPayload<Kind extends string>(
   kind: Kind,
   payload: JsonValue,
 ): EventSchemaValidationResult<Kind> {
-  if (!registry.frozen || !isValidRegistry(registry)) return { status: 'registry-not-frozen' }
+  if (!isValidRegistry(registry)) return { status: 'invalid-registry' }
+  if (!registry.frozen) return { status: 'registry-not-frozen' }
   const schema = registry.schemas.find(item => item.kind === kind)
   if (!schema) return { status: 'schema-not-found' }
   const schemaRef: EventSchemaRef<Kind> = Object.freeze({
