@@ -49,6 +49,7 @@ function sameIdSet(left: readonly string[], right: readonly string[]): boolean {
 function membershipDisposition(
   membership: Membership,
   deathAt: WorldTime,
+  deathEvent: EventId,
   refs: MembershipDeathReferences,
 ): MembershipDeathMembershipDisposition {
   const startAt = refs.eventTimes.get(membership.validFrom)
@@ -60,19 +61,7 @@ function membershipDisposition(
     || compareWorldTime(endAt, startAt) <= 0
     || compareWorldTime(endAt, deathAt) > 0) return 'pending'
   if (compareWorldTime(endAt, deathAt) < 0) return 'ended-before-death'
-  return membership.validTo === deathEventFor(deathAt, membership, refs)
-    ? 'closed-by-death'
-    : 'pending'
-}
-
-function deathEventFor(
-  deathAt: WorldTime,
-  membership: Membership,
-  refs: MembershipDeathReferences,
-): EventId | undefined {
-  const endAt = membership.validTo === 'open' ? undefined : refs.eventTimes.get(membership.validTo)
-  if (!endAt || compareWorldTime(endAt, deathAt) !== 0) return undefined
-  return membership.validTo
+  return membership.validTo === deathEvent ? 'closed-by-death' : 'pending'
 }
 
 /**
@@ -164,7 +153,7 @@ export function validateMembershipDeathInventory(
       issues.push('membership-death-inventory-membership-person-mismatch')
       continue
     }
-    const expected = membershipDisposition(membership, death.at, refs)
+    const expected = membershipDisposition(membership, death.at, inventory.deathEvent, refs)
     if (entry.disposition !== expected) {
       issues.push('membership-death-inventory-disposition-mismatch')
     }
