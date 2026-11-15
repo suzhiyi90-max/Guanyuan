@@ -215,16 +215,11 @@ export function coordinateDeathSettlement(
     }
 
     const structurallyValid = !invalid && !blocked
-    const coverage: DeathSettlementDomainCoverage = structurallyValid
-      && assessment.canonical !== null
-      && assessment.canonical.entries.length === 0
-      && assessment.evidence.entries.length === 0
-      ? 'empty-reviewed'
-      : assessment.canonical === null
-        ? 'unknown'
-        : assessment.canonical.entries.length > 0
-          ? 'reviewed-with-items'
-          : 'unknown'
+    const coverage: DeathSettlementDomainCoverage = !structurallyValid || assessment.canonical === null
+      ? 'unknown'
+      : assessment.canonical.entries.length === 0 && assessment.evidence.entries.length === 0
+        ? 'empty-reviewed'
+        : 'reviewed-with-items'
 
     reviews.push({
       domain,
@@ -235,7 +230,11 @@ export function coordinateDeathSettlement(
     })
   }
 
-  const hasInvalid = issues.length > 0
+  const incompleteIssueCodes: readonly DeathSettlementCoordinationIssue[] = [
+    'death-settlement-domain-validator-blocked',
+    'death-settlement-inventory-not-complete',
+  ]
+  const hasInvalid = issues.some(issue => !incompleteIssueCodes.includes(issue))
     || reviews.some(review => review.status === 'invalid')
   const hasIncomplete = reviews.some(review =>
     review.status === 'missing' || review.status === 'blocked')
