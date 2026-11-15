@@ -195,13 +195,7 @@ export function coordinateDeathSettlement(
       blocked = true
       domainIssues.push('death-settlement-domain-validator-blocked')
       issues.push('death-settlement-domain-validator-blocked')
-      if (assessment.domainIssues.length === 0) {
-        domainIssues.push('death-settlement-domain-readiness-contradicts-issues')
-        issues.push('death-settlement-domain-readiness-contradicts-issues')
-        invalid = true
-      } else {
-        domainIssues.push(...assessment.domainIssues)
-      }
+      domainIssues.push(...assessment.domainIssues)
     }
     if (assessment.evidence.status !== 'complete') {
       blocked = true
