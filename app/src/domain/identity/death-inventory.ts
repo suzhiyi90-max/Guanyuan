@@ -167,7 +167,10 @@ export function validateDeathOfficeInventory(
 
   const death = deceased.death.value
   if (death.causeEvent !== inventory.deathEvent) issues.push('death-office-inventory-death-event-mismatch')
-  if (!isValidWorldTime(death.at)) issues.push('death-office-inventory-death-time-invalid')
+  if (!isValidWorldTime(death.at)) {
+    issues.push('death-office-inventory-death-time-invalid')
+    return [...new Set(issues)]
+  }
   if (!refs.events.includes(inventory.deathEvent)) issues.push('death-office-inventory-death-event-missing')
   const deathEventAt = refs.eventTimes.get(inventory.deathEvent)
   if (!deathEventAt || !isValidWorldTime(deathEventAt)) {
@@ -195,10 +198,12 @@ export function validateDeathOfficeInventory(
   if (!unique(authorizations.map(item => item.id))) {
     issues.push('death-office-inventory-authorization-duplicate-id')
   }
-  if (!unique(inventory.appointments.map(item => item.id))) {
+  if (!unique(inventory.appointments.map(item => item.id))
+    || !unique(inventory.appointments.map(item => item.appointment))) {
     issues.push('death-office-inventory-appointment-reference-duplicate')
   }
-  if (!unique(inventory.authorizations.map(item => item.id))) {
+  if (!unique(inventory.authorizations.map(item => item.id))
+    || !unique(inventory.authorizations.map(item => item.authorization))) {
     issues.push('death-office-inventory-authorization-reference-duplicate')
   }
 
@@ -206,7 +211,7 @@ export function validateDeathOfficeInventory(
   issues.push(...validateAuthorizationSet(personAuthorizations))
 
   const appointmentById = new Map<string, Appointment[]>()
-  for (const item of personAppointments) {
+  for (const item of appointments) {
     appointmentById.set(item.id, [...(appointmentById.get(item.id) ?? []), item])
   }
   for (const entry of inventory.appointments) {
@@ -225,7 +230,7 @@ export function validateDeathOfficeInventory(
   }
 
   const authorizationById = new Map<string, Authorization[]>()
-  for (const grant of personAuthorizations) {
+  for (const grant of authorizations) {
     authorizationById.set(grant.id, [...(authorizationById.get(grant.id) ?? []), grant])
   }
   for (const entry of inventory.authorizations) {
@@ -245,7 +250,8 @@ export function validateDeathOfficeInventory(
     const grantEventAt = refs.eventTimes.get(grant.grantedBy)
     if (!grantEventAt || !isValidWorldTime(grantEventAt)) {
       issues.push('death-office-inventory-authorization-grant-event-time-missing')
-    } else if (compareWorldTime(grantEventAt, death.at) >= 0
+    } else if (!isValidWorldTime(grant.validFrom)
+      || compareWorldTime(grantEventAt, death.at) >= 0
       || compareWorldTime(grant.validFrom, death.at) >= 0) {
       issues.push('death-office-inventory-authorization-granted-at-or-after-death')
     }
