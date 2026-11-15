@@ -19,6 +19,7 @@ on:
       - work/w2-x-asset-evidence
       - work/w2-y-death-settlement-coordinator
       - work/w3-a-append-only-event-ledger
+      - work/w3-b-frozen-event-schema-registry
   pull_request:
     branches:
       - feat/g1-engine
@@ -53,6 +54,7 @@ on:
       - work/w2-x-asset-evidence
       - work/w2-y-death-settlement-coordinator
       - work/w3-a-append-only-event-ledger
+      - work/w3-b-frozen-event-schema-registry
   workflow_dispatch:
 
 permissions:
@@ -137,6 +139,8 @@ jobs:
         run: npm run test:domain:death-coordinator
       - name: Event ledger core contracts
         run: npm run test:domain:event-ledger
+      - name: Event schema registry contracts
+        run: npm run test:domain:event-registry
       - name: Review index integrity
         run: npm run check:docs
       - name: Patch whitespace integrity
