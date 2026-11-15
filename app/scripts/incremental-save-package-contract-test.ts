@@ -119,6 +119,12 @@ async function main(): Promise<void> {
 
   if (created.status !== 'valid') throw new Error('incremental-test-cannot-continue-without-valid-package')
   const valid = created.package
+  const cyclicChain: Record<string, unknown> = { ...valid, packageKind: 'incremental' }
+  cyclicChain.basePackage = cyclicChain
+  const deepChain = await validateSavePackageChain(cyclicChain, verification)
+  check('cyclic or over-deep package chains are rejected safely', deepChain.status === 'rejected'
+    && deepChain.issue === 'save-package-chain-too-deep')
+
   const tampered = {
     ...valid,
     events: [{ ...valid.events[0], payload: { name: '篡改' } }],
