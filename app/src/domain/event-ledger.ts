@@ -1,5 +1,6 @@
 import { brandedId, type EventId, type BrandedId } from './shared/ids'
 import { isValidWorldTime, type WorldTime } from './shared/world-time'
+import { validateEventPayload, type EventRegistry } from './event-registry'
 
 export type WorldId = BrandedId<'WorldId'>
 export type LedgerSource = 'player-command' | 'rule' | 'schedule' | 'ai-candidate'
@@ -263,8 +264,9 @@ export function appendLedgerEvent<Kind extends string>(
  * candidate-pipeline schema validation and digest verification have succeeded.
  * AI candidate input must never receive this capability.
  */
-export function appendCandidateValidationReceipt(
+export async function appendCandidateValidationReceipt(
   ledger: EventLedger,
+  registry: EventRegistry,
   candidate: {
     readonly candidateId: string
     readonly targetKind: string
@@ -275,7 +277,29 @@ export function appendCandidateValidationReceipt(
   },
   requestWorldTime: WorldTime,
   committedAt: WorldTime,
-): AppendLedgerResult {
+): Promise<AppendLedgerResult> {
+  if (!candidate.candidateId.trim() || !candidate.targetKind.trim()
+    || !candidate.validatedBy.trim() || !/^sha256:[0-9a-f]{64}$/u.test(candidate.payloadDigest)
+    || !registry.frozen || registry.registryVersion !== candidate.registryVersion
+    || validateEventPayload(registry, candidate.targetKind, candidate.candidatePayload).status !== 'valid') {
+    return { status: 'rejected', ledger, issues: ['ledger-ai-candidate-metadata-invalid'] }
+  }
+  try {
+    const canonical = canonicalJson({
+      targetKind: candidate.targetKind,
+      registryVersion: candidate.registryVersion,
+      payload: candidate.candidatePayload,
+    })
+    const subtle = globalThis.crypto?.subtle
+    if (!subtle) return { status: 'rejected', ledger, issues: ['ledger-ai-candidate-metadata-invalid'] }
+    const digest = await subtle.digest('SHA-256', new TextEncoder().encode(canonical))
+    const expected = `sha256:${Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('')}`
+    if (expected !== candidate.payloadDigest) {
+      return { status: 'rejected', ledger, issues: ['ledger-ai-candidate-metadata-invalid'] }
+    }
+  } catch {
+    return { status: 'rejected', ledger, issues: ['ledger-ai-candidate-metadata-invalid'] }
+  }
   return appendLedgerEventCore(ledger, {
     source: 'rule',
     kind: 'candidate.validated',
