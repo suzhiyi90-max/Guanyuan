@@ -1,6 +1,7 @@
 import type { Field } from '../shared/field'
 import { compareWorldTime, isValidWorldTime } from '../shared/world-time'
 import type { Authorization, AuthorizationRequest, AuthorizationScope } from './model'
+import type { Person } from '../person/model'
 
 function isValue<T extends {}>(value: Field<T>): value is { readonly kind: 'value'; readonly value: T } {
   return value.kind === 'value'
@@ -43,11 +44,49 @@ export function isAuthorizationActive(grant: Authorization, at: AuthorizationReq
 }
 
 /** Default-deny authorization. Rank, office title and identity are not implicit grants. */
+/**
+ * A grant is exercisable only by its living principal at the requested world
+ * time. Historical checks before a recorded death remain valid; the death
+ * instant itself is the first instant at which the person cannot act.
+ *
+ * Missing, duplicated or contradictory principal life records fail closed.
+ * Archive state is deliberately irrelevant: archived living people remain
+ * capable of exercising otherwise-valid authority.
+ */
+function isPrincipalAliveAt(
+  person: Person,
+  at: AuthorizationRequest['at'],
+): boolean {
+  if (!isValidWorldTime(at)) return false
+
+  if (person.birth.kind === 'value') {
+    if (!isValidWorldTime(person.birth.value)
+      || compareWorldTime(at, person.birth.value) < 0) return false
+  }
+
+  if (person.lifeState === 'alive') {
+    return person.death.kind === 'n/a'
+  }
+
+  if (person.lifeState === 'dead') {
+    if (person.death.kind !== 'value' || !isValidWorldTime(person.death.value.at)) return false
+    return compareWorldTime(at, person.death.value.at) < 0
+  }
+
+  return false
+}
+
+/** Default-deny authorization, including the principal's life-state gate. */
 export function hasAuthorization(
   grants: readonly Authorization[],
   request: AuthorizationRequest,
+  people: readonly Person[],
 ): boolean {
   if (!isValidWorldTime(request.at) || !request.permission.trim()) return false
+  const principalRecords = people.filter((person) => person.id === request.principal)
+  if (principalRecords.length !== 1 || !isPrincipalAliveAt(principalRecords[0], request.at)) {
+    return false
+  }
   return grants.some((grant) =>
     grant.principal === request.principal
     && grant.permission === request.permission
