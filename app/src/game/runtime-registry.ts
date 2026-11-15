@@ -90,7 +90,7 @@ function generatedEventResolutionPayload(payload: unknown): boolean {
   return typeof payload.generatedEventId === 'string' && payload.generatedEventId.startsWith('ai-')
     && nonEmptyString(payload.optionId) && nonEmptyString(payload.effect)
     && typeof payload.result === 'string' && payload.result.length >= 1 && payload.result.length <= 140
-    && stringList(payload.refs)
+    && Array.isArray(payload.refs) && payload.refs.length <= 4 && payload.refs.every(nonEmptyString)
 }
 
 const definitions: readonly {
