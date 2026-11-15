@@ -11,6 +11,7 @@ import type { DeathOfficeInventory } from '../identity/death-inventory'
 import type { MembershipDeathInventory } from '../relations/death-inventory'
 import type { RelationDeathInventory } from '../relations/relation-death-inventory'
 import type { GoalDeathInventory } from '../planning/death-inventory'
+import type { EstateAssetInventory } from './estate-inventory'
 import { compareWorldTime, isValidWorldTime } from '../shared/world-time'
 import type { WorldTime } from '../shared/world-time'
 
@@ -196,6 +197,25 @@ export function projectGoalDeathInventoryEvidence(
     status: inventory.status,
     entries: inventory.goals.map(entry => ({ id: entry.id })),
     goals: inventory.goals.map(entry => entry.goal),
+  }
+}
+
+
+/** Project the canonical estate asset inventory without copying ownership or disposition decisions. */
+export function projectEstateAssetDeathInventoryEvidence(
+  id: DeathSettlementEvidenceId,
+  inventory: EstateAssetInventory,
+): Extract<DeathSettlementDomainEvidence, { readonly domain: 'asset' }> {
+  return {
+    id,
+    deceased: inventory.deceased,
+    deathEvent: inventory.deathEvent,
+    inventoryEvent: inventory.inventoryEvent,
+    domain: 'asset',
+    inventory: inventory.id,
+    status: inventory.status,
+    entries: inventory.entries.map(entry => ({ id: entry.id })),
+    assets: inventory.entries.map(entry => entry.asset),
   }
 }
 
