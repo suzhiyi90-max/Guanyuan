@@ -50,6 +50,7 @@ check('invalid schema version is rejected', validateWorldSnapshot({ ...validInpu
 check('invalid checkpoint world time is rejected', validateWorldSnapshot({
   ...validInput, checkpointAt: { day: 0, period: '晨' },
 }).status === 'rejected')
+check('missing checkpoint time is rejected without throwing', validateWorldSnapshot({ ...validInput, checkpointAt: undefined }).status === 'rejected')
 
 const cyclic: Record<string, unknown> = {}
 cyclic.self = cyclic
