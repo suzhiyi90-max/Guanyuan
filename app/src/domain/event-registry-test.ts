@@ -53,7 +53,7 @@ const late = registerEventSchema(registry, { kind: 'person.created', schemaVersi
 check('frozen registry rejects late registration', late.status === 'registry-frozen'
   && late.registry === registry && registry.schemas.length === 2)
 
-check('pre-freeze snapshot remains mutable-by-replacement and unchanged', !oldSnapshot.frozen
+check('pre-freeze snapshot remains unchanged after freeze', !oldSnapshot.frozen
   && oldSnapshot.schemas.length === 2)
 
 const valid = validateEventPayload(registry, 'person.created', { displayName: '甲' })
@@ -88,6 +88,25 @@ const invalidDefinition = registerEventSchema(registry, {
   kind: '' as Kind, schemaVersion: 0, validate: personCreated,
 })
 check('frozen registry rejects even malformed definitions as frozen', invalidDefinition.status === 'registry-frozen')
+
+const malformedIdentity = { registryId: 7, registryVersion: '1', frozen: true, schemas: [] }
+  as unknown as EventRegistry<Kind>
+check('malformed registry identity returns a typed invalid-registry result',
+  validateEventPayload(malformedIdentity, 'person.created', {}).status === 'invalid-registry')
+check('malformed registry cannot be frozen',
+  freezeEventRegistry(malformedIdentity).status === 'invalid-registry')
+check('malformed registry cannot accept schema registration',
+  registerEventSchema(malformedIdentity, { kind: 'person.created', schemaVersion: 1, validate: personCreated })
+    .status === 'invalid-definition')
+
+const malformedSchema = {
+  registryId: 'malformed',
+  registryVersion: '1',
+  frozen: true,
+  schemas: [{ kind: null, schemaVersion: 1, registryId: 'malformed', registryVersion: '1', validate: personCreated }],
+} as unknown as EventRegistry<Kind>
+check('malformed schema entry is rejected without throwing',
+  validateEventPayload(malformedSchema, 'person.created', {}).status === 'invalid-registry')
 
 if (failed > 0) throw new Error(`Event registry contracts failed: ${failed}/${passed + failed}`)
 console.log(`Event registry contracts: ${passed}/${passed + failed} passed`)
