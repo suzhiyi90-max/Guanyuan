@@ -22,7 +22,8 @@
 2. 校验每个事件的 worldId、seq、eventId、来源元数据基本结构。
 3. 对普通领域事件使用对应 frozen EventRegistry 验证 payload；Registry 未冻结、kind 未登记、payload 不合法或 validator 抛错，均拒绝。
 4. `candidate.validated` 是账本内置系统控制事件，使用独立固定协议校验，不要求登记到 Q17 业务 Registry；必须 source=rule，payload 字段完整且 digest/算法标签格式有效。
-5. 所有事件预检通过后才开始 reducer；不得静默跳过非法事件。
+5. `source='ai-candidate'` 的事实事件必须引用同一流中更早的 `candidate.validated`，candidate/targetKind/registryVersion/digest 算法与回执一致；完整重放从前序事件建立回执索引，区间重放通过 anchor 或 `priorReceipts` 提供检查点之前的相关回执。
+6. 所有事件预检通过后才开始 reducer；不得静默跳过非法事件。
 
 ## 4. Reducer 与原子失败
 
