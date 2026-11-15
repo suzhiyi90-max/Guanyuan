@@ -78,6 +78,7 @@ export type DeathSettlementCoordinationIssue =
   | 'death-settlement-scope-domain-unknown'
   | 'death-settlement-assessment-domain-duplicate'
   | 'death-settlement-assessment-domain-undeclared'
+  | 'death-settlement-assessment-evidence-domain-mismatch'
   | 'death-settlement-assessment-deceased-mismatch'
   | 'death-settlement-assessment-death-event-mismatch'
   | 'death-settlement-canonical-inventory-missing'
@@ -180,6 +181,11 @@ export function coordinateDeathSettlement(
     let invalid = false
     let blocked = false
 
+    if (assessment.evidence.domain !== assessment.domain) {
+      domainIssues.push('death-settlement-assessment-evidence-domain-mismatch')
+      issues.push('death-settlement-assessment-evidence-domain-mismatch')
+      invalid = true
+    }
     if (assessment.evidence.deceased !== scope.deceased) {
       domainIssues.push('death-settlement-assessment-deceased-mismatch')
       issues.push('death-settlement-assessment-deceased-mismatch')
