@@ -106,8 +106,8 @@ async function validateAtDepth<Kind extends string>(
     || !cursorIsValidForWorld(range.toInclusive, value.worldId)) {
     return { status: 'rejected', issue: 'save-package-incremental-range-invalid' }
   }
-  const from = range.fromExclusive
-  const to = range.toInclusive
+  const from = range.fromExclusive as StreamCursor
+  const to = range.toInclusive as StreamCursor
   if (to.seq < from.seq) return { status: 'rejected', issue: 'save-package-incremental-range-invalid' }
   if (value.events.length !== to.seq - from.seq) {
     return { status: 'rejected', issue: 'save-package-incremental-event-count-mismatch' }
