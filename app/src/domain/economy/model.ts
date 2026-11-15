@@ -113,6 +113,8 @@ export type EconomyIssue =
   | 'debt-succession-duplicate-id'
   | 'debt-succession-debt-missing'
   | 'debt-succession-party-role-mismatch'
+  | 'debt-succession-invalid-role'
+  | 'debt-succession-debt-already-settled'
   | 'debt-succession-deceased-missing'
   | 'debt-succession-deceased-not-dead'
   | 'debt-succession-death-record-missing'

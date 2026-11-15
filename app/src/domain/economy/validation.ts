@@ -235,8 +235,13 @@ export function validateDebtPartySuccessions(
     const debt = matchingDebts.length === 1 ? matchingDebts[0] : undefined
     if (!debt) issues.push('debt-succession-debt-missing')
     else {
-      const originalParty = succession.role === 'creditor' ? debt.creditor : debt.debtor
-      if (originalParty !== succession.deceased) issues.push('debt-succession-party-role-mismatch')
+      if (debt.status === 'settled') issues.push('debt-succession-debt-already-settled')
+      if (succession.role !== 'creditor' && succession.role !== 'debtor') {
+        issues.push('debt-succession-invalid-role')
+      } else {
+        const originalParty = succession.role === 'creditor' ? debt.creditor : debt.debtor
+        if (originalParty !== succession.deceased) issues.push('debt-succession-party-role-mismatch')
+      }
     }
 
     const deceasedRecords = refs.persons.filter(person => person.id === succession.deceased)

@@ -130,6 +130,12 @@ check('total allocated share cannot exceed one',
 check('share must be a positive valid fraction',
   validateDebtPartySuccessions([debt],[succession('bad-share','debtor',debtor,heirA,transferA,0,2)],refs)
     .includes('debt-succession-invalid-share'))
+check('settled debt cannot receive a new succession record',
+  validateDebtPartySuccessions([{...debt,status:'settled',settlements:[settlementEvent]}],[creditorTransfer],refs)
+    .includes('debt-succession-debt-already-settled'))
+check('runtime-invalid role is rejected',
+  validateDebtPartySuccessions([debt],[{...creditorTransfer,role:'guarantor' as never}],refs)
+    .includes('debt-succession-invalid-role'))
 check('missing debt is rejected',
   validateDebtPartySuccessions([], [creditorTransfer], refs).includes('debt-succession-debt-missing'))
 check('source debt is never rewritten by succession validation',
