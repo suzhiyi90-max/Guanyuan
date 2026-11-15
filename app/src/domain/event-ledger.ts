@@ -197,12 +197,12 @@ function appendLedgerEventCore<Kind extends string>(
     if (!receipt || receipt.kind !== 'candidate.validated' || receipt.source !== 'rule'
       || validationIndex >= ledger.events.length
       || receiptPayload === null || typeof receiptPayload !== 'object' || Array.isArray(receiptPayload)
-      || receiptPayload.candidate !== input.candidateRef
-      || receiptPayload.targetKind !== input.kind
-      || receiptPayload.registryVersion === undefined
-      || receiptPayload.payloadDigest === undefined
-      || receiptPayload.digestAlgorithm !== 'sha-256/canonical-json-v1'
-      || JSON.stringify(receiptPayload.candidatePayload) !== JSON.stringify(input.payload)) {
+      || (receiptPayload as { readonly [key: string]: JsonValue }).candidate !== input.candidateRef
+      || (receiptPayload as { readonly [key: string]: JsonValue }).targetKind !== input.kind
+      || (receiptPayload as { readonly [key: string]: JsonValue }).registryVersion === undefined
+      || (receiptPayload as { readonly [key: string]: JsonValue }).payloadDigest === undefined
+      || (receiptPayload as { readonly [key: string]: JsonValue }).digestAlgorithm !== 'sha-256/canonical-json-v1'
+      || JSON.stringify((receiptPayload as { readonly [key: string]: JsonValue }).candidatePayload) !== JSON.stringify(input.payload)) {
       return { status: 'rejected', ledger, issues: ['ledger-ai-candidate-receipt-invalid'] }
     }
   }
