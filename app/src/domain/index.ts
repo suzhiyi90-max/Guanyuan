@@ -11,6 +11,7 @@ export * from './identity/death-handoff'
 
 export * from './relations/model'
 export * from './relations/validation'
+export * from './relations/death-handoff'
 
 export * from './cognition/model'
 export * from './cognition/validation'
