@@ -21,6 +21,9 @@ export interface MembershipDeathReferences {
 export type MembershipDeathIssue =
   | 'membership-death-person-missing'
   | 'membership-death-person-ambiguous'
+  | 'membership-death-event-mismatch'
+  | 'membership-death-successor-source-event-mismatch'
+  | 'membership-death-person-ambiguous'
   | 'membership-death-person-alive'
   | 'membership-death-record-missing'
   | 'membership-death-time-invalid'
@@ -216,8 +219,12 @@ export function validateMembershipDeathHandoffs(
 
     const deceasedMatches = personById.get(handoff.deceased) ?? []
     const deceased = one(deceasedMatches)
-    if (!deceased) {
+    if (deceasedMatches.length === 0) {
       issues.push('membership-death-person-missing')
+      continue
+    }
+    if (!deceased) {
+      issues.push('membership-death-person-ambiguous')
       continue
     }
     if (deceased.lifeState !== 'dead') {
@@ -233,7 +240,7 @@ export function validateMembershipDeathHandoffs(
       issues.push('membership-death-time-invalid')
       continue
     }
-    if (death.causeEvent !== handoff.deathEvent) issues.push('membership-death-event-time-mismatch')
+    if (death.causeEvent !== handoff.deathEvent) issues.push('membership-death-event-mismatch')
     if (!refs.events.includes(handoff.deathEvent)) issues.push('membership-death-event-missing')
     const deathAt = refs.eventTimes.get(handoff.deathEvent)
     if (!deathAt || !isValidWorldTime(deathAt)) {
@@ -276,6 +283,9 @@ export function validateMembershipDeathHandoffs(
     }
     if (target.validFrom !== handoff.handoffEvent) {
       issues.push('membership-death-successor-start-mismatch')
+    }
+    if (target.sourceEvent !== handoff.handoffEvent) {
+      issues.push('membership-death-successor-source-event-mismatch')
     }
 
     const successorMatches = personById.get(target.person) ?? []

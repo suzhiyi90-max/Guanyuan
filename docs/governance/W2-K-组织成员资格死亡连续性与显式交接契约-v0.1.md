@@ -28,7 +28,7 @@ MembershipDeathHandoff 只建立以下可审计引用：
 
 1. 原成员资格属于死者，并以死亡事件结束，且在死亡前已经开始。
 2. 新成员资格必须是独立记录，属于同一组织，但成员人物必须不同。
-3. handoffEvent 必须存在、时点有效且严格晚于死亡时点；新成员资格 validFrom 必须等于 handoffEvent。
+3. handoffEvent 必须存在、时点有效且严格晚于死亡时点；新成员资格 validFrom 与 sourceEvent 都必须等于 handoffEvent。
 4. 新成员在交接时点必须存活；按历史时点判断出生与死亡边界。
 5. 同一原成员资格不得重复交接；同一目标成员资格不得被多个交接记录重复认领。
 6. 新成员的 role 与 obligations 必须由新成员资格自身明确记录；不从死者成员资格自动复制，也不要求相同。

@@ -134,6 +134,15 @@ check('handoff must occur strictly after death',
 check('successor membership start must match handoff event',
   validateMembershipDeathHandoffs([source, { ...target, validFrom: sourceStart }], [handoff], people, refs)
     .includes('membership-death-successor-start-mismatch'))
+check('successor membership source event must be the explicit handoff',
+  validateMembershipDeathHandoffs([source, { ...target, sourceEvent: sourceStart }], [handoff], people, refs)
+    .includes('membership-death-successor-source-event-mismatch'))
+check('ambiguous deceased person reference is rejected',
+  validateMembershipDeathHandoffs([source, target], [handoff], [deceased, { ...deceased }, successor], refs)
+    .includes('membership-death-person-ambiguous'))
+check('handoff death event must match the death record',
+  validateMembershipDeathHandoffs([source, target], [{ ...handoff, deathEvent: sourceStart }], people, refs)
+    .includes('membership-death-event-mismatch'))
 check('successor must be alive at handoff time',
   validateMembershipDeathHandoffs([source, { ...target, person: deceasedId }], [handoff], people, refs)
     .includes('membership-death-successor-person-not-alive'))
