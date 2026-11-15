@@ -172,6 +172,8 @@ jobs:
         run: npm run test:domain:preview-runtime-projection
       - name: Runtime command orchestration contracts
         run: npm run test:domain:runtime-orchestrator
+      - name: Runtime AI candidate receipt and fact contracts
+        run: npm run test:domain:runtime-ai-candidate
       - name: Review index integrity
         run: npm run check:docs
       - name: Patch whitespace integrity
