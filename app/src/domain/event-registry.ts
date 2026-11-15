@@ -65,14 +65,14 @@ export function createEventRegistry<Kind extends string = string>(
 }
 
 function isValidRegistry<Kind extends string>(registry: EventRegistry<Kind>): boolean {
-  if (registry === null || typeof registry !== 'object') return false
+  if (registry === null || typeof registry !== 'object' || !Object.isFrozen(registry)) return false
   if (typeof registry.registryId !== 'string' || !registry.registryId.trim()
     || typeof registry.registryVersion !== 'string' || !registry.registryVersion.trim()
     || typeof registry.frozen !== 'boolean'
-    || !Array.isArray(registry.schemas)) return false
+    || !Array.isArray(registry.schemas) || !Object.isFrozen(registry.schemas)) return false
   const kinds = new Set<string>()
   for (const schema of registry.schemas) {
-    if (schema === null || typeof schema !== 'object'
+    if (schema === null || typeof schema !== 'object' || !Object.isFrozen(schema)
       || typeof schema.kind !== 'string' || !schema.kind.trim()
       || !Number.isInteger(schema.schemaVersion) || schema.schemaVersion < 1
       || schema.registryId !== registry.registryId
