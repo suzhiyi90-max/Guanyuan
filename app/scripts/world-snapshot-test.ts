@@ -1,1 +1,1 @@
-import '../src/domain/world-snapshot-test'
+import './world-snapshot-contract-test'
