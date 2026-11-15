@@ -20,6 +20,7 @@ on:
       - work/w2-y-death-settlement-coordinator
       - work/w3-a-append-only-event-ledger
       - work/w3-b-frozen-event-schema-registry
+      - work/w3-c-command-ledger-idempotency
   pull_request:
     branches:
       - feat/g1-engine
@@ -137,7 +138,7 @@ jobs:
         run: npm run test:domain:death-evidence-envelope
       - name: Death settlement coordinator contracts
         run: npm run test:domain:death-coordinator
-      - name: Event ledger core contracts
+      - name: Event ledger and command idempotency contracts
         run: npm run test:domain:event-ledger
       - name: Event schema registry contracts
         run: npm run test:domain:event-registry

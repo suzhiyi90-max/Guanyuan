@@ -49,9 +49,16 @@ if (second.status === 'appended') ledger = second.ledger
 
 const beforeDuplicate = ledger
 const duplicate = appendLedgerEvent(ledger, baseInput, t2)
-check('same world request retry returns duplicate without append', duplicate.status === 'duplicate'
+check('same request retried at a later commit time remains duplicate', duplicate.status === 'duplicate'
   && duplicate.event.id === 'evt:world-a:1' && duplicate.ledger === ledger
   && duplicate.ledger.events.length === 2)
+
+const requestTimeConflict = appendLedgerEvent(ledger, {
+  ...baseInput,
+  requestWorldTime: t2,
+}, t2)
+check('request world time is fingerprinted, not part of request identity', requestTimeConflict.status === 'idempotency-conflict'
+  && requestTimeConflict.ledger === ledger && requestTimeConflict.event.id === 'evt:world-a:1')
 
 const conflict = appendLedgerEvent(ledger, {
   ...baseInput,

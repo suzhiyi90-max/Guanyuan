@@ -117,8 +117,6 @@ function idempotencyKey<Kind extends string>(worldId: WorldId, input: LedgerEven
     input.source,
     input.intentKind,
     input.actor,
-    input.requestWorldTime.day,
-    input.requestWorldTime.period,
     input.clientRequestId,
   ])
 }
@@ -183,7 +181,15 @@ export function appendLedgerEvent<Kind extends string>(
   if (issues.length > 0) return { status: 'rejected', ledger, issues: [...new Set(issues)] }
 
   const key = idempotencyKey(ledger.worldId, input)
-  const fingerprint = canonicalJson([input.kind, input.payload])
+  // Request time is part of the request's content, not its identity.
+  // A retry after the world clock advances must conflict rather than append a
+  // second fact under the same clientRequestId.
+  const fingerprint = canonicalJson([
+    input.requestWorldTime.day,
+    input.requestWorldTime.period,
+    input.kind,
+    input.payload,
+  ])
   const previous = ledger.idempotency.find(record => record.key === key)
   if (previous) {
     const event = ledger.events.find(item => item.id === previous.eventId)
