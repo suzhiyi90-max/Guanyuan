@@ -1,8 +1,7 @@
 import { brandedId, field } from './index'
 import { hasAuthorization } from './identity/authorization'
 import { validateAppointment, validateAuthorization, validateAuthorizationSet, validateIdentityAssignment, validateOffice, validateOfficeAppointments, validateOfficeAuthorizationReferences } from './identity/validation'
-import type { Appointment, Authorization, IdentityAssignment, Office } from './identity/model'
-import type { AuthorizationRequest } from './identity/model'
+import type { Appointment, Authorization, AuthorizationRequest, IdentityAssignment, Office } from './identity/model'
 import type { Person } from './person/model'
 
 let passed = 0

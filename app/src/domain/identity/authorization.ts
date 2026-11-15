@@ -43,7 +43,6 @@ export function isAuthorizationActive(grant: Authorization, at: AuthorizationReq
   return true
 }
 
-/** Default-deny authorization. Rank, office title and identity are not implicit grants. */
 /**
  * A grant is exercisable only by its living principal at the requested world
  * time. Historical checks before a recorded death remain valid; the death
@@ -76,7 +75,7 @@ function isPrincipalAliveAt(
   return false
 }
 
-/** Default-deny authorization, including the principal's life-state gate. */
+/** Default-deny authorization. Rank, office title and identity are not implicit grants. */
 export function hasAuthorization(
   grants: readonly Authorization[],
   request: AuthorizationRequest,
