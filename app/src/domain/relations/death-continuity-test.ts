@@ -63,7 +63,7 @@ check('ended relation closes at death event and is severed', validateRelationDea
 check('ended disposition rejects open interval', validateRelationDeathContinuity([edge], [ended], [deceased, living], refs).includes('relation-death-ended-not-closed'))
 check('ended disposition requires severed status', validateRelationDeathContinuity([{ ...closedEdge, lifecycle: { ...closedEdge.lifecycle, status: 'active' } }], [ended], [deceased, living], refs).includes('relation-death-ended-not-severed'))
 check('preserved disposition rejects severed status', validateRelationDeathContinuity([closedEdge], [preserved], [deceased, living], refs).includes('relation-death-preserved-but-severed'))
-check('relation ended before death remains historical without disposition', validateRelationDeathContinuity([{ ...edge, lifecycle: { status: 'severed', validFrom: start, validTo: end } }], [], [deceased, living], refs).length === 0)
+check('relation ended before death remains historical without disposition', validateRelationDeathContinuity([{ ...edge, lifecycle: { status: 'severed', validFrom: start, validTo: end } }], [], [deceased, living], { ...refs, eventTimes: new Map(refs.eventTimes).set(end, { day: 7, period: '暮' }) }).length === 0)
 check('disposition is unnecessary when relation ended before death', validateRelationDeathContinuity([{ ...edge, lifecycle: { status: 'severed', validFrom: start, validTo: end } }], [preserved], [deceased, living], { ...refs, eventTimes: new Map(refs.eventTimes).set(end, { day: 7, period: '暮' }) }).includes('relation-death-disposition-unnecessary'))
 check('later relation end requires preserved disposition', validateRelationDeathContinuity([{ ...edge, lifecycle: { ...edge.lifecycle, validTo: end } }], [], [deceased, living], refs).includes('relation-death-disposition-missing'))
 check('preserved relation can have a later end event', validateRelationDeathContinuity([{ ...edge, lifecycle: { ...edge.lifecycle, validTo: end } }], [preserved], [deceased, living], refs).length === 0)
@@ -79,10 +79,10 @@ check('death event must match death record', validateRelationDeathContinuity([ed
 check('death event time must match death record', validateRelationDeathContinuity([edge], [preserved], [deceased, living], { ...refs, eventTimes: new Map(refs.eventTimes).set(deathEvent, endAt) }).includes('relation-death-event-time-mismatch'))
 check('duplicate disposition IDs are rejected', validateRelationDeathContinuity([edge], [preserved, preserved], [deceased, living], refs).includes('relation-death-disposition-duplicate-id'))
 check('duplicate relation/deceased disposition is rejected', validateRelationDeathContinuity([edge], [preserved, { ...preserved, id: brandedId<'RelationDeathDispositionId'>('rel-duplicate') }], [deceased, living], refs).includes('relation-death-disposition-duplicate-endpoint'))
-check('two endpoints can be preserved then ended at later death', validateRelationDeathContinuity([{ ...edge, lifecycle: { status: 'severed', validFrom: start, validTo: secondDeath } }], [
+check('two endpoints can be preserved then ended at later death', validateRelationDeathContinuity([{ ...edge, to: secondDeadId, lifecycle: { status: 'severed', validFrom: start, validTo: secondDeath } }], [
   preserved, { ...preserved, id: brandedId<'RelationDeathDispositionId'>('rel-disposition-2'), deceased: secondDeadId, deathEvent: secondDeath, outcome: 'ended' },
 ], [deceased, laterDeceased], refs).length === 0)
-check('terminal end makes later endpoint disposition unnecessary', validateRelationDeathContinuity([closedEdge], [
+check('terminal end makes later endpoint disposition unnecessary', validateRelationDeathContinuity([{ ...closedEdge, to: secondDeadId }], [
   ended, { ...preserved, id: brandedId<'RelationDeathDispositionId'>('rel-late'), deceased: secondDeadId, deathEvent: secondDeath },
 ], [deceased, laterDeceased], refs).includes('relation-death-disposition-unnecessary'))
 check('validation does not mutate source data', edge.lifecycle.validTo === 'open' && deceased.lifeState === 'dead' && preserved.outcome === 'preserved')
