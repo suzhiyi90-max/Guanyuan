@@ -13,6 +13,7 @@ on:
       - work/w2-r-membership-death-inventory
       - work/w2-s-relation-death-inventory
       - work/w2-t-goal-death-inventory
+      - work/w2-u-death-evidence-envelope
   pull_request:
     branches:
       - feat/g1-engine
@@ -41,6 +42,7 @@ on:
       - work/w2-r-membership-death-inventory
       - work/w2-s-relation-death-inventory
       - work/w2-t-goal-death-inventory
+      - work/w2-u-death-evidence-envelope
   workflow_dispatch:
 
 permissions:
@@ -119,6 +121,8 @@ jobs:
         run: npm run test:domain:relation-death-inventory
       - name: Goal death inventory completeness contracts
         run: npm run test:domain:goal-death-inventory
+      - name: Death settlement evidence envelope contracts
+        run: npm run test:domain:death-evidence-envelope
       - name: Review index integrity
         run: npm run check:docs
       - name: Patch whitespace integrity
