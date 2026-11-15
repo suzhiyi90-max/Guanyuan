@@ -7,8 +7,8 @@ import type {
   DeathSettlementScopeDeclaration,
   EstateSettlementDomain,
 } from '../index'
-import type { EventId, PersonId } from '../../shared/ids'
-import type { WorldTime } from '../../shared/world-time'
+import type { EventId, PersonId } from '../shared/ids'
+import type { WorldTime } from '../shared/world-time'
 
 let passed = 0
 let failed = 0
@@ -167,12 +167,15 @@ check('canonical inventory mismatch is rejected', coordinateDeathSettlement(scop
 const debtBlocked: DeathSettlementDomainAssessment = {
   domain: 'debt',
   evidence: {
-    ...assessments[1].evidence,
+    id: brandedId<'DeathSettlementEvidenceId'>('e-debt-blocked'),
+    deceased, deathEvent, inventoryEvent, domain: 'debt',
+    inventory: brandedId<'DebtDeathInventoryId'>('i-debt'),
+    status: 'complete',
     entries: [{ id: brandedId<'DebtDeathInventoryEntryId'>('debt-entry') }],
     positions: [{ debt: brandedId<'DebtId'>('unpaid-debt'), role: 'debtor' }],
   },
   canonical: {
-    ...assessments[1].canonical!,
+    id: 'i-debt', deceased, deathEvent, inventoryEvent, status: 'complete',
     entries: [{ id: 'debt-entry', itemRef: 'debt:unpaid-debt:debtor' }],
   },
   domainIssues: ['debt-death-inventory-entry-pending'],
@@ -185,9 +188,16 @@ check('domain-specific unresolved debt blocks overall settlement without invalid
   && blocked.reviews.find(review => review.domain === 'debt')?.status === 'blocked')
 
 const openInventory: DeathSettlementDomainAssessment = {
-  ...assessments[2],
-  evidence: { ...assessments[2].evidence, status: 'open' },
-  canonical: { ...assessments[2].canonical!, status: 'open' },
+  domain: 'asset',
+  evidence: {
+    id: brandedId<'DeathSettlementEvidenceId'>('e-asset-open'),
+    deceased, deathEvent, inventoryEvent, domain: 'asset',
+    inventory: brandedId<'EstateAssetInventoryId'>('i-asset'),
+    status: 'open', entries: [], assets: [],
+  },
+  canonical: {
+    id: 'i-asset', deceased, deathEvent, inventoryEvent, status: 'open', entries: [],
+  },
   domainIssues: ['estate-inventory-open'],
   readiness: 'blocked',
 }
@@ -196,7 +206,16 @@ check('open inventory cannot be promoted by an otherwise valid evidence envelope
     index === 2 ? openInventory : item), refs, deathAt).status === 'incomplete')
 
 const contradictoryReady: DeathSettlementDomainAssessment = {
-  ...assessments[1],
+  domain: 'debt',
+  evidence: {
+    id: brandedId<'DeathSettlementEvidenceId'>('e-debt-contradictory'),
+    deceased, deathEvent, inventoryEvent, domain: 'debt',
+    inventory: brandedId<'DebtDeathInventoryId'>('i-debt'),
+    status: 'complete', entries: [], positions: [],
+  },
+  canonical: {
+    id: 'i-debt', deceased, deathEvent, inventoryEvent, status: 'complete', entries: [],
+  },
   domainIssues: ['debt-death-inventory-invalid'],
   readiness: 'ready',
 }
