@@ -87,7 +87,8 @@ export function validateWorldSnapshot(
   if (!cursorIsValidForWorld(value.streamHead, value.worldId)) {
     return { status: 'rejected', issue: 'snapshot-stream-head-invalid' }
   }
-  if (!isValidWorldTime(value.checkpointAt as WorldTime)) {
+  if (value.checkpointAt === null || typeof value.checkpointAt !== 'object' || Array.isArray(value.checkpointAt)
+    || !isValidWorldTime(value.checkpointAt as WorldTime)) {
     return { status: 'rejected', issue: 'snapshot-checkpoint-time-invalid' }
   }
   let materialized: JsonValue
