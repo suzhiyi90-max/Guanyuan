@@ -34,6 +34,16 @@ export type SavePackageIssue =
   | 'save-package-checksum-unavailable'
   | 'save-package-event-replay-rejected'
   | 'save-package-snapshot-state-mismatch'
+  | 'save-package-base-missing'
+  | 'save-package-base-invalid'
+  | 'save-package-base-world-mismatch'
+  | 'save-package-base-schema-mismatch'
+  | 'save-package-base-head-mismatch'
+  | 'save-package-incremental-range-invalid'
+  | 'save-package-incremental-event-count-mismatch'
+  | 'save-package-incremental-replay-rejected'
+  | 'save-package-incremental-snapshot-state-mismatch'
+  | 'save-package-chain-too-deep'
 
 export type SavePackageResult =
   | { readonly status: 'valid'; readonly package: FullSavePackage }
@@ -127,13 +137,21 @@ function checksumPayload(input: Omit<FullSavePackage, 'checksum'>): Omit<FullSav
   }
 }
 
-async function checksumOf(input: Omit<FullSavePackage, 'checksum'>): Promise<string | null> {
+export function canonicalSavePackageJson(value: unknown): string {
+  return canonicalJson(value)
+}
+
+export async function calculateSavePackageChecksum(payload: unknown): Promise<string | null> {
   const cryptoApi = globalThis.crypto
   if (!cryptoApi?.subtle) return null
-  const bytes = new TextEncoder().encode(canonicalJson(checksumPayload(input)))
+  const bytes = new TextEncoder().encode(canonicalJson(payload))
   const digest = await cryptoApi.subtle.digest('SHA-256', bytes)
   const hex = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('')
   return `sha256:${hex}`
+}
+
+async function checksumOf(input: Omit<FullSavePackage, 'checksum'>): Promise<string | null> {
+  return calculateSavePackageChecksum(checksumPayload(input))
 }
 
 const topLevelKeys = ['packageKind', 'worldId', 'schemaVersion', 'streamRange', 'events', 'snapshot', 'checksum']
