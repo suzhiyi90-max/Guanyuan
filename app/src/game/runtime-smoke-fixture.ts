@@ -71,7 +71,7 @@ export function createRuntimeSmokeFixture(target: RuntimeSmokeFixture): PreviewR
   send({ kind: 'official.action', payload: { key: 'commissioner' } })
   send({ kind: 'official.action', payload: { key: 'files' } })
   send({ kind: 'official.action', payload: { key: 'impeach' } })
-  if (session.state.day !== 10 || session.state.periodIndex !== 3) {
+  if (Number(session.state.day) !== 10 || session.state.periodIndex !== 3) {
     throw new Error('runtime-smoke-fixture-day10-night-invariant-failed')
   }
   return session
