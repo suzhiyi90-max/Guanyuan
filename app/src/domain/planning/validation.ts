@@ -27,7 +27,7 @@ export function validateGoal(goal: Goal, persons: readonly Person[], eventIds: r
   if (!person) issues.push('goal-person-missing')
   if (!goal.statement.trim()) issues.push('goal-empty-statement')
   if (!Number.isFinite(goal.priority) || goal.priority < 0) issues.push('goal-invalid-priority')
-  if (!['active', 'achieved', 'abandoned', 'failed'].includes(goal.status)) issues.push('goal-invalid-status')
+  if (!['active', 'achieved', 'abandoned', 'failed', 'closed-by-death'].includes(goal.status)) issues.push('goal-invalid-status')
   if (!eventIds.includes(goal.sourceEvent)) issues.push('goal-source-event-missing')
   if (!validVisibility(goal.visibility, persons.map(item => item.id))) issues.push('goal-visibility-invalid')
   if (person && !person.stateDomains.goals.includes(goal.id)) issues.push('goal-person-index-mismatch')
