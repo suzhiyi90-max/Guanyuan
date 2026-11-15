@@ -19,6 +19,7 @@ export type KnowledgeId = BrandedId<'KnowledgeId'>
 export type MessageId = BrandedId<'MessageId'>
 export type AssetId = BrandedId<'AssetId'>
 export type DebtId = BrandedId<'DebtId'>
+export type DebtPartySuccessionId = BrandedId<'DebtPartySuccessionId'>
 export type RightGrantId = BrandedId<'RightGrantId'>
 export type AssetInheritanceId = BrandedId<'AssetInheritanceId'>
 export type ScheduleId = BrandedId<'ScheduleId'>

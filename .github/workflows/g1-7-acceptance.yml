@@ -19,6 +19,7 @@ on:
       - work/w2-e-life-time-boundaries
       - work/w2-f-death-settlement-integrity
       - work/w2-g-office-death-handoff
+      - work/w2-h-authorization-death-gate
   workflow_dispatch:
 
 permissions:
@@ -59,6 +60,8 @@ jobs:
         run: npm run test:domain:cognition
       - name: Planning and economy contract tests
         run: npm run test:domain:planning-economy
+      - name: Debt party death continuity contracts
+        run: npm run test:domain:debt-death
       - name: Life history and body/mind hook contracts
         run: npm run test:domain:life
       - name: Calendar age contract tests

@@ -1,7 +1,8 @@
 import { compareWorldTime, isValidWorldTime } from '../shared/world-time'
 import type { Field } from '../shared/field'
 import type { AssetId, DebtId, EventId, OrgId, PersonId, RightGrantId } from '../shared/ids'
-import type { Asset, AssetRightKind, Debt, EconomyIssue, RightGrant, RightHolder, RightRevocation } from './model'
+import type { Asset, AssetRightKind, Debt, DebtPartySuccession, EconomyIssue, RightGrant, RightHolder, RightRevocation } from './model'
+import type { Person } from '../person/model'
 
 export interface EconomyReferences {
   readonly persons: readonly PersonId[]
@@ -195,3 +196,112 @@ export function validateDebtSet(debts: readonly Debt[], refs: EconomyReferences)
 }
 
 export type { AssetId, DebtId }
+
+
+export interface DebtSuccessionReferences extends Omit<EconomyReferences, 'persons'> {
+  readonly persons: readonly Person[]
+}
+
+function personAliveAt(person: Person, at: import('../shared/world-time').WorldTime): boolean {
+  if (!isValidWorldTime(at)) return false
+  if (person.birth.kind === 'value') {
+    if (!isValidWorldTime(person.birth.value) || compareWorldTime(at, person.birth.value) < 0) return false
+  }
+  if (person.lifeState === 'alive') return person.death.kind === 'n/a'
+  if (person.lifeState === 'dead') {
+    return person.death.kind === 'value'
+      && isValidWorldTime(person.death.value.at)
+      && compareWorldTime(at, person.death.value.at) < 0
+  }
+  return false
+}
+
+/**
+ * Validate explicit debt-party succession without mutating the original debt.
+ * Shares are exact rational fractions and may not allocate more than the
+ * deceased party's entire creditor/debtor position.
+ */
+export function validateDebtPartySuccessions(
+  debts: readonly Debt[],
+  successions: readonly DebtPartySuccession[],
+  refs: DebtSuccessionReferences,
+): EconomyIssue[] {
+  const issues: EconomyIssue[] = []
+  if (duplicateIds(successions, item => item.id)) issues.push('debt-succession-duplicate-id')
+
+  const allocated = new Map<string, { numerator: bigint; denominator: bigint }>()
+  for (const succession of successions) {
+    const matchingDebts = debts.filter(debt => debt.id === succession.debt)
+    const debt = matchingDebts.length === 1 ? matchingDebts[0] : undefined
+    if (!debt) issues.push('debt-succession-debt-missing')
+    else {
+      if (debt.status === 'settled') issues.push('debt-succession-debt-already-settled')
+      if (succession.role !== 'creditor' && succession.role !== 'debtor') {
+        issues.push('debt-succession-invalid-role')
+      } else {
+        const originalParty = succession.role === 'creditor' ? debt.creditor : debt.debtor
+        if (originalParty !== succession.deceased) issues.push('debt-succession-party-role-mismatch')
+      }
+    }
+
+    const deceasedRecords = refs.persons.filter(person => person.id === succession.deceased)
+    const deceased = deceasedRecords.length === 1 ? deceasedRecords[0] : undefined
+    if (!deceased) issues.push('debt-succession-deceased-missing')
+    else if (deceased.lifeState !== 'dead') issues.push('debt-succession-deceased-not-dead')
+    if (!deceased || deceased.death.kind !== 'value') {
+      issues.push('debt-succession-death-record-missing')
+    }
+
+    const deathRecord = deceased?.death.kind === 'value' ? deceased.death.value : undefined
+    if (deathRecord) {
+      if (deathRecord.causeEvent !== succession.deathEvent) issues.push('debt-succession-death-event-mismatch')
+      if (!refs.events.includes(succession.deathEvent)) issues.push('debt-succession-death-event-missing')
+      const eventAt = refs.eventTimes.get(succession.deathEvent)
+      if (!eventAt || !isValidWorldTime(eventAt) || !isValidWorldTime(deathRecord.at)
+        || compareWorldTime(eventAt, deathRecord.at) !== 0) {
+        issues.push('debt-succession-death-time-mismatch')
+      }
+    }
+
+    const successorRecords = refs.persons.filter(person => person.id === succession.successor)
+    const successor = successorRecords.length === 1 ? successorRecords[0] : undefined
+    if (!successor) issues.push('debt-succession-successor-missing')
+    if (succession.successor === succession.deceased) issues.push('debt-succession-self-transfer')
+
+    if (!refs.events.includes(succession.successionEvent)) {
+      issues.push('debt-succession-event-missing')
+    }
+    const successionAt = refs.eventTimes.get(succession.successionEvent)
+    if (!successionAt || !isValidWorldTime(successionAt)) {
+      issues.push('debt-succession-event-time-missing')
+    }
+    if (deathRecord && successionAt && isValidWorldTime(successionAt)
+      && isValidWorldTime(deathRecord.at)
+      && compareWorldTime(successionAt, deathRecord.at) < 0) {
+      issues.push('debt-succession-before-death')
+    }
+    if (successor && successionAt && isValidWorldTime(successionAt)
+      && !personAliveAt(successor, successionAt)) {
+      issues.push('debt-succession-successor-not-alive')
+    }
+
+    const validShare = Number.isSafeInteger(succession.shareNumerator)
+      && Number.isSafeInteger(succession.shareDenominator)
+      && succession.shareNumerator > 0
+      && succession.shareDenominator > 0
+      && succession.shareNumerator <= succession.shareDenominator
+    if (!validShare) {
+      issues.push('debt-succession-invalid-share')
+      continue
+    }
+    const key = `${succession.debt}:${succession.role}:${succession.deceased}`
+    const current = allocated.get(key) ?? { numerator: 0n, denominator: 1n }
+    const numerator = BigInt(succession.shareNumerator)
+    const denominator = BigInt(succession.shareDenominator)
+    const combinedNumerator = current.numerator * denominator + numerator * current.denominator
+    const combinedDenominator = current.denominator * denominator
+    if (combinedNumerator > combinedDenominator) issues.push('debt-succession-overallocated')
+    allocated.set(key, { numerator: combinedNumerator, denominator: combinedDenominator })
+  }
+  return issues
+}

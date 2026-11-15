@@ -2,6 +2,7 @@ import type { Field } from '../shared/field'
 import type {
   AssetId,
   DebtId,
+  DebtPartySuccessionId,
   EventId,
   OrgId,
   PersonId,
@@ -48,6 +49,24 @@ export interface Asset {
 
 export type DebtStatus = 'open' | 'settled' | 'disputed'
 
+/**
+ * Explicit post-death continuation of one party's position in a debt.
+ * creditor = succession of the claim; debtor = explicit assumption of liability.
+ * The original Debt remains immutable; this record does not itself settle it.
+ */
+export interface DebtPartySuccession {
+  readonly id: DebtPartySuccessionId
+  readonly debt: DebtId
+  readonly role: 'creditor' | 'debtor'
+  readonly deceased: PersonId
+  readonly successor: PersonId
+  /** Exact rational share; multiple successors may share a position without rounding. */
+  readonly shareNumerator: number
+  readonly shareDenominator: number
+  readonly deathEvent: EventId
+  readonly successionEvent: EventId
+}
+
 export interface Debt {
   readonly id: DebtId
   readonly creditor: PersonId
@@ -91,3 +110,22 @@ export type EconomyIssue =
   | 'debt-settlement-event-missing'
   | 'debt-duplicate-settlement'
   | 'debt-settled-without-settlement'
+  | 'debt-succession-duplicate-id'
+  | 'debt-succession-debt-missing'
+  | 'debt-succession-party-role-mismatch'
+  | 'debt-succession-invalid-role'
+  | 'debt-succession-debt-already-settled'
+  | 'debt-succession-deceased-missing'
+  | 'debt-succession-deceased-not-dead'
+  | 'debt-succession-death-record-missing'
+  | 'debt-succession-death-event-mismatch'
+  | 'debt-succession-death-event-missing'
+  | 'debt-succession-death-time-mismatch'
+  | 'debt-succession-successor-missing'
+  | 'debt-succession-successor-not-alive'
+  | 'debt-succession-self-transfer'
+  | 'debt-succession-event-missing'
+  | 'debt-succession-event-time-missing'
+  | 'debt-succession-before-death'
+  | 'debt-succession-invalid-share'
+  | 'debt-succession-overallocated'
