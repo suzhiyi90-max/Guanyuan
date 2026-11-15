@@ -115,7 +115,7 @@ check('ordinary achieved goal needs an event-backed pre-death transition', valid
 ).includes('goal-death-inventory-terminal-evidence-mismatch'))
 check('active goal cannot be classified as terminal-before-death', validateGoalDeathInventory(
   inventory([entry('bad-active', activeId, 'terminal-before-death')]),
-  allGoals, allDispositions, allDispositions, [transition], [deceased, successor], refs,
+  allGoals, allDispositions, [transition], [deceased, successor], refs,
 ).includes('goal-death-inventory-terminal-evidence-mismatch'))
 check('death disposition must match each inventory outcome', validateGoalDeathInventory(
   inventory([entry('wrong-outcome', activeId, 'failed')]),
