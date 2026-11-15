@@ -55,6 +55,8 @@ export function createRuntimeSmokeFixture(target: RuntimeSmokeFixture): PreviewR
   send({ kind: 'world.event.resolved', payload: { eventId: 'zhubu-visit', optionId: 'confront' } })
   send({ kind: 'person.asked', payload: { personId: 'liangshang' } })
   send({ kind: 'person.asked', payload: { personId: 'gentry' } })
+  send({ kind: 'records.audited', payload: {} })
+  send({ kind: 'banquet.choice', payload: { choice: 'delegate' } })
   send({ kind: 'day.advanced', payload: {} })
 
   // The fourth-day outcome is now computed from the complete fact stream.
