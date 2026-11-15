@@ -263,8 +263,8 @@ export function validateDebtDeathInventory(
   }
 
   for (const succession of successions) {
-    if (succession.deceased === inventory.deceased && succession.deathEvent === inventory.deathEvent
-      && !referencedSuccessionIds.has(succession.id)) {
+    if (succession.deceased === inventory.deceased
+      && (succession.deathEvent !== inventory.deathEvent || !referencedSuccessionIds.has(succession.id))) {
       issues.push('debt-death-inventory-succession-unaccounted')
     }
   }
