@@ -67,7 +67,7 @@ function relation(id: RelationId, from: PersonId, to: PersonId, validTo: EventId
   }
 }
 const activeA = relation(relationA, deadId, livingId)
-const activeB = relation(relationB, otherId, deadId, endLater, 'active')
+const activeB = relation(relationB, otherId, deadId, deathEvent, 'severed')
 const historical = relation(relationOld, deadId, otherId, endOld, 'severed')
 const preservedDisposition: RelationDeathDisposition = {
   id: brandedId<'RelationDeathDispositionId'>('inventory-disposition-a') as RelationDeathDispositionId,
@@ -139,7 +139,7 @@ check('wrong disposition is rejected', validateRelationDeathInventory(
 check('relation with endpoint start at death cannot be treated as completed', validateRelationDeathInventory(
   inventory([entry('post-start', { ...activeA, lifecycle: { ...activeA.lifecycle, validFrom: deathEvent } }, 'preserved')]),
   [{ ...activeA, lifecycle: { ...activeA.lifecycle, validFrom: deathEvent } }], [preservedDisposition], people, refs)
-  .includes('relation-death-inventory-disposition-mismatch'))
+  .includes('relation-death-starts-at-or-after-death'))
 const twoDeadRelation = relation(relationA, deadId, secondDeadId, secondDeath, 'severed')
 check('two-deceased-endpoint relation can be preserved then ended at later death', validateRelationDeathInventory(
   inventory([entry('two-endpoint-a', twoDeadRelation, 'preserved')]),
