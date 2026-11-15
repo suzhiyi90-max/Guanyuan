@@ -1,5 +1,5 @@
 import { people } from '../data'
-import type { GameState } from './useGame'
+import type { GameState } from './model'
 
 export interface WorldEventOption {
   id: string
