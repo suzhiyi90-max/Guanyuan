@@ -109,7 +109,8 @@ const duplicateBanquet = dispatchPreviewRuntimeIntent(banquetSession, {
 }, 'banquet-second-choice')
 check('a second banquet choice on the same world day is rejected atomically', duplicateBanquet.status === 'rejected'
   && duplicateBanquet.session.ledger.head === banquetSession.ledger.head
-  && duplicateBanquet.session.state.giftEntries.length === 1)
+  && duplicateBanquet.session.state.giftEntries.length === 1
+  && banquetSession.state.handledEvents.includes('banquet-choice-1'))
 
 if (failed > 0) throw new Error(`runtime-orchestrator: ${failed} failed, ${passed} passed`)
 console.log(`runtime-orchestrator: ${passed}/${passed} passed`)
