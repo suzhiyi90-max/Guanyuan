@@ -24,6 +24,7 @@ export * from './planning/model'
 export * from './planning/validation'
 export * from './planning/death-continuity'
 export * from './planning/status-history'
+export * from './planning/death-inventory'
 
 export * from './economy/model'
 export * from './economy/validation'
