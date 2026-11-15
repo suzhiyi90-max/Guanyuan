@@ -32,7 +32,7 @@ function revocationTime(grantId: RightGrantId, refs: EconomyReferences): import(
   return refs.eventTimes.get(revocation.revokedBy)
 }
 
-function grantIsEffective(grant: RightGrant, at: import('../shared/world-time').WorldTime, refs: EconomyReferences): boolean {
+export function isAssetRightGrantEffectiveAt(grant: RightGrant, at: import('../shared/world-time').WorldTime, refs: EconomyReferences): boolean {
   const grantedAt = refs.eventTimes.get(grant.grantedBy)
   if (!grantedAt || !isValidWorldTime(grantedAt) || !isValidWorldTime(at)) return false
   if (compareWorldTime(grantedAt, at) > 0) return false
@@ -64,7 +64,7 @@ export function deriveAssetOwner(
 ): Field<PersonId> {
   const holders = new Set<string>()
   for (const grant of ownership) {
-    if (grantIsEffective(grant, at, refs)) holders.add(grant.holder)
+    if (isAssetRightGrantEffectiveAt(grant, at, refs)) holders.add(grant.holder)
   }
   const people = [...holders].filter(holder =>
     refs.persons.includes(holder as PersonId) && !refs.organizations.includes(holder as OrgId))
@@ -111,7 +111,7 @@ export function validateAsset(
   if (duplicateIds(grants, item => item.grant.id)) issues.push('asset-right-grant-duplicate-id')
   for (const { grant } of grants) issues.push(...validateGrant(grant, refs))
   for (const kind of ['ownership', 'control', 'handling', 'disposal'] as const) {
-    const active = asset.rights[kind].filter(grant => grantIsEffective(grant, at, refs))
+    const active = asset.rights[kind].filter(grant => isAssetRightGrantEffectiveAt(grant, at, refs))
     for (let i = 0; i < active.length; i += 1) {
       for (let j = i + 1; j < active.length; j += 1) {
         if (active[i].scope === active[j].scope && active[i].holder !== active[j].holder) {
@@ -169,7 +169,7 @@ export function canDisposeAsset(
   refs: EconomyReferences,
 ): boolean {
   return [...asset.rights.ownership, ...asset.rights.disposal]
-    .some(grant => grant.holder === holder && grantIsEffective(grant, at, refs))
+    .some(grant => grant.holder === holder && isAssetRightGrantEffectiveAt(grant, at, refs))
 }
 
 export function validateDebt(debt: Debt, refs: EconomyReferences): EconomyIssue[] {
