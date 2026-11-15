@@ -63,8 +63,9 @@ function cloneFreezeJson(value: JsonValue, ancestors = new Set<object>()): JsonV
     if (Array.isArray(value)) return Object.freeze(value.map(item => cloneFreezeJson(item, ancestors)))
     const prototype = Object.getPrototypeOf(value)
     if (prototype !== Object.prototype && prototype !== null) throw new Error('replay-initial-state-invalid')
+    const record = value as { readonly [key: string]: JsonValue }
     const result: Record<string, JsonValue> = {}
-    for (const key of Object.keys(value).sort()) result[key] = cloneFreezeJson(value[key], ancestors)
+    for (const key of Object.keys(record).sort()) result[key] = cloneFreezeJson(record[key], ancestors)
     return Object.freeze(result)
   } finally {
     ancestors.delete(value)
