@@ -1,7 +1,11 @@
 import { brandedId } from '../shared/ids'
 import type { DebtDeathInventory } from './debt-death-inventory'
+import type { DeathOfficeInventory } from '../identity/death-inventory'
+import type { MembershipDeathInventory } from '../relations/death-inventory'
 import {
   projectDebtDeathInventoryEvidence,
+  projectDeathOfficeInventoryEvidence,
+  projectMembershipDeathInventoryEvidence,
   validateDeathSettlementDomainEvidence,
 } from './death-settlement-evidence'
 import type { EventId } from '../shared/ids'
@@ -74,5 +78,56 @@ check('open or challenged state is carried, not promoted', projectDebtDeathInven
   evidenceId, { ...inventory, status: 'challenged' },
 ).status === 'challenged')
 check('pending remains visible in canonical inventory and is not rewritten', inventory.entries[0].disposition === 'pending')
+const officeAppointment = brandedId<'AppointmentId'>('office-appointment')
+const officeAuthorization = brandedId<'AuthorizationId'>('office-authorization')
+const officeInventoryId = brandedId<'DeathOfficeInventoryId'>('office-inventory')
+const officeAppointmentEntry = brandedId<'DeathOfficeInventoryEntryId'>('office-appointment-entry')
+const officeAuthorizationEntry = brandedId<'DeathOfficeInventoryEntryId'>('office-authorization-entry')
+const officeInventory: DeathOfficeInventory = {
+  id: officeInventoryId, deceased, deathEvent, inventoryEvent: reviewEvent, status: 'complete',
+  appointments: [{ id: officeAppointmentEntry, appointment: officeAppointment, disposition: 'ended-before-death' }],
+  authorizations: [{ id: officeAuthorizationEntry, authorization: officeAuthorization, disposition: 'inactive-before-death' }],
+}
+const officeEvidence = projectDeathOfficeInventoryEvidence(evidenceId, officeInventory)
+const officeCanonical = {
+  id: officeInventoryId, deceased, deathEvent, inventoryEvent: reviewEvent, status: 'complete' as const,
+  entries: [
+    { id: officeAppointmentEntry, itemRef: `appointment:${officeAppointment}` },
+    { id: officeAuthorizationEntry, itemRef: `authorization:${officeAuthorization}` },
+  ],
+}
+check('office projection preserves both appointment and authorization references', officeEvidence.appointments[0] === officeAppointment
+  && officeEvidence.authorizations[0] === officeAuthorization && officeEvidence.entries.length === 2)
+check('office evidence aligns with canonical typed inventory', validateDeathSettlementDomainEvidence(
+  officeEvidence, officeCanonical, refs, deathAt,
+).length === 0)
+check('office evidence rejects swapped canonical entry mapping', validateDeathSettlementDomainEvidence(
+  officeEvidence, { ...officeCanonical, entries: [...officeCanonical.entries].reverse() }, refs, deathAt,
+).includes('death-settlement-evidence-domain-reference-mismatch'))
+
+const membershipId = brandedId<'MembershipId'>('membership')
+const membershipInventoryId = brandedId<'MembershipDeathInventoryId'>('membership-inventory')
+const membershipEntryId = brandedId<'MembershipDeathInventoryEntryId'>('membership-entry')
+const membershipInventory: MembershipDeathInventory = {
+  id: membershipInventoryId, deceased, deathEvent, inventoryEvent: reviewEvent, status: 'complete',
+  memberships: [{ id: membershipEntryId, membership: membershipId, disposition: 'ended-before-death' }],
+}
+const membershipEvidence = projectMembershipDeathInventoryEvidence(evidenceId, membershipInventory)
+const membershipCanonical = {
+  id: membershipInventoryId, deceased, deathEvent, inventoryEvent: reviewEvent, status: 'complete' as const,
+  entries: [{ id: membershipEntryId, itemRef: `membership:${membershipId}` }],
+}
+check('membership projection preserves canonical membership identity', membershipEvidence.memberships[0] === membershipId
+  && membershipEvidence.entries[0].id === membershipEntryId)
+check('membership evidence aligns with canonical typed inventory', validateDeathSettlementDomainEvidence(
+  membershipEvidence, membershipCanonical, refs, deathAt,
+).length === 0)
+check('membership evidence rejects a wrong canonical membership reference', validateDeathSettlementDomainEvidence(
+  membershipEvidence, { ...membershipCanonical, entries: [{ id: membershipEntryId, itemRef: 'membership:other' }] }, refs, deathAt,
+).includes('death-settlement-evidence-domain-reference-mismatch'))
+check('office and membership inventory states are carried without promotion',
+  projectDeathOfficeInventoryEvidence(evidenceId, { ...officeInventory, status: 'challenged' }).status === 'challenged'
+  && projectMembershipDeathInventoryEvidence(evidenceId, { ...membershipInventory, status: 'open' }).status === 'open')
+
 if (failed) throw new Error('Death evidence envelope tests failed: ' + failed + '/' + (passed + failed))
 console.log('Death evidence envelope contracts: ' + passed + '/' + (passed + failed) + ' passed')
