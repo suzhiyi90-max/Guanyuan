@@ -1,7 +1,7 @@
 import { brandedId, field } from '../index'
 import type {
   EventId, MembershipDeathHandoffId, MembershipDeathInventoryEntryId,
-  MembershipDeathInventoryId, MembershipId, OrgId, PersonId,
+  MembershipDeathInventoryId, MembershipId, PersonId,
 } from '../shared/ids'
 import type { WorldTime } from '../shared/world-time'
 import type { Person } from '../person/model'
