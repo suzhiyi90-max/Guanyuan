@@ -90,7 +90,8 @@ async function main(): Promise<void> {
     && fact.event.candidateRef === 'cand-001'
     && fact.event.validationRef === ledger.events[0].id
     && fact.event.seq === 2)
-  if (fact.status === 'appended') ledger = fact.ledger
+  if (fact.status !== 'appended') throw new Error('candidate fact append failed')
+  ledger = fact.ledger
   const factRetry = await appendValidatedAiCandidateFact(log, ledger, frozen, 'cand-001', later, later)
   check('fact retry returns duplicate without appending a second fact', factRetry.status === 'duplicate'
     && factRetry.ledger.head === 2 && factRetry.event.id === fact.event.id)
