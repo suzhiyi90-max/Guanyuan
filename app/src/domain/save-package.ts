@@ -241,10 +241,17 @@ export async function createFullSavePackage<Kind extends string>(
   input: Omit<FullSavePackage, 'checksum'>,
   verification: SavePackageVerification<Kind>,
 ): Promise<SavePackageResult> {
+  const snapshot = validateWorldSnapshot(input.snapshot, {
+    worldId: input.worldId,
+    schemaVersion: input.schemaVersion,
+    streamHead: input.streamRange.toInclusive,
+  })
+  if (snapshot.status !== 'valid') return { status: 'rejected', issue: 'save-package-snapshot-invalid' }
+  const normalizedInput = { ...input, snapshot: snapshot.snapshot }
   let checksum: string | null
-  try { checksum = await checksumOf(input) } catch {
+  try { checksum = await checksumOf(normalizedInput) } catch {
     return { status: 'rejected', issue: 'save-package-envelope-invalid' }
   }
   if (checksum === null) return { status: 'rejected', issue: 'save-package-checksum-unavailable' }
-  return validateFullSavePackage({ ...input, checksum }, verification)
+  return validateFullSavePackage({ ...normalizedInput, checksum }, verification)
 }
