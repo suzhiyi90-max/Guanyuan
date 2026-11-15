@@ -185,7 +185,9 @@ export async function dispatchPreviewRuntimeCandidate(
   }
   const effect = effectById(option.effect)
   if (!effect) return { status: 'rejected', session: unchanged(), reason: 'unknown-effect' }
-  if (!effect.available(session.state, officialAvailableOf(session.state))) {
+  const alreadyCommitted = existing?.status === 'validated'
+    && session.ledger.events.some(item => item.source === 'ai-candidate' && item.candidateRef === candidateId)
+  if (!alreadyCommitted && !effect.available(session.state, officialAvailableOf(session.state))) {
     return { status: 'rejected', session: unchanged(), reason: 'effect-unavailable' }
   }
 
