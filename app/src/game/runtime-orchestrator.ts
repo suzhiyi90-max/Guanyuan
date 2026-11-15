@@ -199,7 +199,8 @@ export async function dispatchPreviewRuntimeCandidate(
     refs,
   }
   let log = session.candidateLog
-  if (existing && JSON.stringify(existing.payload) !== JSON.stringify(candidatePayload)) {
+  if (existing && JSON.stringify(existing.payload, ['effect', 'generatedEventId', 'optionId', 'refs', 'result'])
+    !== JSON.stringify(candidatePayload, ['effect', 'generatedEventId', 'optionId', 'refs', 'result'])) {
     return { status: 'rejected', session: unchanged(), reason: 'candidate-payload-conflict' }
   }
   if (!existing) {
