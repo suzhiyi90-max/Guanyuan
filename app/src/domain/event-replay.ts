@@ -88,6 +88,11 @@ function cursorIsValid(cursor: StreamCursor): boolean {
     && typeof cursor.eventId === 'string' && cursor.eventId.trim().length > 0
 }
 
+function safeWorldTime(value: unknown): value is WorldTime {
+  if (value === null || typeof value !== 'object') return false
+  try { return isValidWorldTime(value as WorldTime) } catch { return false }
+}
+
 function compareTime(left: WorldTime, right: WorldTime): number {
   const order = ['晨', '午', '暮', '夜'] as const
   if (left.day !== right.day) return left.day < right.day ? -1 : 1
@@ -125,9 +130,10 @@ function validateEvent<Kind extends string>(
     || typeof event.intentKind !== 'string' || !event.intentKind.trim()
     || typeof event.actor !== 'string' || !event.actor.trim()
     || typeof event.clientRequestId !== 'string' || !event.clientRequestId.trim()
-    || !isValidWorldTime(event.requestWorldTime) || !isValidWorldTime(event.committedAt)
+    || !safeWorldTime(event.requestWorldTime) || !safeWorldTime(event.committedAt)
     || compareTime(event.committedAt, event.requestWorldTime) < 0
-    || (event.source === 'ai-candidate' && (!event.candidateRef?.trim() || !event.validationRef?.trim()))
+    || (event.source === 'ai-candidate' && (typeof event.candidateRef !== 'string' || !event.candidateRef.trim()
+      || typeof event.validationRef !== 'string' || !event.validationRef.trim()))
     || (event.source !== 'ai-candidate' && (event.candidateRef !== undefined || event.validationRef !== undefined))) {
     return 'replay-event-metadata-invalid'
   }
