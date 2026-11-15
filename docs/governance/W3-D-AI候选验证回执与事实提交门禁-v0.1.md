@@ -41,11 +41,10 @@
 
 ## 4. candidate.validated 回执
 
-验证成功时由可信规则执行器追加唯一的 `candidate.validated` 控制事件，source 固定为 `rule`。回执 payload 包含：
+验证成功时由可信规则执行器追加唯一的 `candidate.validated` 控制事件，source 固定为 `rule`。回执 payload 仅包含以下证明字段，不包含候选 payload 原文：
 
 - candidate：候选稳定 ID
 - targetKind：候选目标事件类型
-- candidatePayload：待提交 payload 的不可变快照
 - payloadDigest：规范摘要
 - digestAlgorithm：固定算法标识
 - registryVersion：实际执行的 frozen Registry 版本
@@ -59,8 +58,8 @@
 
 1. candidateRef 与 validationRef 均存在。
 2. validationRef 指向同一 EventLedger 中更早的 `candidate.validated` 事件。
-3. 回执 candidate、targetKind、candidatePayload 与本次提交一致。
-4. digestAlgorithm 与 payloadDigest 完全匹配。
+3. 回执 candidate、targetKind、registryVersion 与本次提交及 frozen Registry 一致。
+4. 事实 payload 重新通过领域 schema 校验，并按 canonical-json-v1 重算摘要，与回执 payloadDigest 完全匹配。
 5. Registry 当前 frozen，registryVersion 与候选及回执一致。
 6. 领域 schema 在验证时和事实提交时均重新校验通过。
 7. 候选状态为 validated，且未被 rejected。
