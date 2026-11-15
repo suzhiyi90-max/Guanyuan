@@ -17,6 +17,7 @@ const deceased = brandedId<'PersonId'>('deceased')
 const deathEvent = brandedId<'EventId'>('death')
 const reviewEvent = brandedId<'EventId'>('review')
 const debtId = brandedId<'DebtId'>('debt')
+const otherDebtId = brandedId<'DebtId'>('other-debt')
 const entryId = brandedId<'DebtDeathInventoryEntryId'>('entry')
 const inventoryId = brandedId<'DebtDeathInventoryId'>('inventory')
 const evidenceId = brandedId<'DeathSettlementEvidenceId'>('evidence')
@@ -31,20 +32,38 @@ const refs = {
   eventTimes: new Map<EventId, WorldTime>([[deathEvent, deathAt], [reviewEvent, reviewAt]]),
 }
 const evidence = projectDebtDeathInventoryEvidence(evidenceId, inventory)
-const canonical = { id: inventoryId, deceased, deathEvent, inventoryEvent: reviewEvent, status: inventory.status, entryIds: inventory.entries.map(item => item.id) }
+const canonical = {
+  id: inventoryId, deceased, deathEvent, inventoryEvent: reviewEvent, status: inventory.status,
+  entries: [{ id: entryId, itemRef: `debt:${debtId}:creditor` }],
+}
 check('debt projection preserves inventory identity and scope', evidence.inventory === inventoryId
   && evidence.deceased === deceased && evidence.entries[0].id === entryId)
 check('debt projection preserves typed creditor/debtor position', evidence.positions[0].debt === debtId
   && evidence.positions[0].role === 'creditor')
-check('valid envelope passes structural validation', validateDeathSettlementDomainEvidence(
+check('valid envelope passes exact canonical mapping validation', validateDeathSettlementDomainEvidence(
   evidence, canonical, refs, deathAt,
 ).length === 0)
 check('missing canonical inventory is rejected', validateDeathSettlementDomainEvidence(
   evidence, null, refs, deathAt,
 ).includes('death-settlement-evidence-inventory-reference-missing'))
+check('canonical inventory identity mismatch is rejected', validateDeathSettlementDomainEvidence(
+  evidence, { ...canonical, deceased: brandedId<'PersonId'>('someone-else') }, refs, deathAt,
+).includes('death-settlement-evidence-inventory-identity-mismatch'))
+check('canonical inventory status mismatch is rejected', validateDeathSettlementDomainEvidence(
+  evidence, { ...canonical, status: 'open' }, refs, deathAt,
+).includes('death-settlement-evidence-inventory-status-mismatch'))
+check('same-count but wrong canonical item reference is rejected', validateDeathSettlementDomainEvidence(
+  evidence, { ...canonical, entries: [{ id: entryId, itemRef: `debt:${otherDebtId}:creditor` }] }, refs, deathAt,
+).includes('death-settlement-evidence-domain-reference-mismatch'))
 check('review event before death is rejected', validateDeathSettlementDomainEvidence(
   evidence, canonical, { ...refs, eventTimes: new Map([[deathEvent, deathAt], [reviewEvent, { day: 2, period: '夜' }]]) }, deathAt,
 ).includes('death-settlement-evidence-inventory-before-death'))
+check('missing review event time is rejected', validateDeathSettlementDomainEvidence(
+  evidence, canonical, { ...refs, eventTimes: new Map([[deathEvent, deathAt]]) }, deathAt,
+).includes('death-settlement-evidence-review-time-missing'))
+check('death event time mismatch is rejected', validateDeathSettlementDomainEvidence(
+  evidence, canonical, { ...refs, eventTimes: new Map([[deathEvent, { day: 3, period: '暮' }], [reviewEvent, reviewAt]]) }, deathAt,
+).includes('death-settlement-evidence-death-time-mismatch'))
 check('duplicate evidence entry IDs are rejected', validateDeathSettlementDomainEvidence(
   { ...evidence, entries: [evidence.entries[0], evidence.entries[0]] }, canonical, refs, deathAt,
 ).includes('death-settlement-evidence-entry-id-duplicate'))
