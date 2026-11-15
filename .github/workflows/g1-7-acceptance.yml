@@ -18,6 +18,7 @@ on:
       - work/w2-w-relation-goal-evidence
       - work/w2-x-asset-evidence
       - work/w2-y-death-settlement-coordinator
+      - work/w3-a-append-only-event-ledger
   pull_request:
     branches:
       - feat/g1-engine
@@ -51,6 +52,7 @@ on:
       - work/w2-w-relation-goal-evidence
       - work/w2-x-asset-evidence
       - work/w2-y-death-settlement-coordinator
+      - work/w3-a-append-only-event-ledger
   workflow_dispatch:
 
 permissions:
@@ -133,6 +135,8 @@ jobs:
         run: npm run test:domain:death-evidence-envelope
       - name: Death settlement coordinator contracts
         run: npm run test:domain:death-coordinator
+      - name: Event ledger core contracts
+        run: npm run test:domain:event-ledger
       - name: Review index integrity
         run: npm run check:docs
       - name: Patch whitespace integrity
