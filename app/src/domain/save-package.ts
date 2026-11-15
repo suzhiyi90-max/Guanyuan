@@ -84,7 +84,7 @@ function canonicalJson(value: unknown, ancestors = new Set<object>()): string {
   }
 }
 
-function cloneFreezeJson(value: unknown, ancestors = new Set<object>()): JsonValue {
+export function cloneFreezeSavePackageJson(value: unknown, ancestors = new Set<object>()): JsonValue {
   if (value === null || typeof value === 'string' || typeof value === 'boolean') return value
   if (typeof value === 'number') {
     if (!Number.isFinite(value)) throw new Error('save-package-envelope-invalid')
@@ -93,12 +93,12 @@ function cloneFreezeJson(value: unknown, ancestors = new Set<object>()): JsonVal
   if (typeof value !== 'object' || ancestors.has(value)) throw new Error('save-package-envelope-invalid')
   ancestors.add(value)
   try {
-    if (Array.isArray(value)) return Object.freeze(value.map(item => cloneFreezeJson(item, ancestors)))
+    if (Array.isArray(value)) return Object.freeze(value.map(item => cloneFreezeSavePackageJson(item, ancestors)))
     const prototype = Object.getPrototypeOf(value)
     if (prototype !== Object.prototype && prototype !== null) throw new Error('save-package-envelope-invalid')
     const record = value as Record<string, unknown>
     const result: Record<string, JsonValue> = {}
-    for (const key of Object.keys(record).sort()) result[key] = cloneFreezeJson(record[key], ancestors)
+    for (const key of Object.keys(record).sort()) result[key] = cloneFreezeSavePackageJson(record[key], ancestors)
     return Object.freeze(result)
   } finally {
     ancestors.delete(value)
@@ -250,7 +250,7 @@ export async function validateFullSavePackage<Kind extends string>(
         ? { kind: 'genesis' as const, seq: 0 as const }
         : { kind: 'event' as const, seq: to.seq, eventId: to.eventId }),
     }),
-    events: Object.freeze(value.events.map(event => cloneFreezeJson(event) as unknown as LedgerEvent)),
+    events: Object.freeze(value.events.map(event => cloneFreezeSavePackageJson(event) as unknown as LedgerEvent)),
     snapshot: snapshotResult.snapshot,
     checksum: value.checksum,
   })
