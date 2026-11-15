@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - fix/g1.7-acceptance
+      - work/w2-l-relation-death-continuity
   pull_request:
     branches:
       - feat/g1-engine
