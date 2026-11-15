@@ -5,7 +5,7 @@
  * 数值 / 阈值 / 文案一条未改；唯一成本变化＝AI 入口的正式业务行动与 UI 入口一致耗时段（用户施工单授权）。
  * 判定口径单源（红线 29/32）：可用性谓词来自 effects 目录与 engine，命令层不另算一套。
  */
-import type { GameState } from './useGame'
+import type { GameState } from './model'
 import type { OfficialActionId } from '../types'
 import type { GeneratedEvent } from '../narrative/types'
 import { officialAvailableOf, resolveWorldOptionPure, spendAction } from './engine'
