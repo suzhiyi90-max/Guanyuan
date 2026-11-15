@@ -28,6 +28,7 @@ on:
       - work/w4-c-incremental-save-chain
       - work/w5-a-runtime-connection-audit
       - work/w5-b-runtime-event-catalog-projection
+      - work/w5-c-runtime-command-orchestration
   pull_request:
     branches:
       - feat/g1-engine
@@ -70,6 +71,7 @@ on:
       - work/w4-b-full-save-package
       - work/w4-c-incremental-save-chain
       - work/w5-a-runtime-connection-audit
+      - work/w5-b-runtime-event-catalog-projection
   workflow_dispatch:
 
 permissions:
@@ -168,6 +170,8 @@ jobs:
         run: npm run test:domain:incremental-save-package
       - name: Preview runtime event catalog and projection contracts
         run: npm run test:domain:preview-runtime-projection
+      - name: Runtime command orchestration contracts
+        run: npm run test:domain:runtime-orchestrator
       - name: Review index integrity
         run: npm run check:docs
       - name: Patch whitespace integrity
