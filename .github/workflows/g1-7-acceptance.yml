@@ -15,6 +15,7 @@ on:
       - work/w2-t-goal-death-inventory
       - work/w2-u-death-evidence-envelope
       - work/w2-v-office-membership-evidence
+      - work/w2-w-relation-goal-evidence
   pull_request:
     branches:
       - feat/g1-engine
@@ -45,6 +46,7 @@ on:
       - work/w2-t-goal-death-inventory
       - work/w2-u-death-evidence-envelope
       - work/w2-v-office-membership-evidence
+      - work/w2-w-relation-goal-evidence
   workflow_dispatch:
 
 permissions:

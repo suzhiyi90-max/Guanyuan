@@ -2,10 +2,14 @@ import { brandedId } from '../shared/ids'
 import type { DebtDeathInventory } from './debt-death-inventory'
 import type { DeathOfficeInventory } from '../identity/death-inventory'
 import type { MembershipDeathInventory } from '../relations/death-inventory'
+import type { RelationDeathInventory } from '../relations/relation-death-inventory'
+import type { GoalDeathInventory } from '../planning/death-inventory'
 import {
   projectDebtDeathInventoryEvidence,
   projectDeathOfficeInventoryEvidence,
   projectMembershipDeathInventoryEvidence,
+  projectRelationDeathInventoryEvidence,
+  projectGoalDeathInventoryEvidence,
   validateDeathSettlementDomainEvidence,
 } from './death-settlement-evidence'
 import type { EventId } from '../shared/ids'
@@ -128,6 +132,53 @@ check('membership evidence rejects a wrong canonical membership reference', vali
 check('office and membership inventory states are carried without promotion',
   projectDeathOfficeInventoryEvidence(evidenceId, { ...officeInventory, status: 'challenged' }).status === 'challenged'
   && projectMembershipDeathInventoryEvidence(evidenceId, { ...membershipInventory, status: 'open' }).status === 'open')
+
+
+const relationId = brandedId<'RelationId'>('relation')
+const relationInventoryId = brandedId<'RelationDeathInventoryId'>('relation-inventory')
+const relationEntryId = brandedId<'RelationDeathInventoryEntryId'>('relation-entry')
+const relationInventory: RelationDeathInventory = {
+  id: relationInventoryId, deceased, deathEvent, inventoryEvent: reviewEvent, status: 'complete',
+  relations: [{ id: relationEntryId, relation: relationId, outcome: 'preserved' }],
+}
+const relationEvidence = projectRelationDeathInventoryEvidence(evidenceId, relationInventory)
+const relationCanonical = {
+  id: relationInventoryId, deceased, deathEvent, inventoryEvent: reviewEvent, status: 'complete' as const,
+  entries: [{ id: relationEntryId, itemRef: `relation:${relationId}` }],
+}
+check('relation projection preserves canonical relation identity and entry', relationEvidence.relations[0] === relationId
+  && relationEvidence.entries[0].id === relationEntryId)
+check('relation evidence aligns with canonical typed inventory', validateDeathSettlementDomainEvidence(
+  relationEvidence, relationCanonical, refs, deathAt,
+).length === 0)
+check('relation evidence rejects wrong canonical relation reference', validateDeathSettlementDomainEvidence(
+  relationEvidence, { ...relationCanonical, entries: [{ id: relationEntryId, itemRef: 'relation:other' }] }, refs, deathAt,
+).includes('death-settlement-evidence-domain-reference-mismatch'))
+
+const goalId = brandedId<'GoalId'>('goal')
+const goalInventoryId = brandedId<'GoalDeathInventoryId'>('goal-inventory')
+const goalEntryId = brandedId<'GoalDeathInventoryEntryId'>('goal-entry')
+const goalInventory: GoalDeathInventory = {
+  id: goalInventoryId, deceased, deathEvent, inventoryEvent: reviewEvent, status: 'complete',
+  goals: [{ id: goalEntryId, goal: goalId, outcome: 'undertaken' }],
+}
+const goalEvidence = projectGoalDeathInventoryEvidence(evidenceId, goalInventory)
+const goalCanonical = {
+  id: goalInventoryId, deceased, deathEvent, inventoryEvent: reviewEvent, status: 'complete' as const,
+  entries: [{ id: goalEntryId, itemRef: `goal:${goalId}` }],
+}
+check('goal projection preserves canonical NPC goal identity and entry', goalEvidence.goals[0] === goalId
+  && goalEvidence.entries[0].id === goalEntryId)
+check('goal evidence aligns with canonical typed inventory', validateDeathSettlementDomainEvidence(
+  goalEvidence, goalCanonical, refs, deathAt,
+).length === 0)
+check('goal evidence rejects wrong canonical goal reference', validateDeathSettlementDomainEvidence(
+  goalEvidence, { ...goalCanonical, entries: [{ id: goalEntryId, itemRef: 'goal:other' }] }, refs, deathAt,
+).includes('death-settlement-evidence-domain-reference-mismatch'))
+check('relation and goal inventory states are carried without promotion',
+  projectRelationDeathInventoryEvidence(evidenceId, { ...relationInventory, status: 'challenged' }).status === 'challenged'
+  && projectGoalDeathInventoryEvidence(evidenceId, { ...goalInventory, status: 'open' }).status === 'open')
+
 
 if (failed) throw new Error('Death evidence envelope tests failed: ' + failed + '/' + (passed + failed))
 console.log('Death evidence envelope contracts: ' + passed + '/' + (passed + failed) + ' passed')
