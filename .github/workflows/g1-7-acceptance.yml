@@ -135,8 +135,6 @@ jobs:
         run: npm run test:domain:death-evidence-envelope
       - name: Death settlement coordinator contracts
         run: npm run test:domain:death-coordinator
-      - name: Death settlement coordinator contracts
-        run: npm run test:domain:death-coordinator
       - name: Event ledger core contracts
         run: npm run test:domain:event-ledger
       - name: Review index integrity
