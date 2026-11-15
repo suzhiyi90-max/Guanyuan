@@ -20,9 +20,10 @@ export type PreviewRuntimeEventKind =
   | 'world.event.resolved'
   | 'day.advanced'
   | 'candidate.validated'
+  | 'ai.generated-event.resolved'
 
 export const PREVIEW_RUNTIME_REGISTRY_ID = 'guanyuan.preview-runtime'
-export const PREVIEW_RUNTIME_REGISTRY_VERSION = '0.1.0'
+export const PREVIEW_RUNTIME_REGISTRY_VERSION = '0.2.0'
 export const PREVIEW_RUNTIME_SCHEMA_VERSION = 1
 
 type RecordValue = Record<string, unknown>
@@ -84,6 +85,14 @@ function worldEventPayload(payload: unknown): boolean {
     && nonEmptyString(payload.eventId) && nonEmptyString(payload.optionId)
 }
 
+function generatedEventResolutionPayload(payload: unknown): boolean {
+  if (!isRecord(payload) || !hasExactKeys(payload, ['generatedEventId', 'optionId', 'effect', 'result', 'refs'])) return false
+  return typeof payload.generatedEventId === 'string' && payload.generatedEventId.startsWith('ai-')
+    && nonEmptyString(payload.optionId) && nonEmptyString(payload.effect)
+    && typeof payload.result === 'string' && payload.result.length >= 1 && payload.result.length <= 140
+    && stringList(payload.refs)
+}
+
 const definitions: readonly {
   readonly kind: Exclude<PreviewRuntimeEventKind, 'candidate.validated'>
   readonly validate: EventSchemaValidator
@@ -100,6 +109,7 @@ const definitions: readonly {
   { kind: 'official.action', validate: officialActionPayload },
   { kind: 'world.event.resolved', validate: worldEventPayload },
   { kind: 'day.advanced', validate: emptyPayload },
+  { kind: 'ai.generated-event.resolved', validate: generatedEventResolutionPayload },
 ]
 
 /**
