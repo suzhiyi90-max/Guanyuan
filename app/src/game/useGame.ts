@@ -13,6 +13,19 @@ export type { ReckoningRow, GoalReckoning, Verdict } from './engine'
 const SAVE_KEY = 'guanyuan.save.v1'
 
 const initialState = createInitialGameState()
+
+// Preserve the existing v1 restore behavior while GameState ownership moves out of the React hook.
+function loadSave(): GameState | null {
+  try {
+    const raw = localStorage.getItem(SAVE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as GameState
+    if (!parsed || typeof parsed.day !== 'number' || !Array.isArray(parsed.clues)) return null
+    return { ...initialState, ...parsed }
+  } catch {
+    return null
+  }
+}
 export function taskStageOf(state: GameState): TaskStage {
   if (state.plan) {
     if (state.day >= 10) return '结'
