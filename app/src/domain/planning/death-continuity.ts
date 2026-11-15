@@ -1,5 +1,5 @@
 import { compareWorldTime, isValidWorldTime } from '../shared/world-time'
-import type { EventId, GoalDeathDispositionId, GoalId, PersonId } from '../shared/ids'
+import type { EventId, GoalId, PersonId } from '../shared/ids'
 import type { WorldTime } from '../shared/world-time'
 import type { Person } from '../person/model'
 import type { Field } from '../shared/field'
@@ -29,6 +29,7 @@ export type GoalDeathIssue =
   | 'goal-death-goal-starts-at-or-after-death'
   | 'goal-death-disposition-time-invalid'
   | 'goal-death-disposition-before-death'
+  | 'goal-death-historical-event-mismatch'
   | 'goal-death-outcome-invalid'
   | 'goal-death-goal-status-mismatch'
   | 'goal-death-successor-field-mismatch'
@@ -141,7 +142,7 @@ export function validateGoalDeathContinuity(
     if (item.outcome === 'historical') {
       if (goal.status !== 'closed-by-death') issues.push('goal-death-goal-status-mismatch')
       if (item.dispositionEvent !== item.deathEvent || compareWorldTime(dispositionAt, death.at) !== 0) {
-        issues.push('goal-death-disposition-before-death')
+        issues.push('goal-death-historical-event-mismatch')
       }
       if (hasValue(item.successorGoal)) issues.push('goal-death-successor-field-mismatch')
     } else if (item.outcome === 'abandoned' || item.outcome === 'failed') {
