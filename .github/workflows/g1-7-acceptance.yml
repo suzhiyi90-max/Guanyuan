@@ -22,6 +22,7 @@ on:
       - work/w2-h-authorization-death-gate
       - work/w2-i-debt-death-continuity
       - work/w2-j-estate-asset-inventory
+      - work/w2-k-membership-death-continuity
   workflow_dispatch:
 
 permissions:
@@ -68,6 +69,8 @@ jobs:
         run: npm run test:domain:estate-inventory
       - name: Membership death continuity contracts
         run: npm run test:domain:membership-death
+      - name: Relation death continuity contracts
+        run: npm run test:domain:relation-death
       - name: Life history and body/mind hook contracts
         run: npm run test:domain:life
       - name: Calendar age contract tests
