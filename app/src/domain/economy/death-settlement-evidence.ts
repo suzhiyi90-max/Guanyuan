@@ -9,6 +9,8 @@ import type {
 import type { DebtDeathInventory } from './debt-death-inventory'
 import type { DeathOfficeInventory } from '../identity/death-inventory'
 import type { MembershipDeathInventory } from '../relations/death-inventory'
+import type { RelationDeathInventory } from '../relations/relation-death-inventory'
+import type { GoalDeathInventory } from '../planning/death-inventory'
 import { compareWorldTime, isValidWorldTime } from '../shared/world-time'
 import type { WorldTime } from '../shared/world-time'
 
@@ -157,6 +159,43 @@ export function projectMembershipDeathInventoryEvidence(
     status: inventory.status,
     entries: inventory.memberships.map(entry => ({ id: entry.id })),
     memberships: inventory.memberships.map(entry => entry.membership),
+  }
+}
+
+
+/** Project the relation domain's canonical relation inventory without copying outcomes. */
+export function projectRelationDeathInventoryEvidence(
+  id: DeathSettlementEvidenceId,
+  inventory: RelationDeathInventory,
+): Extract<DeathSettlementDomainEvidence, { readonly domain: 'relation' }> {
+  return {
+    id,
+    deceased: inventory.deceased,
+    deathEvent: inventory.deathEvent,
+    inventoryEvent: inventory.inventoryEvent,
+    domain: 'relation',
+    inventory: inventory.id,
+    status: inventory.status,
+    entries: inventory.relations.map(entry => ({ id: entry.id })),
+    relations: inventory.relations.map(entry => entry.relation),
+  }
+}
+
+/** Project the NPC goal domain's canonical inventory without copying outcomes. */
+export function projectGoalDeathInventoryEvidence(
+  id: DeathSettlementEvidenceId,
+  inventory: GoalDeathInventory,
+): Extract<DeathSettlementDomainEvidence, { readonly domain: 'goal' }> {
+  return {
+    id,
+    deceased: inventory.deceased,
+    deathEvent: inventory.deathEvent,
+    inventoryEvent: inventory.inventoryEvent,
+    domain: 'goal',
+    inventory: inventory.id,
+    status: inventory.status,
+    entries: inventory.goals.map(entry => ({ id: entry.id })),
+    goals: inventory.goals.map(entry => entry.goal),
   }
 }
 
