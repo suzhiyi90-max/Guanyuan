@@ -32,6 +32,7 @@ export * from './economy/inheritance'
 export * from './economy/estate-inventory'
 export * from './economy/debt-death-inventory'
 export * from './economy/death-settlement-evidence'
+export * from './economy/death-settlement-coordinator'
 
 export * from './life/model'
 export * from './life/validation'
