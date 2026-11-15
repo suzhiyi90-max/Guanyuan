@@ -53,12 +53,16 @@ export type DeathSettlementEvidenceIssue =
   | 'death-settlement-evidence-inventory-event-missing'
   | 'death-settlement-evidence-inventory-before-death'
   | 'death-settlement-evidence-inventory-reference-missing'
+  | 'death-settlement-evidence-inventory-identity-mismatch'
+  | 'death-settlement-evidence-inventory-status-mismatch'
+  | 'death-settlement-evidence-review-time-missing'
+  | 'death-settlement-evidence-review-time-invalid'
   | 'death-settlement-evidence-entry-id-duplicate'
   | 'death-settlement-evidence-domain-reference-duplicate'
   | 'death-settlement-evidence-domain-entry-count-mismatch'
   | 'death-settlement-evidence-domain-reference-mismatch'
 
-export interface DeathSettlementEvidenceReferences {
+export interface DeathSettlementCanonicalInventoryReference {\n  readonly id: string\n  readonly deceased: PersonId\n  readonly deathEvent: EventId\n  readonly inventoryEvent: EventId\n  readonly status: 'open' | 'challenged' | 'complete'\n  readonly entryIds: readonly string[]\n}\n\nexport interface DeathSettlementEvidenceReferences {
   readonly events: readonly EventId[]
   readonly eventTimes: ReadonlyMap<EventId, import('../shared/world-time').WorldTime>
 }
@@ -87,7 +91,7 @@ export function projectDebtDeathInventoryEvidence(
  */
 export function validateDeathSettlementDomainEvidence(
   evidence: DeathSettlementDomainEvidence,
-  inventoryExists: boolean,
+  canonical: DeathSettlementCanonicalInventoryReference | null,
   refs: DeathSettlementEvidenceReferences,
   deathAt: import('../shared/world-time').WorldTime,
 ): DeathSettlementEvidenceIssue[] {
