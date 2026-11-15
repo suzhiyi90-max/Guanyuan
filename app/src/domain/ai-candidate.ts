@@ -174,12 +174,12 @@ export async function validateAiCandidate(
   if (append.status !== 'appended' && append.status !== 'duplicate') return { status: 'ledger-rejected', log, ledger, append }
   const receiptPayload = append.event.payload
   if (receiptPayload === null || typeof receiptPayload !== 'object' || Array.isArray(receiptPayload)
-    || receiptPayload.candidate !== candidateId
-    || receiptPayload.targetKind !== candidate.targetKind
-    || receiptPayload.payloadDigest !== payloadDigest
-    || receiptPayload.registryVersion !== candidate.registryVersion
-    || receiptPayload.digestAlgorithm !== 'sha-256/canonical-json-v1'
-    || receiptPayload.validatedBy !== validatedBy) {
+    || (receiptPayload as { readonly [key: string]: JsonValue }).candidate !== candidateId
+    || (receiptPayload as { readonly [key: string]: JsonValue }).targetKind !== candidate.targetKind
+    || (receiptPayload as { readonly [key: string]: JsonValue }).payloadDigest !== payloadDigest
+    || (receiptPayload as { readonly [key: string]: JsonValue }).registryVersion !== candidate.registryVersion
+    || (receiptPayload as { readonly [key: string]: JsonValue }).digestAlgorithm !== 'sha-256/canonical-json-v1'
+    || (receiptPayload as { readonly [key: string]: JsonValue }).validatedBy !== validatedBy) {
     return { status: 'ledger-rejected', log, ledger, append }
   }
   const nextCandidate = Object.freeze({ ...candidate, status: 'validated' as const })
@@ -218,7 +218,7 @@ export async function appendValidatedAiCandidateFact(
   const validationEvent = ledger.events.find(event => event.kind === 'candidate.validated'
     && event.source === 'rule'
     && event.payload !== null && typeof event.payload === 'object' && !Array.isArray(event.payload)
-    && event.payload.candidate === candidateId)
+    && (event.payload as { readonly [key: string]: JsonValue }).candidate === candidateId)
   if (!validationEvent || validationEvent.seq >= ledger.head + 1) {
     return { status: 'rejected', ledger, reason: 'validation-receipt-missing' }
   }
