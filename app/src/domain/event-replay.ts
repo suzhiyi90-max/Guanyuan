@@ -84,7 +84,7 @@ function cloneFreezeEvent<Kind extends string>(event: LedgerEvent<Kind>): Ledger
 function cursorIsValid(cursor: StreamCursor): boolean {
   if (cursor === null || typeof cursor !== 'object') return false
   if (cursor.kind === 'genesis') return cursor.seq === 0
-  return cursor.kind === 'event' && Number.isInteger(cursor.seq) && cursor.seq > 0
+  return cursor.kind === 'event' && Number.isSafeInteger(cursor.seq) && cursor.seq > 0
     && typeof cursor.eventId === 'string' && cursor.eventId.trim().length > 0
 }
 
@@ -173,6 +173,7 @@ export function replayEventRange<Kind extends string>(
   for (let index = 0; index < input.events.length; index += 1) {
     const event = input.events[index]
     const seq = from.seq + index + 1
+    if (!Number.isSafeInteger(seq)) return { status: 'rejected', issue: 'replay-range-invalid' }
     const issue = validateEvent(event, input.worldId, seq, input.registry)
     if (issue) return { status: 'rejected', issue, seq, eventId: event.id }
     try { checked.push(cloneFreezeEvent(event)) } catch {
@@ -201,13 +202,16 @@ export function replayEventRange<Kind extends string>(
       return { status: 'rejected', issue: 'replay-reducer-failed', seq: event.seq, eventId: event.id }
     }
   }
-  return {
-    status: 'replayed',
+  const cursor: StreamCursor = Object.freeze(to.kind === 'genesis'
+    ? { kind: 'genesis' as const, seq: 0 as const }
+    : { kind: 'event' as const, seq: to.seq, eventId: to.eventId })
+  return Object.freeze({
+    status: 'replayed' as const,
     worldId: input.worldId,
     state,
-    cursor: to,
+    cursor,
     applied: checked.length,
-  }
+  })
 }
 
 export interface ReadOnlyProjection {
