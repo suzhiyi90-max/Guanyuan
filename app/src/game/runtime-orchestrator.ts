@@ -191,19 +191,23 @@ export async function dispatchPreviewRuntimeCandidate(
     return { status: 'rejected', session: unchanged(), reason: 'effect-unavailable' }
   }
 
+  const candidatePayload: JsonValue = {
+    generatedEventId: generated.id,
+    optionId: option.id,
+    effect: option.effect,
+    result: option.result || option.label,
+    refs,
+  }
   let log = session.candidateLog
+  if (existing && JSON.stringify(existing.payload) !== JSON.stringify(candidatePayload)) {
+    return { status: 'rejected', session: unchanged(), reason: 'candidate-payload-conflict' }
+  }
   if (!existing) {
     const submitted = submitAiCandidate(log, {
       candidateId,
       targetKind: 'ai.generated-event.resolved',
       registryVersion: session.registry.registryVersion,
-      payload: {
-        generatedEventId: generated.id,
-        optionId: option.id,
-        effect: option.effect,
-        result: option.result || option.label,
-        refs,
-      },
+      payload: candidatePayload,
     })
     if (submitted.status !== 'accepted') return { status: 'rejected', session: unchanged(), reason: 'candidate-submit-rejected' }
     log = submitted.log
@@ -232,8 +236,12 @@ export async function dispatchPreviewRuntimeCandidate(
     }
   }
 
+  const validationEvent = validatedLedger.events.find(item => item.kind === 'candidate.validated'
+    && item.payload !== null && typeof item.payload === 'object' && !Array.isArray(item.payload)
+    && (item.payload as { readonly [key: string]: JsonValue }).candidate === candidateId)
+  if (!validationEvent) return { status: 'rejected', session: unchanged(), reason: 'validation-receipt-missing' }
   const fact = await appendValidatedAiCandidateFact(
-    log, validatedLedger, session.registry, candidateId, now, now,
+    log, validatedLedger, session.registry, candidateId, validationEvent.requestWorldTime, now,
   )
   if (fact.status === 'rejected') {
     return { status: 'rejected', session: unchanged(), reason: fact.reason }
