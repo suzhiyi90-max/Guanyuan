@@ -80,11 +80,22 @@ async function main(): Promise<void> {
   check('receipt digest and registry provenance match', validated.receipt.payloadDigest === digestA
     && validated.receipt.registryVersion === '3.1.0'
     && validated.receipt.validationEventId === ledger.events[0].id)
+  check('receipt stores only digest/provenance, not candidate payload', ledger.events[0].payload !== null
+    && typeof ledger.events[0].payload === 'object' && !Array.isArray(ledger.events[0].payload)
+    && !('candidatePayload' in ledger.events[0].payload))
   const retryValidation = await validateAiCandidate(log, ledger, frozen, 'cand-001', 'rule:person-create', time, time)
   check('validated candidate cannot be validated a second time', retryValidation.status === 'invalid-state')
   const recoveredValidation = await validateAiCandidate(pendingSnapshot, ledger, frozen, 'cand-001', 'rule:person-create', time, time)
   check('retry recovers a committed receipt without appending a second one', recoveredValidation.status === 'validated'
     && recoveredValidation.ledger.head === 1 && recoveredValidation.receipt.validationEventId === validated.receipt.validationEventId)
+
+  const genericAiBypass = appendLedgerEvent(ledger, {
+    source: 'ai-candidate', kind: 'person.created', intentKind: 'ai-candidate-fact',
+    actor: 'ai-candidate', requestWorldTime: later, clientRequestId: 'generic-bypass',
+    candidateRef: 'cand-001', validationRef: ledger.events[0].id, payload,
+  }, later)
+  check('generic append cannot bypass trusted digest/schema fact gate', genericAiBypass.status === 'rejected'
+    && genericAiBypass.ledger === ledger)
 
   const fact = await appendValidatedAiCandidateFact(log, ledger, frozen, 'cand-001', later, later)
   check('validated candidate appends AI fact linked to receipt', fact.status === 'appended'
