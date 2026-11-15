@@ -24,6 +24,7 @@ const worldId = brandedId<'WorldId'>('incremental-world') as WorldId
 const t1 = { day: 1, period: '晨' } as const
 const t2 = { day: 1, period: '午' } as const
 const t3 = { day: 1, period: '暮' } as const
+const t4 = { day: 1, period: '夜' } as const
 const genesis: StreamCursor = { kind: 'genesis', seq: 0 }
 let registry = createEventRegistry<Kind>('incremental-test', '1.0.0')
 const registered = registerEventSchema(registry, {
@@ -59,6 +60,13 @@ const third = appendLedgerEvent(ledger, {
 }, t3)
 if (third.status !== 'appended') throw new Error('incremental-test-third-event-failed')
 const thirdEvent = third.event
+ledger = third.ledger
+const fourth = appendLedgerEvent(ledger, {
+  source: 'rule', kind: 'person.created', intentKind: 'create-person',
+  actor: 'system', requestWorldTime: t4, clientRequestId: 'i4', payload: { name: '丁' },
+}, t4)
+if (fourth.status !== 'appended') throw new Error('incremental-test-fourth-event-failed')
+const fourthEvent = fourth.event
 
 const head2: StreamCursor = { kind: 'event', seq: 2, eventId: secondEvent.id }
 const head3: StreamCursor = { kind: 'event', seq: 3, eventId: thirdEvent.id }
@@ -119,6 +127,29 @@ async function main(): Promise<void> {
 
   if (created.status !== 'valid') throw new Error('incremental-test-cannot-continue-without-valid-package')
   const valid = created.package
+  const head4: StreamCursor = { kind: 'event', seq: 4, eventId: fourthEvent.id }
+  const secondReplay = replayEventRange({
+    worldId, fromExclusive: head3, toInclusive: head4,
+    anchorEvent: thirdEvent, events: [fourthEvent], registry,
+    initialState: nextSnapshot.snapshot.materialized, reduce,
+  })
+  if (secondReplay.status !== 'replayed') throw new Error('incremental-test-second-range-replay-failed')
+  const secondSnapshot = createWorldSnapshot({
+    schemaVersion: 1, worldId, streamHead: head4, checkpointAt: t4, materialized: secondReplay.state,
+  })
+  if (secondSnapshot.status !== 'valid') throw new Error('incremental-test-second-snapshot-failed')
+  const secondIncremental = await createIncrementalSavePackage({
+    packageKind: 'incremental', worldId, schemaVersion: 1,
+    streamRange: { fromExclusive: head3, toInclusive: head4 },
+    events: [fourthEvent], snapshot: secondSnapshot.snapshot, basePackage: valid,
+  }, verification)
+  check('multiple incremental layers preserve a continuous base chain', secondIncremental.status === 'valid'
+    && secondIncremental.package.packageKind === 'incremental'
+    && secondIncremental.package.basePackage.packageKind === 'incremental'
+    && secondIncremental.package.basePackage.basePackage.packageKind === 'full')
+  check('multi-layer chain validates recursively to its full root', secondIncremental.status === 'valid'
+    && (await validateSavePackageChain(secondIncremental.package, verification)).status === 'valid')
+
   const cyclicChain: Record<string, unknown> = { ...valid, packageKind: 'incremental' }
   cyclicChain.basePackage = cyclicChain
   const deepChain = await validateSavePackageChain(cyclicChain, verification)
@@ -129,6 +160,17 @@ async function main(): Promise<void> {
     ...valid,
     events: [{ ...valid.events[0], payload: { name: '篡改' } }],
   }
+  const tamperedBase = {
+    ...valid,
+    basePackage: {
+      ...valid.basePackage,
+      events: [{ ...valid.basePackage.events[0], payload: { name: '根包篡改' } }, valid.basePackage.events[1]],
+    },
+  }
+  const baseTamperResult = await validateIncrementalSavePackage(tamperedBase, verification)
+  check('corrupted base package invalidates every descendant package', baseTamperResult.status === 'rejected'
+    && baseTamperResult.issue === 'save-package-base-invalid')
+
   const tamperResult = await validateIncrementalSavePackage(tampered, verification)
   check('incremental event tampering is rejected by checksum', tamperResult.status === 'rejected'
     && tamperResult.issue === 'save-package-checksum-invalid')
@@ -205,6 +247,13 @@ async function main(): Promise<void> {
   }, verification)
   if (receiptBase.status !== 'valid') throw new Error('incremental-test-receipt-base-failed')
 
+  const receiptCheckpoint = await createIncrementalSavePackage({
+    packageKind: 'incremental', worldId: receiptWorld, schemaVersion: 1,
+    streamRange: { fromExclusive: receiptHead, toInclusive: receiptHead },
+    events: [], snapshot: receiptSnapshot.snapshot, basePackage: receiptBase.package,
+  }, verification)
+  if (receiptCheckpoint.status !== 'valid') throw new Error('incremental-test-receipt-checkpoint-failed')
+
   const aiAppend = await appendAiCandidateFact(receiptAppend.ledger, registry, {
     source: 'ai-candidate',
     kind: 'person.created',
@@ -226,7 +275,7 @@ async function main(): Promise<void> {
   const aiIncremental = await createIncrementalSavePackage({
     packageKind: 'incremental', worldId: receiptWorld, schemaVersion: 1,
     streamRange: { fromExclusive: receiptHead, toInclusive: aiHead },
-    events: [aiFact], snapshot: aiSnapshot.snapshot, basePackage: receiptBase.package,
+    events: [aiFact], snapshot: aiSnapshot.snapshot, basePackage: receiptCheckpoint.package,
   }, verification)
   check('incremental replay carries earlier AI validation receipts from its base chain', aiIncremental.status === 'valid')
 
