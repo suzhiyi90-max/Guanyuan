@@ -22,6 +22,7 @@ on:
       - work/w3-b-frozen-event-schema-registry
       - work/w3-c-command-ledger-idempotency
       - work/w3-d-ai-candidate-validation-receipts
+      - work/w3-e-event-replay-readonly-projection
   pull_request:
     branches:
       - feat/g1-engine
@@ -59,6 +60,7 @@ on:
       - work/w3-b-frozen-event-schema-registry
       - work/w3-c-command-ledger-idempotency
       - work/w3-d-ai-candidate-validation-receipts
+      - work/w3-e-event-replay-readonly-projection
   workflow_dispatch:
 
 permissions:
@@ -147,6 +149,8 @@ jobs:
         run: npm run test:domain:event-registry
       - name: AI candidate validation and receipt contracts
         run: npm run test:domain:ai-candidate
+      - name: Event replay and read-only projection contracts
+        run: npm run test:domain:event-replay
       - name: Review index integrity
         run: npm run check:docs
       - name: Patch whitespace integrity
