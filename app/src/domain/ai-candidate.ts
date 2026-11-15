@@ -1,6 +1,6 @@
 import {
   appendCandidateValidationReceipt,
-  appendLedgerEvent,
+  appendAiCandidateFact,
   type EventLedger,
   type JsonValue,
   type LedgerEvent,
@@ -230,10 +230,10 @@ export async function appendValidatedAiCandidateFact(
     || payload.registryVersion !== candidate.registryVersion
     || payload.payloadDigest !== digest
     || payload.digestAlgorithm !== 'sha-256/canonical-json-v1'
-    || canonicalJson(payload.candidatePayload) !== canonicalJson(candidate.payload)) {
+    ) {
     return { status: 'rejected', ledger, reason: 'validation-receipt-mismatch' }
   }
-  const append = appendLedgerEvent(ledger, {
+  const append = await appendAiCandidateFact(ledger, registry, {
     source: 'ai-candidate',
     kind: candidate.targetKind,
     intentKind: 'ai-candidate-fact',
