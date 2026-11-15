@@ -66,6 +66,7 @@ async function main(): Promise<void> {
   check('pending candidate cannot append a fact', premature.status === 'rejected'
     && premature.reason === 'candidate-not-validated' && premature.ledger === ledger)
 
+  const pendingSnapshot = log
   const validated = await validateAiCandidate(log, ledger, frozen, 'cand-001', 'rule:person-create', time, time)
   check('pending candidate validates and appends one receipt', validated.status === 'validated'
     && validated.ledger.head === 1 && validated.receipt.digestAlgorithm === 'sha-256/canonical-json-v1')
@@ -79,6 +80,9 @@ async function main(): Promise<void> {
     && validated.receipt.validationEventId === ledger.events[0].id)
   const retryValidation = await validateAiCandidate(log, ledger, frozen, 'cand-001', 'rule:person-create', time, time)
   check('validated candidate cannot be validated a second time', retryValidation.status === 'invalid-state')
+  const recoveredValidation = await validateAiCandidate(pendingSnapshot, ledger, frozen, 'cand-001', 'rule:person-create', time, time)
+  check('retry recovers a committed receipt without appending a second one', recoveredValidation.status === 'validated'
+    && recoveredValidation.ledger.head === 1 && recoveredValidation.receipt.validationEventId === validated.receipt.validationEventId)
 
   const fact = await appendValidatedAiCandidateFact(log, ledger, frozen, 'cand-001', later, later)
   check('validated candidate appends AI fact linked to receipt', fact.status === 'appended'
@@ -87,6 +91,9 @@ async function main(): Promise<void> {
     && fact.event.validationRef === ledger.events[0].id
     && fact.event.seq === 2)
   if (fact.status === 'appended') ledger = fact.ledger
+  const factRetry = await appendValidatedAiCandidateFact(log, ledger, frozen, 'cand-001', later, later)
+  check('fact retry returns duplicate without appending a second fact', factRetry.status === 'duplicate'
+    && factRetry.ledger.head === 2 && factRetry.event.id === fact.event.id)
 
   const fakeReceipt = appendLedgerEvent(ledger, {
     source: 'rule', kind: 'candidate.validated', intentKind: 'fake', actor: 'fake',
