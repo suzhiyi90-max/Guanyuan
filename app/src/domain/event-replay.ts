@@ -225,6 +225,7 @@ export function replayEventRange<Kind extends string>(
     const event = input.events[index]
     const seq = from.seq + index + 1
     if (!Number.isSafeInteger(seq)) return { status: 'rejected', issue: 'replay-range-invalid' }
+    if (!event || typeof event !== 'object') return { status: 'rejected', issue: 'replay-event-metadata-invalid', seq }
     let immutableEvent: LedgerEvent<Kind>
     try { immutableEvent = cloneFreezeEvent(event) } catch {
       return { status: 'rejected', issue: 'replay-schema-invalid', seq, eventId: event.id }
