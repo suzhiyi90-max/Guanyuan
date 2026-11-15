@@ -159,7 +159,11 @@ export async function dispatchPreviewRuntimeCandidate(
     requestSequence: session.requestSequence + 1,
   })
   if (!generated || generated.origin !== 'ai' || typeof generated.id !== 'string'
-    || !generated.id.startsWith('ai-') || generated.day !== session.state.day) {
+    || !/^ai-\\d+-[a-z0-9]+$/u.test(generated.id) || generated.day !== session.state.day
+    || !Number.isSafeInteger(generated.seed) || !Array.isArray(generated.options)
+    || generated.options.length !== 2
+    || !generated.options.some(item => item.id === 'jia')
+    || !generated.options.some(item => item.id === 'yi')) {
     return { status: 'rejected', session: unchanged(), reason: 'not-generated-or-stale' }
   }
   if (session.state.pendingEvent && session.state.pendingEvent !== generated.id) {
@@ -172,10 +176,11 @@ export async function dispatchPreviewRuntimeCandidate(
   if (session.state.handledEvents.includes(generated.id) && existing?.status !== 'validated') {
     return { status: 'rejected', session: unchanged(), reason: 'already-handled' }
   }
+  const refs = option.refs ?? []
   if (!['jia', 'yi'].includes(option.id) || typeof option.result !== 'string'
     || option.result.trim().length === 0 || option.result.length > 140
-    || !Array.isArray(option.refs) || option.refs.length > 4
-    || option.refs.some(ref => !evidenceIds.includes(ref))) {
+    || !Array.isArray(refs) || refs.length > 4
+    || refs.some(ref => !evidenceIds.includes(ref))) {
     return { status: 'rejected', session: unchanged(), reason: 'candidate-payload-invalid' }
   }
   const effect = effectById(option.effect)
@@ -195,7 +200,7 @@ export async function dispatchPreviewRuntimeCandidate(
         optionId: option.id,
         effect: option.effect,
         result: option.result || option.label,
-        refs: option.refs ?? [],
+        refs,
       },
     })
     if (submitted.status !== 'accepted') return { status: 'rejected', session: unchanged(), reason: 'candidate-submit-rejected' }
