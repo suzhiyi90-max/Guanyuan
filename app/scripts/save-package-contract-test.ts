@@ -93,6 +93,10 @@ async function main(): Promise<void> {
   check('event payload tampering is rejected by checksum before replay', tamperResult.status === 'rejected'
     && tamperResult.issue === 'save-package-checksum-invalid')
 
+  const missingEvents = await createFullSavePackage({ ...fullInput, events: [] }, verification)
+  check('full package event count must cover the declared stream head', missingEvents.status === 'rejected'
+    && missingEvents.issue === 'save-package-event-count-mismatch')
+
   const gapInput: FullSavePackageInput = { ...fullInput, events: [second.event, second.event] }
   const gap = await createFullSavePackage(gapInput, verification)
   check('duplicate or discontinuous full event range is rejected', gap.status === 'rejected'
@@ -136,7 +140,7 @@ async function main(): Promise<void> {
   const emptyInput: FullSavePackageInput = {
     packageKind: 'full', worldId, schemaVersion: 1,
     streamRange: { fromExclusive: genesis, toInclusive: genesis },
-    events: emptyLedger.events, snapshot: emptySnapshot.snapshot,
+    events: [], snapshot: emptySnapshot.snapshot,
   }
   const emptyPackage = await createFullSavePackage(emptyInput, verification)
   check('empty world full package allows genesis-to-genesis with no events', emptyPackage.status === 'valid'
