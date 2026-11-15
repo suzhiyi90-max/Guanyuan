@@ -161,7 +161,7 @@ check('duplicate inventory entries rejected', validateGoalDeathInventory(
 check('duplicate source goal IDs rejected', validateGoalDeathInventory(
   valid, [...allGoals, activeGoal], allDispositions, [transition], [deceased, successor], refs,
 ).includes('goal-death-inventory-input-goal-duplicate-id'))
-check('entry for another person's goal rejected', validateGoalDeathInventory(
+check("entry for another person's goal rejected", validateGoalDeathInventory(
   inventory([entry('foreign', successorGoalId, 'terminal-before-death')]),
   allGoals, allDispositions, [transition], [deceased, successor], refs,
 ).includes('goal-death-inventory-goal-owner-mismatch'))
