@@ -174,11 +174,13 @@ export function replayEventRange<Kind extends string>(
   }
   if (to.kind === 'genesis') {
     if (checked.length !== 0 || from.kind !== 'genesis') return { status: 'rejected', issue: 'replay-cursor-invalid' }
-  } else {
+  } else if (checked.length > 0) {
     const last = checked[checked.length - 1]
     if (!last || last.seq !== to.seq || last.id !== to.eventId) {
       return { status: 'rejected', issue: 'replay-cursor-invalid', seq: to.seq, eventId: to.eventId }
     }
+  } else if (from.kind !== 'event' || from.seq !== to.seq || from.eventId !== to.eventId) {
+    return { status: 'rejected', issue: 'replay-cursor-invalid', seq: to.seq, eventId: to.eventId }
   }
 
   let state: JsonValue
@@ -202,6 +204,7 @@ export function replayEventRange<Kind extends string>(
 }
 
 export interface ReadOnlyProjection {
+  readonly status: 'rebuilt'
   readonly worldId: WorldId
   readonly state: JsonValue
   readonly cursor: StreamCursor
@@ -215,6 +218,7 @@ export function rebuildReadOnlyProjection<Kind extends string>(
   const result = replayEventRange(input)
   if (result.status === 'rejected') return result
   return Object.freeze({
+    status: 'rebuilt' as const,
     worldId: result.worldId,
     state: result.state,
     cursor: result.cursor,
