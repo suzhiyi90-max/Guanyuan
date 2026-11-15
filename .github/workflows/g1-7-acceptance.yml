@@ -24,6 +24,7 @@ on:
       - work/w3-d-ai-candidate-validation-receipts
       - work/w3-e-event-replay-readonly-projection
       - work/w4-a-world-snapshot-checkpoint
+      - work/w4-b-full-save-package
   pull_request:
     branches:
       - feat/g1-engine
@@ -62,6 +63,7 @@ on:
       - work/w3-c-command-ledger-idempotency
       - work/w3-d-ai-candidate-validation-receipts
       - work/w3-e-event-replay-readonly-projection
+      - work/w4-a-world-snapshot-checkpoint
   workflow_dispatch:
 
 permissions:
@@ -154,6 +156,8 @@ jobs:
         run: npm run test:domain:event-replay
       - name: World snapshot and checkpoint contracts
         run: npm run test:domain:world-snapshot
+      - name: Full save package and event range contracts
+        run: npm run test:domain:save-package
       - name: Review index integrity
         run: npm run check:docs
       - name: Patch whitespace integrity
