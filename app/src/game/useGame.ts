@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { people } from '../data'
 import { advanceDay, advancePeriod, goalReckoningOf, officialAvailableOf, periods, spendAction, verdictOf } from './engine'
-import type { TaskStage, ToastMessage } from '../types'
+import type { OfficialActionId, RiverPlan, TaskStage, ToastMessage } from '../types'
 import { createInitialGameState } from './initial-state'
 import type { GameState } from './model'
 export type { GameState } from './model'
