@@ -3,7 +3,6 @@ import {
   appendLedgerEvent,
   type EventLedger,
   type JsonValue,
-  type WorldId,
   type LedgerEvent,
   type AppendLedgerResult,
 } from './event-ledger'
@@ -238,8 +237,4 @@ export async function appendValidatedAiCandidateFact(
   return append.status === 'appended'
     ? { status: 'appended', ledger: append.ledger, event: append.event }
     : { status: 'rejected', ledger, reason: append.status }
-}
-
-export function candidateLedgerWorld(ledger: EventLedger): WorldId {
-  return ledger.worldId
 }
