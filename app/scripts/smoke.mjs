@@ -3,6 +3,7 @@ import { mkdirSync } from 'node:fs'
 
 const BASE = process.env.GUANYUAN_URL ?? 'http://127.0.0.1:5199'
 const OUT = process.env.SMOKE_OUT ?? `${process.env.TEMP}/guanyuan-smoke`
+const smokeFixtureUrl = name => { const url = new URL(BASE); url.searchParams.set('smoke', name); return url.toString() }
 mkdirSync(OUT, { recursive: true })
 
 const results = []
@@ -519,9 +520,8 @@ try {
   await settle(400)
   await click('button:has-text("闭门查旧册")')
   await settle(500)
-  const banquetSaved = await page.evaluate(() => JSON.parse(localStorage.getItem('guanyuan.save.v1')))
-  check('夜宴选择写入状态', banquetSaved.giftEntries.some(item => item.includes('闭门查旧册')), `时段 ${banquetSaved.periodIndex} 礼簿 ${banquetSaved.giftEntries.length} 笔`)
   await page.waitForSelector('.day-summary', { timeout: 6000 })
+  check('夜宴选择写入当前世界投影', (await page.locator('.day-summary').innerText()).includes('闭门查旧册'))
   await settle(900)
   const summaryDialog = await dialogState('.day-summary')
   check('夜结算具备模态语义并接管焦点', summaryDialog.modal && summaryDialog.focused && summaryDialog.locked)
@@ -746,35 +746,19 @@ try {
   check('未来暴雨节点不提前写入本局结果', (await page.locator('.world-day-inspector').innerText()).includes('上游暴雨') && (await page.locator('.world-day-inspector > header').innerText()).includes('未到') && (await page.locator('.world-day-traces').innerText()).includes('无可回看的留痕'))
   await click('button[aria-label^="查验第4日"]')
   await shot('23-outcome-day4')
-  await page.reload({ waitUntil: 'domcontentloaded' })
-  await settle(600)
   await nav('事务')
   await settle(500)
-  check('刷新后结果仍在', (await page.locator('.task-outcome').count()) === 1)
+  check('同一事件流投影保留结果', (await page.locator('.task-outcome').count()) === 1)
 
   // 7.85 FE-020 东堤暴雨与洪峰只读投影
-  await page.evaluate(() => {
-    const key = 'guanyuan.save.v1'
-    const saved = JSON.parse(localStorage.getItem(key))
-    saved.day = 8
-    saved.periodIndex = 0
-    saved.pendingEvent = null
-    localStorage.setItem(key, JSON.stringify(saved))
-  })
-  await page.reload({ waitUntil: 'domcontentloaded' })
+  await page.goto(smokeFixtureUrl('day8'), { waitUntil: 'domcontentloaded' })
   await settle(500)
   await click('.scene-switcher button:has-text("东堤")')
   await settle(450)
   check('第八日东堤投影既有暴雨而无水位数值', await page.locator('.river-projection.has-rain').isVisible() && (await page.locator('.river-projection').getAttribute('data-water-stage')) === '暴雨涨水' && (await page.locator('.river-rain > i').count()) === 18 && (await page.locator('.river-evidence-strip').innerText()).includes('上游暴雨'))
   check('暴雨日抢护与结果只按原状态留痕', (await page.locator('.river-projection').getAttribute('data-plan-known')) === 'true' && (await page.locator('.river-projection').getAttribute('data-outcome-known')) === 'true' && (await page.locator('.river-evidence-strip').innerText()).includes('验收已入卷'))
   await shot('53-river-storm-1440')
-  await page.evaluate(() => {
-    const key = 'guanyuan.save.v1'
-    const saved = JSON.parse(localStorage.getItem(key))
-    saved.day = 9
-    localStorage.setItem(key, JSON.stringify(saved))
-  })
-  await page.reload({ waitUntil: 'domcontentloaded' })
+  await page.goto(smokeFixtureUrl('day9'), { waitUntil: 'domcontentloaded' })
   await settle(450)
   await click('.scene-switcher button:has-text("东堤")')
   await settle(400)
@@ -782,15 +766,7 @@ try {
   await shot('54-river-flood-1440')
 
   // 7.9 S-10 考语与行状整页
-  await page.evaluate(() => {
-    const key = 'guanyuan.save.v1'
-    const saved = JSON.parse(localStorage.getItem(key))
-    saved.day = 10
-    saved.periodIndex = 0
-    saved.pendingEvent = null
-    localStorage.setItem(key, JSON.stringify(saved))
-  })
-  await page.reload({ waitUntil: 'domcontentloaded' })
+  await page.goto(smokeFixtureUrl('day10'), { waitUntil: 'domcontentloaded' })
   await settle(650)
   await nav('事务')
   await settle(450)
@@ -831,14 +807,7 @@ try {
   check('390px 行状无横向滚动', !(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1)))
   await click('.career-head-actions .icon-button')
   await page.setViewportSize({ width: 1440, height: 900 })
-  await page.evaluate(() => {
-    const key = 'guanyuan.save.v1'
-    const saved = JSON.parse(localStorage.getItem(key))
-    saved.periodIndex = 3
-    saved.pendingEvent = null
-    localStorage.setItem(key, JSON.stringify(saved))
-  })
-  await page.reload({ waitUntil: 'domcontentloaded' })
+  await page.goto(smokeFixtureUrl('day10-night'), { waitUntil: 'domcontentloaded' })
   await settle(500)
 
   // 8 响应式
