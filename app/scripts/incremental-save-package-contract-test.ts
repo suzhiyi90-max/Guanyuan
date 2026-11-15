@@ -83,7 +83,7 @@ const baseSnapshot = createWorldSnapshot({
   schemaVersion: 1, worldId, streamHead: head2, checkpointAt: t2, materialized: baseReplay.state,
 })
 if (baseSnapshot.status !== 'valid') throw new Error('incremental-test-base-snapshot-failed')
-const baseSnapshotValue = baseSnapshotValue
+const baseSnapshotValue = baseSnapshot.snapshot
 const verification = { registry, initialState: [] as JsonValue, reduce }
 
 async function main(): Promise<void> {
