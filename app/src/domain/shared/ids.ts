@@ -15,6 +15,7 @@ export type RelationId = BrandedId<'RelationId'>
 export type RelationClaimId = BrandedId<'RelationClaimId'>
 export type RelationEvidenceId = BrandedId<'RelationEvidenceId'>
 export type MembershipId = BrandedId<'MembershipId'>
+export type MembershipDeathHandoffId = BrandedId<'MembershipDeathHandoffId'>
 export type KnowledgeId = BrandedId<'KnowledgeId'>
 export type MessageId = BrandedId<'MessageId'>
 export type AssetId = BrandedId<'AssetId'>
