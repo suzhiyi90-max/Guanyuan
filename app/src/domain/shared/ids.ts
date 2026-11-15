@@ -34,6 +34,7 @@ export type DebtId = BrandedId<'DebtId'>
 export type DebtPartySuccessionId = BrandedId<'DebtPartySuccessionId'>
 export type DebtDeathInventoryId = BrandedId<'DebtDeathInventoryId'>
 export type DebtDeathInventoryEntryId = BrandedId<'DebtDeathInventoryEntryId'>
+export type DeathSettlementEvidenceId = BrandedId<'DeathSettlementEvidenceId'>
 export type RightGrantId = BrandedId<'RightGrantId'>
 export type AssetInheritanceId = BrandedId<'AssetInheritanceId'>
 export type EstateAssetInventoryId = BrandedId<'EstateAssetInventoryId'>
