@@ -280,7 +280,7 @@ export function appendCandidateValidationReceipt(
     source: 'rule',
     kind: 'candidate.validated',
     intentKind: 'candidate-validation',
-    actor: candidate.validatedBy,
+    actor: 'system:candidate-validator',
     requestWorldTime,
     clientRequestId: `candidate-validation:${candidate.candidateId}`,
     payload: {
