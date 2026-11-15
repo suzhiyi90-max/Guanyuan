@@ -1,7 +1,7 @@
-import { appendLedgerEvent, createEventLedger, type EventLedger, type LedgerEvent, type WorldId } from './event-ledger'
-import { createEventRegistry, freezeEventRegistry, registerEventSchema } from './event-registry'
-import { rebuildReadOnlyProjection, replayEventRange, type StreamCursor } from './event-replay'
-import { brandedId, type EventId } from './shared/ids'
+import { appendLedgerEvent, createEventLedger, type EventLedger, type LedgerEvent, type WorldId } from '../src/domain/event-ledger'
+import { createEventRegistry, freezeEventRegistry, registerEventSchema } from '../src/domain/event-registry'
+import { rebuildReadOnlyProjection, replayEventRange, type StreamCursor } from '../src/domain/event-replay'
+import { brandedId, type EventId } from '../src/domain/shared/ids'
 
 let passed = 0
 let failed = 0
