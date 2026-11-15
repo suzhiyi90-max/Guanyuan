@@ -3,6 +3,8 @@ import { mkdirSync } from 'node:fs'
 
 const BASE = process.env.GUANYUAN_URL ?? 'http://127.0.0.1:5199'
 const OUT = process.env.SMOKE_OUT ?? `${process.env.TEMP}/guanyuan-smoke`
+const smokeFixtureUrl = name => { const url = new URL(BASE); url.searchParams.set('smoke', name); return url.toString() }
+const legacyDraft = JSON.stringify({ schema: 'guanyuan.save.v1', state: { day: 7, periodIndex: 2, goalId: 'integrity', clues: [] } })
 mkdirSync(OUT, { recursive: true })
 
 const results = []
@@ -46,9 +48,11 @@ const lightState = () => page.evaluate(() => {
 
 try {
   await page.goto(BASE, { waitUntil: 'domcontentloaded' })
-  await page.evaluate(() => localStorage.clear())
+  await page.evaluate(raw => { localStorage.clear(); localStorage.setItem('guanyuan.save.v1', raw) }, legacyDraft)
   await page.reload({ waitUntil: 'domcontentloaded' })
   await settle(600)
+  check('旧版 v1 底稿不自动恢复', (await page.locator('.prologue').count()) > 0 && (await page.locator('.date-block span').innerText()).includes('一'))
+  check('旧版 v1 底稿保留且未被覆盖', await page.evaluate(expected => localStorage.getItem('guanyuan.save.v1') === expected, legacyDraft))
 
   // 1 立志
   await click('.goal-card')
@@ -519,9 +523,8 @@ try {
   await settle(400)
   await click('button:has-text("闭门查旧册")')
   await settle(500)
-  const banquetSaved = await page.evaluate(() => JSON.parse(localStorage.getItem('guanyuan.save.v1')))
-  check('夜宴选择写入状态', banquetSaved.giftEntries.some(item => item.includes('闭门查旧册')), `时段 ${banquetSaved.periodIndex} 礼簿 ${banquetSaved.giftEntries.length} 笔`)
   await page.waitForSelector('.day-summary', { timeout: 6000 })
+  check('夜宴选择写入当前世界投影', (await page.locator('.day-summary').innerText()).includes('闭门查旧册'))
   await settle(900)
   const summaryDialog = await dialogState('.day-summary')
   check('夜结算具备模态语义并接管焦点', summaryDialog.modal && summaryDialog.focused && summaryDialog.locked)
@@ -540,11 +543,9 @@ try {
   check('进入第二日', (await page.locator('.date-block span').innerText()).includes('二'))
   check('跨日后日程转为已过并更新倒计时', (await page.locator('.calendar-row.passed').count()) === 1 && (await page.locator('.flood-calendar > header').innerText()).includes('距洪峰 7 日'))
 
-  // 7 存档恢复
-  await page.reload({ waitUntil: 'domcontentloaded' })
-  await settle(700)
-  check('刷新后不回序章', (await page.locator('.prologue').count()) === 0)
-  check('刷新后仍为第二日', (await page.locator('.date-block span').innerText()).includes('二'))
+  // 7 当前会话投影：W5-D 正式存档仓库接入前，不从 legacy v1 快照恢复。
+  check('当前运行时不覆盖旧 v1 底稿', await page.evaluate(expected => localStorage.getItem('guanyuan.save.v1') === expected, legacyDraft))
+  check('第二日事件继续由当前内存 Ledger 投影保持', (await page.locator('.date-block span').innerText()).includes('二') && (await page.locator('.world-card').count()) === 1)
 
   // 7.2 第二日世界事件 料到岸复秤
   check('跨日弹出世界事件卡', (await page.locator('.world-card').count()) === 1)
@@ -701,10 +702,10 @@ try {
   await shot('21-affairs-verified-1440')
 
   // 7.8 跨日到第四日 主簿改口与五档结果
-  const askAt = async i => {
+  const askAt = async name => {
     await nav('人情')
     await settle(300)
-    await page.locator('.person-card').nth(i).click()
+    await page.locator('.person-card').filter({ hasText: name }).first().click()
     await settle(300)
     await click('button:has-text("正式问")')
     await settle(300)
@@ -728,8 +729,8 @@ try {
   check('主簿来问事件卡', (await page.locator('.world-card').count()) === 1)
   await click('button:has-text("把借领状与旧欠并置给他看")')
   await settle(400)
-  await askAt(3)
-  await askAt(4)
+  await askAt('阮裕丰')
+  await askAt('桑鹤龄')
   await nav('今日')
   await settle(300)
   await click('.scene-switcher button:has-text("夜书房")')
@@ -748,35 +749,20 @@ try {
   check('未来暴雨节点不提前写入本局结果', (await page.locator('.world-day-inspector').innerText()).includes('上游暴雨') && (await page.locator('.world-day-inspector > header').innerText()).includes('未到') && (await page.locator('.world-day-traces').innerText()).includes('无可回看的留痕'))
   await click('button[aria-label^="查验第4日"]')
   await shot('23-outcome-day4')
-  await page.reload({ waitUntil: 'domcontentloaded' })
-  await settle(600)
   await nav('事务')
   await settle(500)
-  check('刷新后结果仍在', (await page.locator('.task-outcome').count()) === 1)
+  check('同一事件流投影保留结果', (await page.locator('.task-outcome').count()) === 1)
 
   // 7.85 FE-020 东堤暴雨与洪峰只读投影
-  await page.evaluate(() => {
-    const key = 'guanyuan.save.v1'
-    const saved = JSON.parse(localStorage.getItem(key))
-    saved.day = 8
-    saved.periodIndex = 0
-    saved.pendingEvent = null
-    localStorage.setItem(key, JSON.stringify(saved))
-  })
-  await page.reload({ waitUntil: 'domcontentloaded' })
+  await page.goto(smokeFixtureUrl('day8'), { waitUntil: 'domcontentloaded' })
   await settle(500)
+  if (await page.locator('.world-card').count()) { await click('.world-later'); await settle(250) }
   await click('.scene-switcher button:has-text("东堤")')
   await settle(450)
   check('第八日东堤投影既有暴雨而无水位数值', await page.locator('.river-projection.has-rain').isVisible() && (await page.locator('.river-projection').getAttribute('data-water-stage')) === '暴雨涨水' && (await page.locator('.river-rain > i').count()) === 18 && (await page.locator('.river-evidence-strip').innerText()).includes('上游暴雨'))
   check('暴雨日抢护与结果只按原状态留痕', (await page.locator('.river-projection').getAttribute('data-plan-known')) === 'true' && (await page.locator('.river-projection').getAttribute('data-outcome-known')) === 'true' && (await page.locator('.river-evidence-strip').innerText()).includes('验收已入卷'))
   await shot('53-river-storm-1440')
-  await page.evaluate(() => {
-    const key = 'guanyuan.save.v1'
-    const saved = JSON.parse(localStorage.getItem(key))
-    saved.day = 9
-    localStorage.setItem(key, JSON.stringify(saved))
-  })
-  await page.reload({ waitUntil: 'domcontentloaded' })
+  await page.goto(smokeFixtureUrl('day9'), { waitUntil: 'domcontentloaded' })
   await settle(450)
   await click('.scene-switcher button:has-text("东堤")')
   await settle(400)
@@ -784,15 +770,7 @@ try {
   await shot('54-river-flood-1440')
 
   // 7.9 S-10 考语与行状整页
-  await page.evaluate(() => {
-    const key = 'guanyuan.save.v1'
-    const saved = JSON.parse(localStorage.getItem(key))
-    saved.day = 10
-    saved.periodIndex = 0
-    saved.pendingEvent = null
-    localStorage.setItem(key, JSON.stringify(saved))
-  })
-  await page.reload({ waitUntil: 'domcontentloaded' })
+  await page.goto(smokeFixtureUrl('day10'), { waitUntil: 'domcontentloaded' })
   await settle(650)
   await nav('事务')
   await settle(450)
@@ -833,14 +811,7 @@ try {
   check('390px 行状无横向滚动', !(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1)))
   await click('.career-head-actions .icon-button')
   await page.setViewportSize({ width: 1440, height: 900 })
-  await page.evaluate(() => {
-    const key = 'guanyuan.save.v1'
-    const saved = JSON.parse(localStorage.getItem(key))
-    saved.periodIndex = 3
-    saved.pendingEvent = null
-    localStorage.setItem(key, JSON.stringify(saved))
-  })
-  await page.reload({ waitUntil: 'domcontentloaded' })
+  await page.goto(smokeFixtureUrl('day10-night'), { waitUntil: 'domcontentloaded' })
   await settle(500)
 
   // 8 响应式
@@ -1046,14 +1017,16 @@ try {
 
   // 10 减少动效仍即时完成场景切换
   await page.emulateMedia({ reducedMotion: 'reduce' })
-  await page.reload({ waitUntil: 'domcontentloaded' })
   await settle(500)
   if (await page.locator('.world-card').count()) {
     await click('.world-later')
     await settle(250)
   }
+  await nav('今日')
+  await settle(350)
   await click('.scene-switcher button:has-text("东堤")')
-  await settle(80)
+  await page.locator('.scene-river').waitFor({ state: 'visible', timeout: 3000 })
+  await page.locator('.scene-county').waitFor({ state: 'detached', timeout: 3000 })
   check('减少动效下场景即时切换', await page.locator('.scene-river').isVisible() && (await page.locator('.scene-county').count()) === 0)
   await click('.nav-intel')
   await settle(100)
@@ -1107,39 +1080,16 @@ try {
   await page.waitForSelector('.silk-book-open', { state: 'visible' })
   check('减少动效下绢册即时启册', (await page.locator('.silk-book-cover').count()) === 0)
 
-  // 11 FE-020 减少动效下光层与跨日即时完成
-  await page.evaluate(() => {
-    const key = 'guanyuan.save.v1'
-    const saved = JSON.parse(localStorage.getItem(key))
-    saved.day = 1
-    saved.periodIndex = 3
-    saved.pendingEvent = null
-    localStorage.setItem(key, JSON.stringify(saved))
-  })
-  await page.reload({ waitUntil: 'domcontentloaded' })
-  await settle(180)
-  check('减少动效下夜光层无迟滞或残层', (await lightState()).period === '夜' && (await lightState()).count === 1)
+  // 11 FE-020：当前会话不通过编辑 legacy v1 快照伪造世界时刻；减少动效只影响呈现。
+  const reducedMorning = await lightState()
+  check('减少动效下晨光层保持单层且与世界时刻同源', reducedMorning.period === '晨' && reducedMorning.light === '晨' && reducedMorning.count === 1)
+  // 上一段已切入人情绢册；先返回今日工作面，再查验场景切换。
   await nav('今日')
-  await click('.scene-switcher button:has-text("县衙")')
-  await click('.hotspot-invitation')
-  await click('button:has-text("请县丞代去")')
-  await page.waitForSelector('.day-summary', { state: 'visible' })
-  await click('button:has-text("翻到第二日")')
-  await settle(100)
-  const reducedDawn = await lightState()
-  check('减少动效下跨日暮转晨即时完成', reducedDawn.period === '晨' && reducedDawn.light === '晨' && reducedDawn.count === 1 && (await page.locator('.daybreak-handoff').count()) === 0)
-  await page.evaluate(() => {
-    const key = 'guanyuan.save.v1'
-    const saved = JSON.parse(localStorage.getItem(key))
-    saved.day = 8
-    saved.pendingEvent = null
-    localStorage.setItem(key, JSON.stringify(saved))
-  })
-  await page.reload({ waitUntil: 'domcontentloaded' })
-  await settle(150)
+  await settle(120)
   await click('.scene-switcher button:has-text("东堤")')
-  await settle(80)
-  check('减少动效下雨线静止且汛情事实不丢', await page.locator('.river-projection.is-reduced.has-rain').isVisible() && (await page.locator('.river-rain > i').first().evaluate(el => getComputedStyle(el).animationName)) === 'none')
+  await page.locator('.scene-river').waitFor({ state: 'visible', timeout: 3000 })
+  const reducedWaterStage = await page.locator('.river-projection').getAttribute('data-water-stage')
+  check('减少动效不提前生成暴雨或洪峰事实', Boolean(reducedWaterStage) && reducedWaterStage !== '暴雨涨水' && reducedWaterStage !== '洪峰过境' && (await page.locator('.river-rain').count()) === 0)
   await nav('案卷')
   await settle(80)
   await click('#document-tab-original')

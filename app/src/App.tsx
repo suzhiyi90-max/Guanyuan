@@ -101,7 +101,7 @@ export default function App() {
   const arrivedTimer = useRef<number | null>(null)
   // FE-132：批阅来处只多记一枚滚轴位置（会话内存），「回那处」不再落在纸页顶端。
   const reviewOriginScroll = useRef<Partial<Record<ReviewOrigin, number>>>({})
-  const [prologueDone, setPrologueDone] = useState(() => Boolean(game.restored && state.goalId))
+  const [prologueDone, setPrologueDone] = useState(() => Boolean(state.goalId))
   const [activeSection, setActiveSection] = useState<SectionId>('today')
   const [scene, setScene] = useState<SceneId>('county')
   const [sceneDirection, setSceneDirection] = useState(1)
@@ -161,7 +161,7 @@ export default function App() {
 
   const exportSave = useCallback(() => {
     const payload = {
-      schema: 'guanyuan.save.v1',
+      schema: 'guanyuan.preview-projection.v1',
       exportedAt: new Date().toISOString(),
       summary: { day: state.day, period, goalId: state.goalId, privateFunds: state.privateFunds, clues: state.clues.length },
       state,
@@ -170,7 +170,7 @@ export default function App() {
     const url = URL.createObjectURL(blob)
     const anchor = document.createElement('a')
     anchor.href = url
-    anchor.download = `观远-底稿-第${state.day}日.json`
+    anchor.download = `观远-会话底稿-第${state.day}日.json`
     document.body.appendChild(anchor)
     anchor.click()
     anchor.remove()
@@ -615,6 +615,7 @@ export default function App() {
       'not-generated': '生成事件来源校验失败，事件没有结算。',
       'unknown-event': '未找到对应世界事件，事件没有结算。',
       'repeated': '此动作已经执行，不会重复结算。',
+      'ai-candidate-flow-not-integrated': 'AI 候选回执与事实提交尚在接线，本次选项未改变世界。',
     }
     if (!routeCommandFeedback(
       result,
