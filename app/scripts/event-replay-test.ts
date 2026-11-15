@@ -1,1 +1,1 @@
-import '../src/domain/event-replay-test'
+import './event-replay-contract-test'
