@@ -9,6 +9,7 @@ on:
       - work/w2-n-goal-status-history
       - work/w2-o-death-settlement-readiness-audit
       - work/w2-p-debt-death-inventory
+      - work/w2-q-office-death-inventory
   pull_request:
     branches:
       - feat/g1-engine
@@ -33,6 +34,7 @@ on:
       - work/w2-n-goal-status-history
       - work/w2-o-death-settlement-readiness-audit
       - work/w2-p-debt-death-inventory
+      - work/w2-q-office-death-inventory
   workflow_dispatch:
 
 permissions:
@@ -103,6 +105,8 @@ jobs:
         run: npm run test:domain:death-settlement
       - name: Death office appointment handoff contracts
         run: npm run test:domain:death-office
+      - name: Death office inventory completeness contracts
+        run: npm run test:domain:death-office-inventory
       - name: Review index integrity
         run: npm run check:docs
       - name: Patch whitespace integrity

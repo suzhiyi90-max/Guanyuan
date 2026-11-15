@@ -564,7 +564,14 @@ try {
   check('复秤后到场四十', (await page.locator('.material-legend').innerText()).includes('40'))
   check('复秤产生虚松疑点', (await page.locator('.material-note').innerText()).includes('复秤'))
   await click('.material-segment:has-text("在途")')
-  await settle(220)
+  await page.waitForFunction(() => {
+    const selected = [...document.querySelectorAll('.material-segment')]
+      .find(element => element.textContent?.includes('在途'))
+    const paper = document.querySelector('.material-focus-paper')?.textContent ?? ''
+    return selected?.getAttribute('aria-pressed') === 'true'
+      && paper.includes('在途 · 0 垛')
+      && paper.includes('不在到场之外重复计算')
+  }, null, { timeout: 4000 })
   check('料到岸后在途归零且不重复计算', (await page.locator('.material-focus-paper').innerText()).includes('在途 · 0 垛') && (await page.locator('.material-focus-paper').innerText()).includes('不在到场之外重复计算'))
   await click('.material-segment:has-text("已到场")')
   await nav('生活')
