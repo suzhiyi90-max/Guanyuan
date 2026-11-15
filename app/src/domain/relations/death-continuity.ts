@@ -126,7 +126,7 @@ export function validateRelationDeathContinuity(
       if (relation.lifecycle.validTo !== item.deathEvent) issues.push('relation-death-ended-not-closed')
       if (relation.lifecycle.status !== 'severed') issues.push('relation-death-ended-not-severed')
     } else if (item.outcome === 'preserved') {
-      if (relation.lifecycle.status === 'severed') issues.push('relation-death-preserved-but-severed')
+      if (relation.lifecycle.status === 'severed' && (!endAt || compareWorldTime(endAt, death.at) <= 0)) issues.push('relation-death-preserved-but-severed')
       if (endAt && compareWorldTime(endAt, death.at) <= 0) issues.push('relation-death-preserved-after-end')
     } else {
       issues.push('relation-death-disposition-invalid-outcome')
