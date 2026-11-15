@@ -10,7 +10,7 @@ let passed = 0
 let failed = 0
 function check(name: string, condition: boolean): void {
   if (condition) passed += 1
-  else { failed += 1; console.error(\`FAIL \${name}\`) }
+  else { failed += 1; console.error(`FAIL ${name}`) }
 }
 
 const deceasedId = brandedId<'PersonId'>('estate-deceased')
@@ -51,16 +51,16 @@ function person(id: PersonId, lifeState: 'alive' | 'dead'): Person {
         { domain: 'goal', settlementEvent: deathEvent, status: 'pending' },
       ],
     }) : field.notApplicable,
-    capability: brandedId<'CapabilityRef'>(\`cap-\${id}\`),
+    capability: brandedId<'CapabilityRef'>(`cap-${id}`),
     stateDomains: {
-      body: brandedId<'BodyScopeRef'>(\`body-\${id}\`),
-      mind: brandedId<'MindScopeRef'>(\`mind-\${id}\`),
-      knowledge: brandedId<'KnowledgeScopeId'>(\`knowledge-\${id}\`),
-      goals: [], scheduleScope: brandedId<'ScheduleScopeId'>(\`schedule-\${id}\`),
-      economy: brandedId<'EconomyScopeId'>(\`economy-\${id}\`),
-      location: brandedId<'LocationStateRef'>(\`location-\${id}\`),
+      body: brandedId<'BodyScopeRef'>(`body-${id}`),
+      mind: brandedId<'MindScopeRef'>(`mind-${id}`),
+      knowledge: brandedId<'KnowledgeScopeId'>(`knowledge-${id}`),
+      goals: [], scheduleScope: brandedId<'ScheduleScopeId'>(`schedule-${id}`),
+      economy: brandedId<'EconomyScopeId'>(`economy-${id}`),
+      location: brandedId<'LocationStateRef'>(`location-${id}`),
     },
-    history: brandedId<'LifeHistoryRef'>(\`history-\${id}\`),
+    history: brandedId<'LifeHistoryRef'>(`history-${id}`),
   }
 }
 
@@ -187,5 +187,5 @@ check('invalid runtime inventory status is rejected',
   validateEstateAssetInventory({ ...inventory, status: 'finished' as EstateAssetInventory['status'] }, assets, refs)
     .includes('estate-inventory-invalid-status'))
 
-if (failed > 0) throw new Error(\`Estate asset inventory contracts failed: \${failed}/\${passed + failed}\`)
-console.log(\`Estate asset inventory contracts: \${passed}/\${passed + failed} passed\`)
+if (failed > 0) throw new Error(`Estate asset inventory contracts failed: ${failed}/${passed + failed}`)
+console.log(`Estate asset inventory contracts: ${passed}/${passed + failed} passed`)
