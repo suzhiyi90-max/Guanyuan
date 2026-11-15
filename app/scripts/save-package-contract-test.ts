@@ -37,14 +37,16 @@ const first = appendLedgerEvent(ledger, {
 }, t1)
 if (first.status !== 'appended') throw new Error('save-test-first-event-failed')
 ledger = first.ledger
+const firstEvent = firstEvent
 const second = appendLedgerEvent(ledger, {
   source: 'rule', kind: 'person.created', intentKind: 'create-person',
   actor: 'system', requestWorldTime: t2, clientRequestId: 's2', payload: { name: '乙' },
 }, t2)
 if (second.status !== 'appended') throw new Error('save-test-second-event-failed')
 ledger = second.ledger
+const secondEvent = secondEvent
 
-const head: StreamCursor = { kind: 'event', seq: 2, eventId: second.event.id }
+const head: StreamCursor = { kind: 'event', seq: 2, eventId: secondEvent.id }
 const reduce = (state: import('../src/domain/event-ledger').JsonValue, event: LedgerEvent<Kind>) => [
   ...(state as readonly string[]),
   (event.payload as { readonly name: string }).name,
@@ -97,7 +99,7 @@ async function main(): Promise<void> {
   check('full package event count must cover the declared stream head', missingEvents.status === 'rejected'
     && missingEvents.issue === 'save-package-event-count-mismatch')
 
-  const gapInput: FullSavePackageInput = { ...fullInput, events: [second.event, second.event] }
+  const gapInput: FullSavePackageInput = { ...fullInput, events: [secondEvent, secondEvent] }
   const gap = await createFullSavePackage(gapInput, verification)
   check('duplicate or discontinuous full event range is rejected', gap.status === 'rejected'
     && gap.issue === 'save-package-event-replay-rejected')
@@ -112,13 +114,13 @@ async function main(): Promise<void> {
 
   const wrongRange = await createFullSavePackage({
     ...fullInput,
-    streamRange: { fromExclusive: { kind: 'event', seq: 1, eventId: first.event.id }, toInclusive: head },
+    streamRange: { fromExclusive: { kind: 'event', seq: 1, eventId: firstEvent.id }, toInclusive: head },
   }, verification)
   check('full package must begin at genesis', wrongRange.status === 'rejected'
     && wrongRange.issue === 'save-package-full-range-invalid')
 
   const wrongHeadSnapshot = createWorldSnapshot({
-    schemaVersion: 1, worldId, streamHead: { kind: 'event', seq: 1, eventId: first.event.id },
+    schemaVersion: 1, worldId, streamHead: { kind: 'event', seq: 1, eventId: firstEvent.id },
     checkpointAt: t2, materialized: ['甲'],
   })
   if (wrongHeadSnapshot.status !== 'valid') throw new Error('save-test-wrong-head-snapshot-failed')
