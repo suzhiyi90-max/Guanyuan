@@ -23,6 +23,7 @@ on:
       - work/w3-c-command-ledger-idempotency
       - work/w3-d-ai-candidate-validation-receipts
       - work/w3-e-event-replay-readonly-projection
+      - work/w4-a-world-snapshot-checkpoint
   pull_request:
     branches:
       - feat/g1-engine
@@ -151,6 +152,8 @@ jobs:
         run: npm run test:domain:ai-candidate
       - name: Event replay and read-only projection contracts
         run: npm run test:domain:event-replay
+      - name: World snapshot and checkpoint contracts
+        run: npm run test:domain:world-snapshot
       - name: Review index integrity
         run: npm run check:docs
       - name: Patch whitespace integrity
