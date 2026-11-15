@@ -117,10 +117,13 @@ export function reducePreviewRuntimeEvent(
 
     case 'banquet.choice': {
       if (state.periodIndex !== 3) return rejectReplay('banquet-choice-outside-night')
+      const actionKey = `banquet-${state.day}`
+      if (state.completedActions.includes(actionKey)) return rejectReplay('banquet-already-decided')
       const choice = payload.choice
       if (choice === 'attend') {
         return {
           ...state,
+          completedActions: [...state.completedActions, actionKey],
           privateFunds: state.privateFunds - 20,
           giftEntries: [...state.giftEntries, '桑宅接风宴 · 亲赴，花费二十两'],
           unlocked: [...new Set([...state.unlocked, 'E-003'])],
