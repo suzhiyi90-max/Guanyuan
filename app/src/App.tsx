@@ -101,7 +101,7 @@ export default function App() {
   const arrivedTimer = useRef<number | null>(null)
   // FE-132：批阅来处只多记一枚滚轴位置（会话内存），「回那处」不再落在纸页顶端。
   const reviewOriginScroll = useRef<Partial<Record<ReviewOrigin, number>>>({})
-  const [prologueDone, setPrologueDone] = useState(() => Boolean(game.restored && state.goalId))
+  const [prologueDone, setPrologueDone] = useState(() => Boolean(state.goalId))
   const [activeSection, setActiveSection] = useState<SectionId>('today')
   const [scene, setScene] = useState<SceneId>('county')
   const [sceneDirection, setSceneDirection] = useState(1)
