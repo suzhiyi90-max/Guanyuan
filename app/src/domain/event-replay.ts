@@ -119,8 +119,12 @@ function validateEvent<Kind extends string>(
   if (event.worldId !== worldId) return 'replay-event-world-mismatch'
   if (event.seq !== expectedSeq) return 'replay-event-sequence-mismatch'
   if (event.id !== brandedId<'EventId'>(`evt:${worldId}:${expectedSeq}`)) return 'replay-event-id-mismatch'
-  if (!['player-command', 'rule', 'schedule', 'ai-candidate'].includes(event.source)
-    || !event.kind.trim() || !event.intentKind.trim() || !event.actor.trim() || !event.clientRequestId.trim()
+  if (!event || typeof event !== 'object'
+    || !['player-command', 'rule', 'schedule', 'ai-candidate'].includes(event.source)
+    || typeof event.kind !== 'string' || !event.kind.trim()
+    || typeof event.intentKind !== 'string' || !event.intentKind.trim()
+    || typeof event.actor !== 'string' || !event.actor.trim()
+    || typeof event.clientRequestId !== 'string' || !event.clientRequestId.trim()
     || !isValidWorldTime(event.requestWorldTime) || !isValidWorldTime(event.committedAt)
     || compareTime(event.committedAt, event.requestWorldTime) < 0
     || (event.source === 'ai-candidate' && (!event.candidateRef?.trim() || !event.validationRef?.trim()))
@@ -151,7 +155,8 @@ export function replayEventRange<Kind extends string>(
 
   if (from.kind === 'event') {
     const anchor = input.anchorEvent
-    if (!anchor || anchor.worldId !== input.worldId || anchor.seq !== from.seq || anchor.id !== from.eventId) {
+    if (!anchor || anchor.worldId !== input.worldId || anchor.seq !== from.seq || anchor.id !== from.eventId
+      || anchor.id !== brandedId<'EventId'>(`evt:${input.worldId}:${from.seq}`)) {
       return { status: 'rejected', issue: 'replay-anchor-mismatch', seq: from.seq, eventId: from.eventId }
     }
   } else if (input.anchorEvent !== undefined) {
@@ -170,7 +175,9 @@ export function replayEventRange<Kind extends string>(
     const seq = from.seq + index + 1
     const issue = validateEvent(event, input.worldId, seq, input.registry)
     if (issue) return { status: 'rejected', issue, seq, eventId: event.id }
-    checked.push(cloneFreezeEvent(event))
+    try { checked.push(cloneFreezeEvent(event)) } catch {
+      return { status: 'rejected', issue: 'replay-schema-invalid', seq, eventId: event.id }
+    }
   }
   if (to.kind === 'genesis') {
     if (checked.length !== 0 || from.kind !== 'genesis') return { status: 'rejected', issue: 'replay-cursor-invalid' }
