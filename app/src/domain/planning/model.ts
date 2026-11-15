@@ -4,6 +4,7 @@ import type {
   EventId,
   GoalId,
   GoalDeathDispositionId,
+  GoalStatusTransitionId,
   PersonId,
   PlaceId,
   ScheduleId,
@@ -23,6 +24,15 @@ export interface Goal {
   readonly status: GoalStatus
   readonly sourceEvent: EventId
   readonly visibility: Visibility
+}
+
+/** Explicit post-death disposition of one unfinished personal goal. */
+export interface GoalStatusTransition {
+  readonly id: GoalStatusTransitionId
+  readonly goal: GoalId
+  readonly fromStatus: 'active'
+  readonly toStatus: 'achieved' | 'abandoned' | 'failed'
+  readonly event: EventId
 }
 
 /** Explicit post-death disposition of one unfinished personal goal. */
