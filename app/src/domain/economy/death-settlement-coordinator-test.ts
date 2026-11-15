@@ -167,8 +167,17 @@ const staleRefs = {
 check('pre-death inventory chronology is rejected', coordinateDeathSettlement(scope, assessments, staleRefs, deathAt).status === 'invalid')
 
 const wrongCanonical = assessments.map((assessment, index) => index === 2
-  ? { ...assessment, canonical: { ...assessment.canonical!, entries: [{ id: 'wrong-entry', itemRef: 'asset:wrong' }] } }
-      as DeathSettlementDomainAssessment
+  ? ({
+      ...assessment,
+      canonical: {
+        id: assessment.canonical!.id,
+        deceased: assessment.canonical!.deceased,
+        deathEvent: assessment.canonical!.deathEvent,
+        inventoryEvent: assessment.canonical!.inventoryEvent,
+        status: assessment.canonical!.status,
+        entries: [{ id: 'wrong-entry', itemRef: 'asset:wrong' }],
+      },
+    } as DeathSettlementDomainAssessment)
   : assessment)
 check('canonical inventory mismatch is rejected', coordinateDeathSettlement(scope, wrongCanonical, refs, deathAt).status === 'invalid')
 
