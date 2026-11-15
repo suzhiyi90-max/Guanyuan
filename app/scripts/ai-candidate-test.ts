@@ -1,1 +1,1 @@
-import './ai-candidate-test'
+import './ai-candidate-contract-test'
