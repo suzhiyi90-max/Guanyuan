@@ -98,10 +98,10 @@ check('transition from a non-active state is rejected', validateGoalStatusHistor
   [achievedGoal], [{ ...transition, fromStatus: 'abandoned' as never }], [owner], [], refs,
 ).includes('goal-status-transition-invalid-from-status'))
 check('closed-by-death cannot use ordinary transition', validateGoalStatusHistory(
-  [{ ...achievedGoal, status: 'closed-by-death' }], [transition], [owner], [], refs,
+  [achievedGoal], [{ ...transition, toStatus: 'closed-by-death' as never }], [owner], [], refs,
 ).includes('goal-status-transition-invalid-to-status'))
 check('living person cannot have death disposition', validateGoalStatusHistory(
-  [achievedGoal], [transition], [owner], [deathDisposition], refs,
+  [achievedGoal], [transition], [owner], [{ ...deathDisposition, goal: goalId, deceased: ownerId }], refs,
 ).includes('goal-status-transition-death-disposition-conflict'))
 check('goal abandoned by death disposition needs no ordinary transition', validateGoalStatusHistory(
   [deadGoal], [], [deceased], [deathDisposition], refs,
@@ -113,7 +113,7 @@ check('multiple transitions for one goal rejected', validateGoalStatusHistory(
   [achievedGoal], [transition, { ...transition, id: brandedId<'GoalStatusTransitionId'>('second') }], [owner], [], refs,
 ).includes('goal-status-transition-duplicate-goal'))
 check('transition after owner death rejected', validateGoalStatusHistory(
-  [achievedGoal], [{ ...transition, event: dispositionEvent }], [deceased], [], refs,
+  [{ ...achievedGoal, person: deceasedId }], [{ ...transition, event: dispositionEvent }], [deceased], [], refs,
 ).includes('goal-status-transition-owner-not-alive'))
 check('dead goal without death disposition still requires history', validateGoalStatusHistory(
   [deadGoal], [], [deceased], [], refs,
