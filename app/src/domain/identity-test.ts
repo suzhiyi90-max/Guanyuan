@@ -1,7 +1,8 @@
 import { brandedId, field } from './index'
 import { hasAuthorization } from './identity/authorization'
 import { validateAppointment, validateAuthorization, validateAuthorizationSet, validateIdentityAssignment, validateOffice, validateOfficeAppointments, validateOfficeAuthorizationReferences } from './identity/validation'
-import type { Appointment, Authorization, IdentityAssignment, Office } from './identity/model'
+import type { Appointment, Authorization, AuthorizationRequest, IdentityAssignment, Office } from './identity/model'
+import type { Person } from './person/model'
 
 let passed = 0
 let failed = 0
@@ -17,6 +18,31 @@ const institution = brandedId<'OrgId'>('org-001')
 const event = brandedId<'EventId'>('event-001')
 const identityId = brandedId<'IdentityId'>('identity-001')
 const now = { day: 10, period: '午' } as const
+const principalRecord: Person = {
+  id: person,
+  displayName: '权限主体测试人物',
+  birth: field.notApplicable,
+  lifeState: 'alive',
+  archiveState: 'active',
+  death: field.notApplicable,
+  capability: brandedId<'CapabilityRef'>('identity-test-capability'),
+  stateDomains: {
+    body: brandedId<'BodyScopeRef'>('identity-test-body'),
+    mind: brandedId<'MindScopeRef'>('identity-test-mind'),
+    knowledge: brandedId<'KnowledgeScopeId'>('identity-test-knowledge'),
+    goals: [],
+    scheduleScope: brandedId<'ScheduleScopeId'>('identity-test-schedule'),
+    economy: brandedId<'EconomyScopeId'>('identity-test-economy'),
+    location: brandedId<'LocationStateRef'>('identity-test-location'),
+  },
+  history: brandedId<'LifeHistoryRef'>('identity-test-history'),
+}
+function hasAuthorizationForTest(
+  grants: readonly Authorization[],
+  request: AuthorizationRequest,
+): boolean {
+  return hasAuthorization(grants, request, [principalRecord])
+}
 
 const identity: IdentityAssignment = {
   id: identityId,
@@ -114,7 +140,7 @@ const grant: Authorization = {
   revokedAt: field.notApplicable,
 }
 const request = { principal: person, permission: 'issue.local-order', scope: { kind: 'office', office: officeId } as const, at: now }
-check('explicit matching grant authorizes action', hasAuthorization([grant], request))
+check('explicit matching grant authorizes action', hasAuthorizationForTest([grant], request))
 check('office authorization reference resolves to matching scope', validateOfficeAuthorizationReferences({
   ...office, authorization: [grant.id],
 }, [grant]).length === 0)
@@ -124,26 +150,26 @@ check('office authorization cannot contain dangling references', validateOfficeA
 check('office authorization cannot reference another office scope', validateOfficeAuthorizationReferences({
   ...office, authorization: [grant.id],
 }, [{ ...grant, scope: { kind: 'office', office: brandedId<'OfficeId'>('office-002') } }]).includes('office-authorization-scope-mismatch'))
-check('authorization defaults to deny', !hasAuthorization([], request))
-check('different principal is denied', !hasAuthorization([grant], { ...request, principal: otherPerson }))
-check('different permission is denied', !hasAuthorization([grant], { ...request, permission: 'issue.extraordinary-order' }))
-check('different office scope is denied', !hasAuthorization([grant], {
+check('authorization defaults to deny', !hasAuthorizationForTest([], request))
+check('different principal is denied', !hasAuthorizationForTest([grant], { ...request, principal: otherPerson }))
+check('different permission is denied', !hasAuthorizationForTest([grant], { ...request, permission: 'issue.extraordinary-order' }))
+check('different office scope is denied', !hasAuthorizationForTest([grant], {
   ...request, scope: { kind: 'office', office: brandedId<'OfficeId'>('office-002') },
 }))
-check('world scope explicitly covers requested scope', hasAuthorization([{
+check('world scope explicitly covers requested scope', hasAuthorizationForTest([{
   ...grant, scope: { kind: 'world' },
 }], request))
-check('grant before validFrom is inactive', !hasAuthorization([grant], {
+check('grant before validFrom is inactive', !hasAuthorizationForTest([grant], {
   ...request, at: { day: 2, period: '夜' },
 }))
-check('grant at validTo boundary is inactive', !hasAuthorization([{
+check('grant at validTo boundary is inactive', !hasAuthorizationForTest([{
   ...grant, validTo: field.value({ day: 10, period: '午' }),
 }], request))
-check('revoked grant is inactive at revocation boundary', !hasAuthorization([{
+check('revoked grant is inactive at revocation boundary', !hasAuthorizationForTest([{
   ...grant, revokedBy: field.value(brandedId<'EventId'>('event-revoke')),
   revokedAt: field.value(now),
 }], request))
-check('unknown revocation state cannot grant authority', !hasAuthorization([{
+check('unknown revocation state cannot grant authority', !hasAuthorizationForTest([{
   ...grant, revokedBy: field.unknown, revokedAt: field.unknown,
 }], request))
 check('non-revocable grant cannot carry revocation', validateAuthorization({
@@ -154,7 +180,7 @@ check('non-revocable grant cannot carry revocation', validateAuthorization({
 check('revocation event and time must travel together', validateAuthorization({
   ...grant, revokedBy: field.value(brandedId<'EventId'>('event-revoke')),
 }).includes('authorization-revocation-inconsistent'))
-check('unknown validity end is not treated as open-ended', !hasAuthorization([{
+check('unknown validity end is not treated as open-ended', !hasAuthorizationForTest([{
   ...grant, validTo: field.unknown,
 }], request))
 check('unknown authorization end fails validation', validateAuthorization({
