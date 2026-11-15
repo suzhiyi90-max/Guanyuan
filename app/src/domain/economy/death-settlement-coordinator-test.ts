@@ -128,6 +128,14 @@ const missing = coordinateDeathSettlement(scope, assessments.slice(1), refs, dea
 check('missing domain evidence is incomplete, not an empty review', missing.status === 'incomplete'
   && missing.reviews.find(review => review.domain === 'office')?.coverage === 'missing')
 
+const unknownCanonical = assessments.map((assessment, index) => index === 2
+  ? { ...assessment, canonical: null, readiness: 'blocked' } as DeathSettlementDomainAssessment
+  : assessment)
+const unknown = coordinateDeathSettlement(scope, unknownCanonical, refs, deathAt)
+check('present evidence without its canonical inventory is unknown, not empty-reviewed',
+  unknown.status === 'invalid'
+  && unknown.reviews.find(review => review.domain === 'asset')?.coverage === 'unknown')
+
 const duplicate = coordinateDeathSettlement(scope, [...assessments, assessments[0]], refs, deathAt)
 check('duplicate domain assessments are invalid', duplicate.status === 'invalid'
   && duplicate.issues.includes('death-settlement-assessment-domain-duplicate'))
@@ -229,6 +237,10 @@ check('empty declared scope is invalid', coordinateDeathSettlement(
 check('duplicate declared domain is invalid', coordinateDeathSettlement(
   { deceased, deathEvent, domains: ['debt', 'debt'] }, [assessments[1]], refs, deathAt,
 ).status === 'invalid')
+
+check('unknown runtime domain values are rejected', coordinateDeathSettlement(
+  { deceased, deathEvent, domains: ['estate' as EstateSettlementDomain] }, [], refs, deathAt,
+).issues.includes('death-settlement-scope-domain-unknown'))
 check('death event time mismatch is rejected', coordinateDeathSettlement(
   scope, assessments, { ...refs, eventTimes: new Map([[deathEvent, { day: 5, period: '晨' }], [inventoryEvent, reviewAt]]) }, deathAt,
 ).status === 'invalid')
