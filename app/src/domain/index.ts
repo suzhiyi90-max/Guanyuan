@@ -26,6 +26,7 @@ export * from './economy/model'
 export * from './economy/validation'
 export * from './economy/inheritance'
 export * from './economy/estate-inventory'
+export * from './economy/debt-death-inventory'
 
 export * from './life/model'
 export * from './life/validation'
