@@ -6,6 +6,7 @@ on:
       - fix/g1.7-acceptance
       - work/w2-l-relation-death-continuity
       - work/w2-m-goal-death-continuity
+      - work/w2-n-goal-status-history
   pull_request:
     branches:
       - feat/g1-engine
@@ -26,6 +27,8 @@ on:
       - work/w2-j-estate-asset-inventory
       - work/w2-k-membership-death-continuity
       - work/w2-l-relation-death-continuity
+      - work/w2-m-goal-death-continuity
+      - work/w2-n-goal-status-history
   workflow_dispatch:
 
 permissions:
@@ -76,6 +79,8 @@ jobs:
         run: npm run test:domain:relation-death
       - name: Goal death continuity contracts
         run: npm run test:domain:goal-death
+      - name: Goal status history contracts
+        run: npm run test:domain:goal-status-history
       - name: Life history and body/mind hook contracts
         run: npm run test:domain:life
       - name: Calendar age contract tests
