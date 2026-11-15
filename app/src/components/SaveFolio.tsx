@@ -80,7 +80,7 @@ export function SaveFolio({ summary, onExport, onReset, extra }: { summary: Save
         onClick={() => { setArmed(false); setOpen(value => !value) }}
       >
         <span className="save-folio-seal" aria-hidden="true">存</span>
-        <span className="save-folio-title"><b>存档案卷</b><small>{summary.restored ? '已接上次 · 本机一档' : '本机一档 · 无云端'}</small></span>
+        <span className="save-folio-title"><b>存档案卷</b><small>{summary.restored ? '已接上次 · 本机一档' : '当前会话 · 未持久化'}</small></span>
         <span className="save-folio-day">第{dayNames[summary.day - 1]}日 · {summary.period}</span>
         <ChevronDown size={14} className="save-folio-chevron" aria-hidden="true" />
       </button>
@@ -123,7 +123,7 @@ export function SaveFolio({ summary, onExport, onReset, extra }: { summary: Save
               <p className={`save-folio-note ${armed ? 'is-armed' : ''}`} id={`${panelId}-note`}>
                 {armed
                   ? '落印即清档：志向、进度、疑点一并归零，本机不留副本。'
-                  : '本机一档 · 无云端。导出只是取一份底稿，不改本档。'}
+                  : '当前世界仅在本次会话内有效；刷新页面不会恢复。导出底稿仅供查阅，不是可恢复存档。'}
               </p>
               {extra}
             </div>
