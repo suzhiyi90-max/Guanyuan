@@ -152,6 +152,17 @@ const wrongPerson = assessments.map((assessment, index) => index === 0
   : assessment)
 check('wrong deceased identity is rejected', coordinateDeathSettlement(scope, wrongPerson, refs, deathAt).status === 'invalid')
 
+const crossDomainEvidence = assessments.map((assessment, index) => index === 0
+  ? ({
+      ...assessment,
+      evidence: assessments[1].evidence,
+      canonical: assessments[1].canonical,
+    } as DeathSettlementDomainAssessment)
+  : assessment)
+check('assessment discriminant must match its evidence domain at runtime',
+  coordinateDeathSettlement(scope, crossDomainEvidence, refs, deathAt).issues
+    .includes('death-settlement-assessment-evidence-domain-mismatch'))
+
 const wrongDeathEvent = assessments.map((assessment, index) => index === 0
   ? { ...assessment, evidence: { ...assessment.evidence, deathEvent: brandedId<'EventId'>('other-death') } } as DeathSettlementDomainAssessment
   : assessment)
