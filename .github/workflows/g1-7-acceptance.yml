@@ -26,6 +26,7 @@ on:
       - work/w4-a-world-snapshot-checkpoint
       - work/w4-b-full-save-package
       - work/w4-c-incremental-save-chain
+      - work/w5-a-runtime-connection-audit
   pull_request:
     branches:
       - feat/g1-engine
@@ -66,6 +67,7 @@ on:
       - work/w3-e-event-replay-readonly-projection
       - work/w4-a-world-snapshot-checkpoint
       - work/w4-b-full-save-package
+      - work/w4-c-incremental-save-chain
   workflow_dispatch:
 
 permissions:
