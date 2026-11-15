@@ -159,7 +159,7 @@ export async function dispatchPreviewRuntimeCandidate(
     requestSequence: session.requestSequence + 1,
   })
   if (!generated || generated.origin !== 'ai' || typeof generated.id !== 'string'
-    || !/^ai-\\d+-[a-z0-9]+$/u.test(generated.id) || generated.day !== session.state.day
+    || !/^ai-\d+-[a-z0-9]+$/u.test(generated.id) || generated.day !== session.state.day
     || !Number.isSafeInteger(generated.seed) || !Array.isArray(generated.options)
     || generated.options.length !== 2
     || !generated.options.some(item => item.id === 'jia')
