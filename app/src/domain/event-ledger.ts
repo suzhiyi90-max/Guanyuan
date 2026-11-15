@@ -54,6 +54,7 @@ export type LedgerIssue =
   | 'ledger-state-corrupt'
   | 'ledger-ai-candidate-receipt-invalid'
   | 'ledger-ai-candidate-metadata-invalid'
+  | 'ledger-ai-candidate-fact-duplicate'
 
 export type AppendLedgerResult<Kind extends string = string> =
   | { readonly status: 'appended'; readonly ledger: EventLedger<Kind>; readonly event: LedgerEvent<Kind> }
@@ -181,6 +182,7 @@ function appendLedgerEventCore<Kind extends string>(
   input: LedgerEventInput<Kind>,
   committedAt: WorldTime,
   allowValidationReceipt = false,
+  allowAiCandidate = false,
 ): AppendLedgerResult<Kind> {
   if (!isLedgerConsistent(ledger)) {
     return { status: 'rejected', ledger, issues: ['ledger-state-corrupt'] }
@@ -191,7 +193,10 @@ function appendLedgerEventCore<Kind extends string>(
   if (input.kind === 'candidate.validated' && !allowValidationReceipt) {
     return { status: 'rejected', ledger, issues: ['ledger-ai-candidate-receipt-invalid'] }
   }
-  if (input.source === 'ai-candidate') {
+  if (input.source === 'ai-candidate' && !allowAiCandidate) {
+    return { status: 'rejected', ledger, issues: ['ledger-ai-candidate-receipt-invalid'] }
+  }
+  if (input.source === 'ai-candidate' && allowAiCandidate) {
     const validationIndex = ledger.events.findIndex(event => event.id === input.validationRef)
     const receipt = validationIndex >= 0 ? ledger.events[validationIndex] : undefined
     const receiptPayload = receipt?.payload
@@ -200,10 +205,9 @@ function appendLedgerEventCore<Kind extends string>(
       || receiptPayload === null || typeof receiptPayload !== 'object' || Array.isArray(receiptPayload)
       || (receiptPayload as { readonly [key: string]: JsonValue }).candidate !== input.candidateRef
       || (receiptPayload as { readonly [key: string]: JsonValue }).targetKind !== input.kind
+      || !/^sha256:[0-9a-f]{64}$/u.test(String((receiptPayload as { readonly [key: string]: JsonValue }).payloadDigest ?? ''))
       || (receiptPayload as { readonly [key: string]: JsonValue }).registryVersion === undefined
-      || (receiptPayload as { readonly [key: string]: JsonValue }).payloadDigest === undefined
-      || (receiptPayload as { readonly [key: string]: JsonValue }).digestAlgorithm !== 'sha-256/canonical-json-v1'
-      || canonicalJson((receiptPayload as { readonly [key: string]: JsonValue }).candidatePayload) !== canonicalJson(input.payload)) {
+      || (receiptPayload as { readonly [key: string]: JsonValue }).digestAlgorithm !== 'sha-256/canonical-json-v1') {
       return { status: 'rejected', ledger, issues: ['ledger-ai-candidate-receipt-invalid'] }
     }
   }
@@ -225,6 +229,11 @@ function appendLedgerEventCore<Kind extends string>(
     return previous.fingerprint === fingerprint
       ? { status: 'duplicate', ledger, event }
       : { status: 'idempotency-conflict', ledger, event }
+  }
+  if (input.source === 'ai-candidate' && ledger.events.some(
+    event => event.source === 'ai-candidate' && event.candidateRef === input.candidateRef,
+  )) {
+    return { status: 'rejected', ledger, issues: ['ledger-ai-candidate-fact-duplicate'] }
   }
 
   const seq = ledger.head + 1
@@ -281,7 +290,7 @@ export async function appendCandidateValidationReceipt(
   if (!candidate.candidateId.trim() || !candidate.targetKind.trim()
     || !candidate.validatedBy.trim() || !/^sha256:[0-9a-f]{64}$/u.test(candidate.payloadDigest)
     || !registry.frozen || registry.registryVersion !== candidate.registryVersion
-    || validateEventPayload(registry, candidate.targetKind, candidate.candidatePayload).status !== 'valid') {
+    || !candidate.candidatePayload || validateEventPayload(registry, candidate.targetKind, candidate.candidatePayload).status !== 'valid') {
     return { status: 'rejected', ledger, issues: ['ledger-ai-candidate-metadata-invalid'] }
   }
   try {
@@ -310,13 +319,51 @@ export async function appendCandidateValidationReceipt(
     payload: {
       candidate: candidate.candidateId,
       targetKind: candidate.targetKind,
-      candidatePayload: candidate.candidatePayload,
       payloadDigest: candidate.payloadDigest,
       digestAlgorithm: 'sha-256/canonical-json-v1',
       registryVersion: candidate.registryVersion,
       validatedBy: candidate.validatedBy,
     },
   }, committedAt, true)
+}
+
+/**
+ * Trusted candidate-fact append. Generic append cannot submit ai-candidate
+ * events; this path rechecks the frozen registry, schema, digest and receipt.
+ */
+export async function appendAiCandidateFact(
+  ledger: EventLedger,
+  registry: EventRegistry,
+  input: Omit<LedgerEventInput, 'source'> & { readonly source: 'ai-candidate' },
+  committedAt: WorldTime,
+): Promise<AppendLedgerResult> {
+  if (!registry.frozen || !input.candidateRef || !input.validationRef
+    || validateEventPayload(registry, input.kind, input.payload).status !== 'valid') {
+    return { status: 'rejected', ledger, issues: ['ledger-ai-candidate-metadata-invalid'] }
+  }
+  const receipt = ledger.events.find(event => event.id === input.validationRef)
+  const p = receipt?.payload
+  if (!receipt || receipt.kind !== 'candidate.validated' || receipt.source !== 'rule'
+    || receipt.seq >= ledger.head + 1 || p === null || typeof p !== 'object' || Array.isArray(p)
+    || (p as { readonly [key: string]: JsonValue }).candidate !== input.candidateRef
+    || (p as { readonly [key: string]: JsonValue }).targetKind !== input.kind
+    || (p as { readonly [key: string]: JsonValue }).registryVersion !== registry.registryVersion
+    || (p as { readonly [key: string]: JsonValue }).digestAlgorithm !== 'sha-256/canonical-json-v1') {
+    return { status: 'rejected', ledger, issues: ['ledger-ai-candidate-receipt-invalid'] }
+  }
+  try {
+    const canonical = canonicalJson({ targetKind: input.kind, registryVersion: registry.registryVersion, payload: input.payload })
+    const subtle = globalThis.crypto?.subtle
+    if (!subtle) return { status: 'rejected', ledger, issues: ['ledger-ai-candidate-metadata-invalid'] }
+    const digest = await subtle.digest('SHA-256', new TextEncoder().encode(canonical))
+    const expected = `sha256:${Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('')}`
+    if ((p as { readonly [key: string]: JsonValue }).payloadDigest !== expected) {
+      return { status: 'rejected', ledger, issues: ['ledger-ai-candidate-receipt-invalid'] }
+    }
+  } catch {
+    return { status: 'rejected', ledger, issues: ['ledger-ai-candidate-metadata-invalid'] }
+  }
+  return appendLedgerEventCore(ledger, input, committedAt, false, true)
 }
 
 export function readLedgerEvents<Kind extends string>(
