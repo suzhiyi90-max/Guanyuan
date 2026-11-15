@@ -116,6 +116,20 @@ async function main(): Promise<void> {
   }, later)
   check('AI fact without candidate and validation refs is rejected', fakeAi.status === 'rejected'
     && fakeAi.ledger === ledger)
+  const forgedLink = appendLedgerEvent(ledger, {
+    source: 'ai-candidate', kind: 'person.created', intentKind: 'fake', actor: 'ai-candidate',
+    requestWorldTime: later, clientRequestId: 'fake-link', candidateRef: 'cand-forged',
+    validationRef: ledger.events[0].id, payload,
+  }, later)
+  check('AI fact cannot borrow another candidate receipt', forgedLink.status === 'rejected'
+    && forgedLink.ledger === ledger)
+  const changedFact = appendLedgerEvent(ledger, {
+    source: 'ai-candidate', kind: 'person.created', intentKind: 'fake', actor: 'ai-candidate',
+    requestWorldTime: later, clientRequestId: 'changed-fact', candidateRef: 'cand-001',
+    validationRef: ledger.events[0].id, payload: { name: '乙', rank: 7 },
+  }, later)
+  check('AI fact payload cannot diverge from validated candidate snapshot', changedFact.status === 'rejected'
+    && changedFact.ledger === ledger)
 
   const changedPayload = await submitAiCandidate(createCandidateLog(), {
     candidateId: 'cand-002', targetKind: 'person.created', payload: { name: 3 }, registryVersion: '3.1.0',
