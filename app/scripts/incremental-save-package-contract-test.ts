@@ -3,6 +3,7 @@ import { appendLedgerEvent, createEventLedger, type EventLedger, type JsonValue,
 import { createEventRegistry, freezeEventRegistry, registerEventSchema } from '../src/domain/event-registry'
 import { replayEventRange, type StreamCursor } from '../src/domain/event-replay'
 import { createWorldSnapshot } from '../src/domain/world-snapshot'
+import { candidatePayloadDigest } from '../src/domain/ai-candidate'
 import { createFullSavePackage, type FullSavePackageInput } from '../src/domain/save-package'
 import {
   createIncrementalSavePackage,
@@ -157,11 +158,13 @@ async function main(): Promise<void> {
 
   const otherWorld = brandedId<'WorldId'>('other-incremental-world') as WorldId
   const otherSnapshot = createWorldSnapshot({
-    schemaVersion: 1, worldId: otherWorld, streamHead: head2, checkpointAt: t2, materialized: ['甲', '乙'],
+    schemaVersion: 1, worldId: otherWorld, streamHead: genesis, checkpointAt: t1, materialized: [],
   })
   if (otherSnapshot.status !== 'valid') throw new Error('incremental-test-other-world-snapshot-failed')
   const otherBase = await createFullSavePackage({
-    ...fullInput, worldId: otherWorld, snapshot: otherSnapshot.snapshot,
+    packageKind: 'full', worldId: otherWorld, schemaVersion: 1,
+    streamRange: { fromExclusive: genesis, toInclusive: genesis },
+    events: [], snapshot: otherSnapshot.snapshot,
   }, verification)
   if (otherBase.status !== 'valid') throw new Error('incremental-test-other-world-base-failed')
   const crossWorld = await createIncrementalSavePackage({
@@ -171,6 +174,7 @@ async function main(): Promise<void> {
     && crossWorld.issue === 'save-package-base-world-mismatch')
 
   const receiptWorld = brandedId<'WorldId'>('receipt-incremental-world') as WorldId
+  const receiptDigest = await candidatePayloadDigest('person.created', '1.0.0', { name: '丙' })
   const receipt: LedgerEvent<Kind> = Object.freeze({
     worldId: receiptWorld,
     id: brandedId<'EventId'>('evt:receipt-incremental-world:1'),
@@ -185,7 +189,7 @@ async function main(): Promise<void> {
     payload: {
       candidate: 'c1',
       targetKind: 'person.created',
-      payloadDigest: `sha256:${'a'.repeat(64)}`,
+      payloadDigest: receiptDigest,
       digestAlgorithm: 'sha-256/canonical-json-v1',
       registryVersion: '1.0.0',
       validatedBy: 'rule:test',
