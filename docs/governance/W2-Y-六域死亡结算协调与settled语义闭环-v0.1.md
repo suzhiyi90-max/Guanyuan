@@ -55,7 +55,7 @@
 | relation | `validateRelationDeathInventory` | `isRelationDeathInventoryReadyForSettlement` |
 | goal | `validateGoalDeathInventory` | `isGoalDeathInventoryReadyForSettlement` |
 
-协调层只验证共享身份、时间、scope coverage、canonical evidence 引用、重复与缺失，以及领域结果是否自洽。它不重新判断债务、产权、任职、授权、成员资格、关系或目标处置是否合法。
+协调层只验证共享身份、时间、scope coverage、assessment discriminant 与 evidence.domain 一致性、canonical evidence 引用、重复与缺失，以及领域结果是否自洽。它不重新判断债务、产权、任职、授权、成员资格、关系或目标处置是否合法。
 
 领域 readiness 为 blocked 时，整体结果为 incomplete；证据结构错误、身份错配、时间倒置、重复声明或 ready 与领域 validator issues 相矛盾时，整体结果为 invalid。
 
