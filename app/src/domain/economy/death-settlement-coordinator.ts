@@ -6,6 +6,12 @@ import type {
 import { compareWorldTime, isValidWorldTime } from '../shared/world-time'
 import type { WorldTime } from '../shared/world-time'
 import type { EstateSettlementDomain } from '../person/model'
+import type { DeathOfficeInventoryIssue } from '../identity/death-inventory'
+import type { MembershipDeathInventoryIssue } from '../relations/death-inventory'
+import type { RelationDeathInventoryIssue } from '../relations/relation-death-inventory'
+import type { GoalDeathInventoryIssue } from '../planning/death-inventory'
+import type { DebtDeathInventoryIssue } from './debt-death-inventory'
+import type { EstateAssetInventoryIssue } from './estate-inventory'
 import type {
   DeathSettlementCanonicalInventoryReference,
   DeathSettlementDomainEvidence,
@@ -25,12 +31,20 @@ type EvidenceFor<Domain extends EstateSettlementDomain> = Extract<
   { readonly domain: Domain }
 >
 
+type DomainIssueFor<Domain extends EstateSettlementDomain> =
+  Domain extends 'office' ? DeathOfficeInventoryIssue
+    : Domain extends 'debt' ? DebtDeathInventoryIssue
+      : Domain extends 'asset' ? EstateAssetInventoryIssue
+        : Domain extends 'membership' ? MembershipDeathInventoryIssue
+          : Domain extends 'relation' ? RelationDeathInventoryIssue
+            : GoalDeathInventoryIssue
+
 type AssessmentFor<Domain extends EstateSettlementDomain> = {
   readonly domain: Domain
   readonly evidence: EvidenceFor<Domain>
   readonly canonical: DeathSettlementCanonicalInventoryReference | null
-  /** Issues returned by this domain's own validator; never reinterpret them here. */
-  readonly domainIssues: readonly string[]
+  /** Domain-specific validator issues retain the domain's own issue type. */
+  readonly domainIssues: readonly DomainIssueFor<Domain>[]
   /** Result of this domain's own readiness function, represented without a boolean. */
   readonly readiness: 'ready' | 'blocked'
 }
