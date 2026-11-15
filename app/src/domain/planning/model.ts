@@ -3,6 +3,7 @@ import type {
   ActionRef,
   EventId,
   GoalId,
+  GoalDeathDispositionId,
   PersonId,
   PlaceId,
   ScheduleId,
@@ -11,7 +12,7 @@ import type {
 import type { Period, WorldDay, WorldTime } from '../shared/world-time'
 import type { Visibility } from '../shared/visibility'
 
-export type GoalStatus = 'active' | 'achieved' | 'abandoned' | 'failed'
+export type GoalStatus = 'active' | 'achieved' | 'abandoned' | 'failed' | 'closed-by-death'
 
 /** NPC goals are A-layer domain records; player aspiration is a separate singleton. */
 export interface Goal {
@@ -22,6 +23,18 @@ export interface Goal {
   readonly status: GoalStatus
   readonly sourceEvent: EventId
   readonly visibility: Visibility
+}
+
+/** Explicit post-death disposition of one unfinished personal goal. */
+export interface GoalDeathDisposition {
+  readonly id: GoalDeathDispositionId
+  readonly goal: GoalId
+  readonly deceased: PersonId
+  readonly deathEvent: EventId
+  readonly dispositionEvent: EventId
+  readonly outcome: 'historical' | 'abandoned' | 'failed' | 'undertaken'
+  /** A new, independently authored goal; present only for undertaken. */
+  readonly successorGoal: Field<GoalId>
 }
 
 export interface PlayerGoal {
