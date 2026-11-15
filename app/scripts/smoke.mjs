@@ -753,6 +753,7 @@ try {
   // 7.85 FE-020 东堤暴雨与洪峰只读投影
   await page.goto(smokeFixtureUrl('day8'), { waitUntil: 'domcontentloaded' })
   await settle(500)
+  if (await page.locator('.world-card').count()) { await click('.world-later'); await settle(250) }
   await click('.scene-switcher button:has-text("东堤")')
   await settle(450)
   check('第八日东堤投影既有暴雨而无水位数值', await page.locator('.river-projection.has-rain').isVisible() && (await page.locator('.river-projection').getAttribute('data-water-stage')) === '暴雨涨水' && (await page.locator('.river-rain > i').count()) === 18 && (await page.locator('.river-evidence-strip').innerText()).includes('上游暴雨'))
