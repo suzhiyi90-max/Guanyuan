@@ -109,6 +109,28 @@ check('partial succession remains explicitly pending, not settled', validateDebt
   partialInventory, [baseDebt], [partialSuccession], refs).length === 0
   && !isDebtDeathInventoryReadyForSettlement(partialInventory,
     validateDebtDeathInventory(partialInventory, [baseDebt], [partialSuccession], refs)))
+check('partial succession cannot be marked fully recorded', validateDebtDeathInventory(
+  inventory([entry('partial-marked-complete', baseDebt, 'creditor', 'succession-recorded', [partialSuccession.id])]),
+  [baseDebt], [partialSuccession], refs).includes('debt-death-inventory-succession-share-incomplete'))
+const overA = { ...successions[0], id: brandedId<'DebtPartySuccessionId'>('over-a'), shareNumerator: 2, shareDenominator: 3 }
+const overB = { ...successions[0], id: brandedId<'DebtPartySuccessionId'>('over-b'), successor: creditorId, shareNumerator: 1, shareDenominator: 2 }
+check('overallocated succession cannot be marked fully recorded', validateDebtDeathInventory(
+  inventory([entry('overallocated-position', baseDebt, 'creditor', 'succession-recorded', [overA.id, overB.id])]),
+  [baseDebt], [overA, overB], refs).includes('debt-death-inventory-succession-share-overallocated'))
+check('succession tied to a different death event is unaccounted', validateDebtDeathInventory(
+  inventory([entry('wrong-death-succession', baseDebt, 'creditor', 'pending')]),
+  [baseDebt], [{ ...successions[0], deathEvent: sourceEvent }], refs)
+  .includes('debt-death-inventory-succession-unaccounted'))
+check('challenged inventory cannot become settlement-ready', !isDebtDeathInventoryReadyForSettlement(
+  inventory([fullCreditorEntry], 'challenged'), []))
+check('empty inventory still requires a recorded review event', validateDebtDeathInventory(
+  { ...inventory([]), inventoryEvent: brandedId<'EventId'>('missing-review') }, [], [], refs)
+  .includes('debt-death-inventory-event-missing'))
+check('settlement evidence after inventory is rejected', validateDebtDeathInventory(
+  { ...inventory([entry('late-settlement', { ...baseDebt, status: 'settled', settlements: [paidAfterEvent] },
+    'creditor', 'settled-after-death')]), inventoryEvent: successionEvent },
+  [{ ...baseDebt, status: 'settled', settlements: [paidAfterEvent] }], [], refs)
+  .includes('debt-death-inventory-settlement-after-inventory'))
 check('a complete inventory must cover creditor and debtor roles separately', validateDebtDeathInventory(
   inventory([fullCreditorEntry]), [baseDebt, secondDebt], successions, refs)
   .includes('debt-death-inventory-complete-coverage-missing'))
