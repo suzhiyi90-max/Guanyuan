@@ -1,31 +1,35 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { people } from '../data'
-import { advanceDay, advancePeriod, goalReckoningOf, officialAvailableOf, periods, spendAction, verdictOf } from './engine'
+import { goalReckoningOf, officialAvailableOf, periods, verdictOf } from './engine'
 import type { OfficialActionId, RiverPlan, TaskStage, ToastMessage } from '../types'
-import { createInitialGameState } from './initial-state'
 import type { GameState } from './model'
 export type { GameState } from './model'
-import { executeCommand } from './commands'
+import type { CommandResult } from './commands'
+import {
+  createPreviewRuntimeSession,
+  dispatchPreviewRuntimeIntent,
+  type PreviewRuntimeDispatchResult,
+  type PreviewRuntimeIntent,
+  type PreviewRuntimeSession,
+} from './runtime-orchestrator'
 import type { GeneratedEvent } from '../narrative/types'
 
 export { periods, goalReckoningOf, verdictOf, officialAvailableOf }
 export type { ReckoningRow, GoalReckoning, Verdict } from './engine'
-const SAVE_KEY = 'guanyuan.save.v1'
 
-const initialState = createInitialGameState()
+let worldAllocationSequence = 0
+function allocatePreviewWorldId(): string {
+  worldAllocationSequence += 1
+  return `preview-world-${Date.now().toString(36)}-${worldAllocationSequence.toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+}
 
-// Preserve the existing v1 restore behavior while GameState ownership moves out of the React hook.
-function loadSave(): GameState | null {
-  try {
-    const raw = localStorage.getItem(SAVE_KEY)
-    if (!raw) return null
-    const parsed = JSON.parse(raw) as GameState
-    if (!parsed || typeof parsed.day !== 'number' || !Array.isArray(parsed.clues)) return null
-    return { ...initialState, ...parsed }
-  } catch {
-    return null
+function asCommandResult(result: PreviewRuntimeDispatchResult): CommandResult {
+  return {
+    state: result.session.state,
+    ...(result.status === 'rejected' ? { rejected: result.reason } : {}),
   }
 }
+
 export function taskStageOf(state: GameState): TaskStage {
   if (state.plan) {
     if (state.day >= 10) return '结'
@@ -57,29 +61,19 @@ export function nextCheckpointOf(state: GameState): { when: string; label: strin
 }
 
 export function useGuanyuanGame() {
-  const [state, setState] = useState<GameState>(() => loadSave() ?? initialState)
+  const runtimeRef = useRef<PreviewRuntimeSession | null>(null)
+  if (!runtimeRef.current) runtimeRef.current = createPreviewRuntimeSession(allocatePreviewWorldId())
+  const [state, setState] = useState<GameState>(() => runtimeRef.current!.state)
   const [toast, setToast] = useState<ToastMessage | null>(null)
-  const restored = useRef(Boolean(loadSave()))
-  // 命令结算在 updater 外基于本次 render 的状态快照同步计算；不在 updater 内写外部变量。
-  const commitCommand = useCallback((command: Parameters<typeof executeCommand>[1]) => {
-    const result = executeCommand(state, command)
-    if (!result.rejected) setState(result.state)
+  const restored = useRef(false)
+
+  // 所有世界事实只能通过此入口 append + replay；React state 只接收不可变投影。
+  const commitIntent = useCallback((intent: PreviewRuntimeIntent) => {
+    const result = dispatchPreviewRuntimeIntent(runtimeRef.current!, intent)
+    runtimeRef.current = result.session
+    if (result.status !== 'rejected') setState(result.session.state)
     return result
-  }, [state])
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(SAVE_KEY, JSON.stringify(state))
-    } catch {
-      /* 存储不可用时静默降级为单次会话 */
-    }
-  }, [state])
-
-  useEffect(() => {
-    if (!toast) return
-    const timer = window.setTimeout(() => setToast(null), 4200)
-    return () => window.clearTimeout(timer)
-  }, [toast])
+  }, [])
 
   const notify = useCallback((title: string, detail: string) => {
     setToast({ id: Date.now(), title, detail })
@@ -88,198 +82,94 @@ export function useGuanyuanGame() {
   const dismissToast = useCallback(() => setToast(null), [])
 
   const setGoal = useCallback((goalId: string) => {
-    setState(current => ({ ...current, goalId }))
-  }, [])
+    return commitIntent({ kind: 'goal.selected', payload: { goalId } })
+  }, [commitIntent])
 
   const rememberDocument = useCallback((selected: string[]) => {
-    let result: 'ok' | 'need-more' | 'done' = 'ok'
-    setState(current => {
-      if (current.completedActions.includes('doc-remembered')) {
-        result = 'done'
-        return current
-      }
-      if (selected.length < 2) {
-        result = 'need-more'
-        return current
-      }
-      const hasCause = selected.some(id => id.startsWith('cause'))
-      const text = hasCause
-        ? '初稿断言“堤土未实”，定稿改称“闸底未明”：渗水因由并无勘查依据，书办为何先下结论？'
-        : '东堤呈文两版在范围、料数或工法上有改动：改动依据未附，须找经手人问明。'
-      const question = hasCause
-        ? '未经探挖，初稿凭什么先定“堤土未实”？谁让书办这样写？'
-        : '两版之间改了什么、谁来改、依据附在哪一页？'
-      return {
-        ...current,
-        completedActions: [...current.completedActions, 'doc-remembered'],
-        clues: [...current.clues, { id: `C-${current.clues.length + 1}`, text, source: 'document' as const, refs: selected, day: current.day }],
-        comparisons: [...current.comparisons, { id: `B-${current.comparisons.length + 1}`, source: 'document' as const, refs: selected, question, day: current.day }],
-        log: { ...current.log, stuck: '呈文因由有改，书办与闸底工法须再核' },
-      }
-    })
-    return result
-  }, [])
+    const current = runtimeRef.current!.state
+    if (current.completedActions.includes('doc-remembered')) return 'done' as const
+    if (selected.length < 2) return 'need-more' as const
+    const result = commitIntent({ kind: 'document.remembered', payload: { selectedIds: selected } })
+    return result.status === 'rejected' ? 'done' as const : 'ok' as const
+  }, [commitIntent])
 
   const rememberLedger = useCallback((selected: string[]) => {
-    let result: 'ok' | 'need-more' | 'done' = 'ok'
-    setState(current => {
-      if (current.completedActions.includes('ledger-remembered')) {
-        result = 'done'
-        return current
-      }
-      if (selected.length < 2) {
-        result = 'need-more'
-        return current
-      }
-      const ids = selected.join(' / ')
-      return {
-        ...current,
-        completedActions: [...current.completedActions, 'ledger-remembered'],
-        clues: [...current.clues, { id: `C-${current.clues.length + 1}`, text: `并置 ${ids}：三百两在库账、借领与旧欠中的名义不同，须核是否同一笔，不得重复计成六百两。`, source: 'ledger' as const, refs: selected, day: current.day }],
-        comparisons: [...current.comparisons, { id: `B-${current.comparisons.length + 1}`, source: 'ledger' as const, refs: selected, question: '同一笔三百两，在几本账里各叫什么名字？经手人分别是谁？', day: current.day }],
-        log: { ...current.log, stuck: '三百两名义不一，须核同一笔账的流转与责任' },
-      }
-    })
-    return result
-  }, [])
+    const current = runtimeRef.current!.state
+    if (current.completedActions.includes('ledger-remembered')) return 'done' as const
+    if (selected.length < 2) return 'need-more' as const
+    const result = commitIntent({ kind: 'ledger.remembered', payload: { selectedIds: selected } })
+    return result.status === 'rejected' ? 'done' as const : 'ok' as const
+  }, [commitIntent])
 
   const askPerson = useCallback((personId: string) => {
-    const person = people.find(p => p.id === personId)
-    if (!person) return 'missing' as const
-    let repeated = false
-    setState(current => {
-      if (current.asked.includes(personId)) {
-        repeated = true
-        return current
-      }
-      const spent = spendAction(current, `ask-${personId}`)
-      if (!spent) return current
-      return {
-        ...spent,
-        asked: [...spent.asked, personId],
-        unlocked: personId === 'liangshang' ? [...new Set([...spent.unlocked, 'E-003'])] : spent.unlocked,
-      }
-    })
-    return repeated ? ('repeated' as const) : ('ok' as const)
-  }, [])
+    const current = runtimeRef.current!.state
+    if (!people.some(person => person.id === personId)) return 'missing' as const
+    if (current.asked.includes(personId) || current.completedActions.includes(`ask-${personId}`)) return 'repeated' as const
+    const result = commitIntent({ kind: 'person.asked', payload: { personId } })
+    return result.status === 'rejected' ? 'repeated' as const : 'ok' as const
+  }, [commitIntent])
 
   const audit = useCallback(() => {
-    let repeated = false
-    setState(current => {
-      if (current.completedActions.includes('audit')) {
-        repeated = true
-        return current
-      }
-      const spent = spendAction(current, 'audit')
-      if (!spent) return current
-      return {
-        ...spent,
-        unlocked: [...new Set([...spent.unlocked, 'E-002'])],
-        log: { ...spent.log, done: '细查旧册，找出主簿三百两借领状', stuck: '借领状与粮商旧欠是否同一笔，尚待互证' },
-      }
-    })
-    return repeated ? ('repeated' as const) : ('ok' as const)
-  }, [])
+    const current = runtimeRef.current!.state
+    if (current.completedActions.includes('audit')) return 'repeated' as const
+    const result = commitIntent({ kind: 'records.audited', payload: {} })
+    return result.status === 'rejected' ? 'repeated' as const : 'ok' as const
+  }, [commitIntent])
 
   const probe = useCallback(() => {
-    let repeated = false
-    setState(current => {
-      if (current.probeKnown) {
-        repeated = true
-        return current
-      }
-      const spent = spendAction(current, 'probe')
-      if (!spent) return current
-      return {
-        ...spent,
-        probeKnown: true,
-        unlocked: [...new Set([...spent.unlocked, 'E-007'])],
-        clues: [...spent.clues, { id: `C-${spent.clues.length + 1}`, text: 'E-007 探挖记录：旧闸底淘空三尺。书办“毋庸拆验”与现场记录不符，但其动机尚不能据此断定。', source: 'river' as const, refs: ['E-007'], day: spent.day }],
-        log: { ...spent.log, done: '亲勘东堤，探挖见闸底淘空三尺', stuck: '抢护可先行，拆修须汛后另案；料与夫仍有缺口' },
-      }
-    })
-    return repeated ? ('repeated' as const) : ('ok' as const)
-  }, [])
+    const current = runtimeRef.current!.state
+    if (current.probeKnown || current.completedActions.includes('probe')) return 'repeated' as const
+    const result = commitIntent({ kind: 'river.probed', payload: {} })
+    return result.status === 'rejected' ? 'repeated' as const : 'ok' as const
+  }, [commitIntent])
 
   const markPlanPreview = useCallback(() => {
-    setState(current => current.completedActions.includes('plan-preview')
-      ? current
-      : { ...current, completedActions: [...current.completedActions, 'plan-preview'] })
-  }, [])
+    if (runtimeRef.current!.state.completedActions.includes('plan-preview')) return
+    commitIntent({ kind: 'plan.previewed', payload: {} })
+  }, [commitIntent])
 
   const confirmPlan = useCallback((plan: Omit<RiverPlan, 'day' | 'period'>) => {
-    let accepted = false
-    setState(current => {
-      if (current.plan) return current
-      const spent = spendAction(current, 'plan-river')
-      if (!spent) return current
-      accepted = true
-      return {
-        ...spent,
-        plan: { ...plan, day: current.day, period: periods[current.periodIndex] },
-        log: { ...spent.log, done: '东堤抢护已签押发起，县丞会勘、工头监作', stuck: '抢护需三至四日；在途十垛与旧欠仍可能生变' },
-      }
-    })
-    return accepted
-  }, [])
+    const current = runtimeRef.current!.state
+    if (current.plan || current.completedActions.includes('plan-river')) return false
+    const result = commitIntent({ kind: 'river.plan.confirmed', payload: { plan } })
+    return result.status !== 'rejected'
+  }, [commitIntent])
 
   const chooseBanquet = useCallback((choice: 'attend' | 'delegate' | 'audit') => {
-    let accepted = false
-    setState(current => {
-      if (current.periodIndex !== 3) return current
-      accepted = true
-      if (choice === 'attend') {
-        return {
-          ...current,
-          privateFunds: current.privateFunds - 20,
-          giftEntries: [...current.giftEntries, '桑宅接风宴 · 亲赴，花费二十两'],
-          unlocked: [...new Set([...current.unlocked, 'E-003'])],
-          asked: [...new Set([...current.asked, 'liangshang', 'gentry'])],
-          log: { done: '赴桑宅接风宴，取得旧欠票据与坟图线索', stuck: '三百两旧欠已有票据，偿还安排与坟地土源未定', rumor: '桑宅赞你通达；主簿整夜未发一言' },
-        }
-      }
-      if (choice === 'delegate') {
-        return {
-          ...current,
-          privateFunds: current.privateFunds - 6,
-          giftEntries: [...current.giftEntries, '桑宅接风宴 · 县丞代往，备礼六两'],
-          asked: [...new Set([...current.asked, 'xiancheng'])],
-          log: { done: '请县丞代赴桑宅宴，县衙礼数未失', stuck: '旧欠只听转述，坟地仍须亲自说合', rumor: '桑士绅嫌你生分；县丞却记下这份托付' },
-        }
-      }
-      return {
-        ...current,
-        unlocked: [...new Set([...current.unlocked, 'E-002'])],
-        giftEntries: [...current.giftEntries, '桑宅接风宴 · 未赴，闭门查旧册'],
-        log: { done: '闭门查旧册，取得主簿三百两借领状', stuck: '借领用途已见，粮商旧欠与现场抢护仍待核', rumor: '桑宅面上无光；主簿连夜打听谁动过旧册' },
-      }
-    })
-    return accepted
-  }, [])
+    if (runtimeRef.current!.state.periodIndex !== 3) return false
+    const result = commitIntent({ kind: 'banquet.choice', payload: { choice } })
+    return result.status !== 'rejected'
+  }, [commitIntent])
 
-  // FE-161 / G1.7-B：所有入口返回真实 CommandResult；UI 依 rejected 决定是否关闭与提示。
-  // 命令在 updater 外基于同步快照计算，避免 updater 副作用及异步返回值竞态。
   const runOfficialAction = useCallback((key: OfficialActionId) => (
-    commitCommand({ kind: 'official', key })
-  ), [commitCommand])
+    asCommandResult(commitIntent({ kind: 'official.action', payload: { key } }))
+  ), [commitIntent])
 
   const continueNextDay = useCallback(() => {
-    setState(advanceDay)
-  }, [])
+    commitIntent({ kind: 'day.advanced', payload: {} })
+  }, [commitIntent])
 
   const resolveWorldOption = useCallback((eventId: string, optionId: string) => (
-    commitCommand({ kind: 'event', eventId, optionId })
-  ), [commitCommand])
+    asCommandResult(commitIntent({ kind: 'world.event.resolved', payload: { eventId, optionId } }))
+  ), [commitIntent])
 
-  // 生成事件只借既有 handledEvents 记已决，不新增存档字段、不改存档结构。
-  const resolveGeneratedEvent = useCallback((event: GeneratedEvent, optionId: string) => (
-    commitCommand({ kind: 'generated', event, optionId })
-  ), [commitCommand])
+  // AI 候选回执与 ai-candidate 事实提交在 W5-C2 接入；此处严禁旧式直接 setState。
+  const resolveGeneratedEvent = useCallback((_event: GeneratedEvent, _optionId: string): CommandResult => ({
+    state: runtimeRef.current!.state,
+    rejected: 'ai-candidate-flow-not-integrated',
+  }), [])
 
+  // 重立志是创建新世界，不删除或覆盖 legacy v1 key，也不伪造旧世界的事件历史。
   const resetGame = useCallback(() => {
-    localStorage.removeItem(SAVE_KEY)
-    setState({ ...initialState })
+    runtimeRef.current = createPreviewRuntimeSession(allocatePreviewWorldId())
+    setState(runtimeRef.current.state)
   }, [])
+
+  useEffect(() => {
+    if (!toast) return
+    const timer = window.setTimeout(() => setToast(null), 4200)
+    return () => window.clearTimeout(timer)
+  }, [toast])
 
   return {
     state,
