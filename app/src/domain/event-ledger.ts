@@ -203,7 +203,7 @@ function appendLedgerEventCore<Kind extends string>(
       || (receiptPayload as { readonly [key: string]: JsonValue }).registryVersion === undefined
       || (receiptPayload as { readonly [key: string]: JsonValue }).payloadDigest === undefined
       || (receiptPayload as { readonly [key: string]: JsonValue }).digestAlgorithm !== 'sha-256/canonical-json-v1'
-      || JSON.stringify((receiptPayload as { readonly [key: string]: JsonValue }).candidatePayload) !== JSON.stringify(input.payload)) {
+      || canonicalJson((receiptPayload as { readonly [key: string]: JsonValue }).candidatePayload) !== canonicalJson(input.payload)) {
       return { status: 'rejected', ledger, issues: ['ledger-ai-candidate-receipt-invalid'] }
     }
   }
