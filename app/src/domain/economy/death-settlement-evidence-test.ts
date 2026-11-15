@@ -4,7 +4,7 @@ import {
   projectDebtDeathInventoryEvidence,
   validateDeathSettlementDomainEvidence,
 } from './death-settlement-evidence'
-import type { EventId, DebtDeathInventoryEntryId, DebtDeathInventoryId, DebtId, PersonId, DeathSettlementEvidenceId } from '../shared/ids'
+import type { EventId } from '../shared/ids'
 import type { WorldTime } from '../shared/world-time'
 
 let passed = 0
@@ -30,7 +30,8 @@ const refs = {
   events: [deathEvent, reviewEvent],
   eventTimes: new Map<EventId, WorldTime>([[deathEvent, deathAt], [reviewEvent, reviewAt]]),
 }
-const evidence = projectDebtDeathInventoryEvidence(evidenceId, inventory)\nconst canonical = { id: inventoryId, deceased, deathEvent, inventoryEvent: reviewEvent, status: inventory.status, entryIds: inventory.entries.map(item => item.id) }
+const evidence = projectDebtDeathInventoryEvidence(evidenceId, inventory)
+const canonical = { id: inventoryId, deceased, deathEvent, inventoryEvent: reviewEvent, status: inventory.status, entryIds: inventory.entries.map(item => item.id) }
 check('debt projection preserves inventory identity and scope', evidence.inventory === inventoryId
   && evidence.deceased === deceased && evidence.entries[0].id === entryId)
 check('debt projection preserves typed creditor/debtor position', evidence.positions[0].debt === debtId
