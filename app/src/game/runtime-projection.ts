@@ -169,6 +169,36 @@ export function reducePreviewRuntimeEvent(
       return result.state
     }
 
+    case 'ai.generated-event.resolved': {
+      const generatedEventId = payload.generatedEventId as string
+      const optionId = payload.optionId as string
+      const generatedEvent = {
+        id: generatedEventId,
+        day: event.requestWorldTime.day,
+        title: '',
+        scene: '',
+        present: '',
+        known: '',
+        body: '',
+        options: [{
+          id: optionId,
+          label: optionId,
+          hint: '',
+          effect: payload.effect as string,
+          result: payload.result as string,
+          refs: payload.refs as string[],
+        }],
+        origin: 'ai' as const,
+        seed: 0,
+        createdAt: 0,
+        profileId: 'runtime-ledger',
+        mood: '',
+      }
+      const result = executeCommand(state, { kind: 'generated', event: generatedEvent, optionId })
+      if (result.rejected) return rejectReplay(`generated-event-${result.rejected}`)
+      return result.state
+    }
+
     case 'day.advanced':
       return advanceDay(state)
 

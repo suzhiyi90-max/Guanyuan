@@ -15,10 +15,19 @@ function check(name: string, condition: boolean): void {
 const registry = createPreviewRuntimeRegistry()
 check('preview runtime registry is frozen and versioned', registry.frozen
   && registry.registryId === 'guanyuan.preview-runtime'
-  && registry.registryVersion === '0.1.0')
-check('preview registry contains all current non-AI runtime action schemas', registry.schemas.length === 12)
+  && registry.registryVersion === '0.2.0')
+check('preview registry contains all current non-AI runtime action schemas', registry.schemas.length === 13)
 check('candidate.validated remains the built-in ledger protocol, not a business schema',
   validateEventPayload(registry, 'candidate.validated', {}).status === 'schema-not-found')
+check('AI generated-event resolution has a strict registered payload schema',
+  validateEventPayload(registry, 'ai.generated-event.resolved', {
+    generatedEventId: 'ai-1-1', optionId: 'jia', effect: 'log-done',
+    result: '已记下', refs: [],
+  }).status === 'valid'
+  && validateEventPayload(registry, 'ai.generated-event.resolved', {
+    generatedEventId: 'ai-1-1', optionId: 'jia', effect: 'log-done',
+    result: '已记下', refs: ['E-001', 'E-002', 'E-003', 'E-004', 'E-005'],
+  }).status === 'payload-invalid')
 check('document comparison schema rejects fewer than two evidence references',
   validateEventPayload(registry, 'document.remembered', { selectedIds: ['E-001'] }).status === 'payload-invalid')
 check('plan schema rejects negative quantities',
