@@ -171,7 +171,17 @@ export async function validateAiCandidate(
     registryVersion: candidate.registryVersion,
     validatedBy,
   }, requestWorldTime, committedAt)
-  if (append.status !== 'appended') return { status: 'ledger-rejected', log, ledger, append }
+  if (append.status !== 'appended' && append.status !== 'duplicate') return { status: 'ledger-rejected', log, ledger, append }
+  const receiptPayload = append.event.payload
+  if (receiptPayload === null || typeof receiptPayload !== 'object' || Array.isArray(receiptPayload)
+    || receiptPayload.candidate !== candidateId
+    || receiptPayload.targetKind !== candidate.targetKind
+    || receiptPayload.payloadDigest !== payloadDigest
+    || receiptPayload.registryVersion !== candidate.registryVersion
+    || receiptPayload.digestAlgorithm !== 'sha-256/canonical-json-v1'
+    || receiptPayload.validatedBy !== validatedBy) {
+    return { status: 'ledger-rejected', log, ledger, append }
+  }
   const nextCandidate = Object.freeze({ ...candidate, status: 'validated' as const })
   const nextLog = Object.freeze({
     candidates: Object.freeze(log.candidates.map(item => item.candidateId === candidateId ? nextCandidate : item)),
