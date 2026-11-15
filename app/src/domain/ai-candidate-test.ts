@@ -1,4 +1,5 @@
 import {
+  appendCandidateValidationReceipt,
   appendLedgerEvent,
   createEventLedger,
   type EventLedger,
@@ -103,6 +104,12 @@ async function main(): Promise<void> {
   }, later)
   check('generic append cannot forge reserved validation receipt', fakeReceipt.status === 'rejected'
     && fakeReceipt.ledger === ledger)
+  const forgedDigest = await appendCandidateValidationReceipt(ledger, frozen, {
+    candidateId: 'cand-forged', targetKind: 'person.created', candidatePayload: payload,
+    payloadDigest: `sha256:${'0'.repeat(64)}`, registryVersion: '3.1.0', validatedBy: 'rule:forged',
+  }, later, later)
+  check('receipt authority recomputes digest and rejects forged validation', forgedDigest.status === 'rejected'
+    && forgedDigest.ledger === ledger)
   const fakeAi = appendLedgerEvent(ledger, {
     source: 'ai-candidate', kind: 'person.created', intentKind: 'fake', actor: 'ai-candidate',
     requestWorldTime: later, clientRequestId: 'fake-ai', payload,
