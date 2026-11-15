@@ -21,6 +21,9 @@ on:
       - work/w3-a-append-only-event-ledger
       - work/w3-b-frozen-event-schema-registry
       - work/w3-c-command-ledger-idempotency
+      - work/w3-d-ai-candidate-validation-receipts
+      - work/w3-c-command-ledger-idempotency
+      - work/w3-d-ai-candidate-validation-receipts
   pull_request:
     branches:
       - feat/g1-engine
@@ -142,6 +145,8 @@ jobs:
         run: npm run test:domain:event-ledger
       - name: Event schema registry contracts
         run: npm run test:domain:event-registry
+      - name: AI candidate validation and receipt contracts
+        run: npm run test:domain:ai-candidate
       - name: Review index integrity
         run: npm run check:docs
       - name: Patch whitespace integrity
