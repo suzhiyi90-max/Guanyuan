@@ -206,7 +206,7 @@ export async function appendValidatedAiCandidateFact(
   candidateId: CandidateId,
   requestWorldTime: WorldTime,
   committedAt: WorldTime,
-): Promise<{ readonly status: 'appended'; readonly ledger: EventLedger; readonly event: LedgerEvent } | { readonly status: 'rejected'; readonly ledger: EventLedger; readonly reason: string }> {
+): Promise<{ readonly status: 'appended' | 'duplicate'; readonly ledger: EventLedger; readonly event: LedgerEvent } | { readonly status: 'rejected'; readonly ledger: EventLedger; readonly reason: string }> {
   const candidate = log.candidates.find(item => item.candidateId === candidateId)
   if (!candidate || candidate.status !== 'validated') return { status: 'rejected', ledger, reason: 'candidate-not-validated' }
   if (!registry.frozen || registry.registryVersion !== candidate.registryVersion) {
@@ -244,7 +244,7 @@ export async function appendValidatedAiCandidateFact(
     validationRef: validationEvent.id,
     payload: candidate.payload,
   }, committedAt)
-  return append.status === 'appended'
-    ? { status: 'appended', ledger: append.ledger, event: append.event }
+  return append.status === 'appended' || append.status === 'duplicate'
+    ? { status: append.status, ledger: append.ledger, event: append.event }
     : { status: 'rejected', ledger, reason: append.status }
 }
