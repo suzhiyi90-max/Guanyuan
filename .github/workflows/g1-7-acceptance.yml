@@ -32,6 +32,7 @@ on:
       - work/w5-c2-ai-candidate-runtime-integration
       - work/w5-c2b-generated-event-ui-integration
       - work/w5-d1-indexeddb-save-repository
+      - work/w5-d2-runtime-save-package-orchestration
   pull_request:
     branches:
       - feat/g1-engine
@@ -185,6 +186,8 @@ jobs:
         run: npm run test:domain:generated-event-hook
       - name: IndexedDB save repository adapter contracts
         run: npm run test:domain:indexeddb-save-repository
+      - name: Runtime SavePackage orchestration contracts
+        run: npm run test:domain:runtime-save-orchestrator
       - name: Review index integrity
         run: npm run check:docs
       - name: Patch whitespace integrity
