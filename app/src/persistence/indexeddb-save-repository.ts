@@ -3,6 +3,7 @@ import type { WorldId } from '../domain/event-ledger'
 import type { StreamCursor } from '../domain/event-replay'
 import type {
   CommitWorldSaveInput,
+  ImportWorldSaveInput,
   SaveRepository,
   SaveRepositoryIssue,
   SaveRepositoryResult,
@@ -264,6 +265,85 @@ export class IndexedDbSaveRepository implements SaveRepository {
         savedAt: worldRow.savedAt,
       }) }
     } catch (error) {
+      return { status: 'rejected', issue: issueFrom(error) }
+    }
+  }
+
+  /**
+   * Imports a fully verified foreign chain into an empty WorldId. All rows are
+   * queued synchronously in one readwrite transaction; the world primary key
+   * is the concurrency authority and any failure rolls the complete write back.
+   */
+  async importWorld(input: ImportWorldSaveInput): Promise<SaveRepositoryResult<StoredWorldSave>> {
+    if (!packageEnvelope(input.packageChain) || input.packageChain.worldId !== input.worldId
+      || !sameCursor(input.packageChain.snapshot.streamHead, input.streamHead)
+      || !sameCursor(input.packageChain.streamRange.toInclusive, input.streamHead)
+      || !Number.isFinite(Date.parse(input.savedAt))) {
+      return { status: 'rejected', issue: 'save-repository-package-invalid' }
+    }
+
+    const newestFirst: SavePackageChain[] = []
+    const seenKeys = new Set<string>()
+    let cursor: SavePackageChain = input.packageChain
+    while (true) {
+      if (newestFirst.length >= MAX_CHAIN_DEPTH || cursor.worldId !== input.worldId) {
+        return { status: 'rejected', issue: 'save-repository-package-invalid' }
+      }
+      const key = packageKey(cursor.worldId, cursor.checksum)
+      if (seenKeys.has(key)) return { status: 'rejected', issue: 'save-repository-package-invalid' }
+      seenKeys.add(key)
+      newestFirst.push(cursor)
+      if (cursor.packageKind === 'full') break
+      cursor = cursor.basePackage
+    }
+    if (newestFirst.length === 0 || newestFirst[newestFirst.length - 1].packageKind !== 'full') {
+      return { status: 'rejected', issue: 'save-repository-package-invalid' }
+    }
+    const rootFirst = newestFirst.reverse()
+    const rows = rootFirst.map(rowForPackage)
+    for (let index = 0; index < rows.length; index += 1) {
+      const expectedBase = index === 0 ? null : rows[index - 1].key
+      if (rows[index].basePackageKey !== expectedBase) {
+        return { status: 'rejected', issue: 'save-repository-package-invalid' }
+      }
+    }
+
+    let db: IDBDatabase
+    try { db = await this.open() } catch {
+      return { status: 'rejected', issue: 'save-repository-unavailable' }
+    }
+
+    let worldConflict = false
+    let packageConflict = false
+    try {
+      const tx = db.transaction([WORLD_STORE, PACKAGE_STORE], 'readwrite')
+      const done = transactionDone(tx)
+      const worlds = tx.objectStore(WORLD_STORE)
+      const packages = tx.objectStore(PACKAGE_STORE)
+      const worldRow: WorldRow = {
+        worldId: input.worldId,
+        latestPackageKey: rows[rows.length - 1].key,
+        streamHead: input.streamHead,
+        savedAt: input.savedAt,
+        packageKind: input.packageChain.packageKind,
+        checksum: input.packageChain.checksum,
+      }
+      const worldRequest = worlds.add(worldRow)
+      worldRequest.onerror = () => { worldConflict = true }
+      for (const row of rows) {
+        const request = packages.add(row)
+        request.onerror = () => { packageConflict = true }
+      }
+      await done
+      return { status: 'success', value: Object.freeze({
+        worldId: input.worldId,
+        packageChain: input.packageChain,
+        streamHead: input.streamHead,
+        savedAt: input.savedAt,
+      }) }
+    } catch (error) {
+      if (worldConflict) return { status: 'rejected', issue: 'save-repository-world-exists' }
+      if (packageConflict) return { status: 'rejected', issue: 'save-repository-storage-conflict' }
       return { status: 'rejected', issue: issueFrom(error) }
     }
   }
