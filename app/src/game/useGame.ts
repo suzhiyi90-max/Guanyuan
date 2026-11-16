@@ -200,7 +200,8 @@ export function useGuanyuanGame() {
   const chooseSavedWorld = useCallback(async (worldId: string) => {
     const repository = repositoryRef.current
     if (!repository) return
-    setStartup({ status: 'loading' })
+    const preserveActiveSession = runtimeRef.current !== null
+    if (!preserveActiveSession) setStartup({ status: 'loading' })
     try {
       const result = await restorePreviewRuntimeSession(worldId as WorldId, repository)
       if (result.status === 'restored') {
@@ -210,13 +211,19 @@ export function useGuanyuanGame() {
         setResumed(true)
         setStartup({ status: 'ready' })
       } else {
-        setStartup({
-          status: 'error',
-          issue: result.status === 'rejected' ? result.issue : 'save-repository-record-corrupt',
-        })
+        const issue = result.status === 'rejected' ? result.issue : 'save-repository-record-corrupt'
+        if (preserveActiveSession) {
+          setToast({ id: Date.now(), title: '档案未能恢复', detail: `校验未通过（${issue}）。当前人生保持不变，可选择其他档案。` })
+        } else {
+          setStartup({ status: 'error', issue })
+        }
       }
     } catch {
-      setStartup({ status: 'error', issue: 'save-repository-storage-error' })
+      if (preserveActiveSession) {
+        setToast({ id: Date.now(), title: '档案恢复中断', detail: '本机存档读取发生异常；当前人生保持不变。' })
+      } else {
+        setStartup({ status: 'error', issue: 'save-repository-storage-error' })
+      }
     }
   }, [])
 
