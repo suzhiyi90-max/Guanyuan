@@ -32,14 +32,13 @@ const incremental = {
   checksum: checksum2,
 } as unknown as IncrementalSavePackage
 
-function check(name: string, condition: boolean): void {
-  if (!condition) throw new Error(`FAIL ${name}`)
-  passed.push(name)
-  console.log(`PASS ${name}`)
-}
-
 export async function runIndexedDbSaveRepositoryContractTests(): Promise<readonly string[]> {
   const passed: string[] = []
+  const check = (name: string, condition: boolean): void => {
+    if (!condition) throw new Error(`FAIL ${name}`)
+    passed.push(name)
+    console.log(`PASS ${name}`)
+  }
   const suffix = `contract-${Date.now()}-${Math.random().toString(36).slice(2)}`
   const repository = new IndexedDbSaveRepository(globalThis.indexedDB, `guanyuan-${suffix}`)
   const unavailable = new IndexedDbSaveRepository(undefined, `guanyuan-${suffix}-none`)
@@ -47,7 +46,6 @@ export async function runIndexedDbSaveRepositoryContractTests(): Promise<readonl
   const first = await repository.commitWorld({
     worldId, packageChain: full, expectedHead: null, savedAt: '2026-11-16T00:00:00.000Z',
   })
-  if (first.status !== 'success') console.error('first commit diagnostic', first)
   check('genesis full package is committed for a new world', first.status === 'success')
   const loaded = await repository.loadWorld(worldId)
   check('full package survives IndexedDB structured-clone round trip', loaded.status === 'success'
