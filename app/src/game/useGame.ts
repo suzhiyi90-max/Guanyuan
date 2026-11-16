@@ -19,6 +19,7 @@ import { createIndexedDbSaveRepository } from '../persistence/indexeddb-save-rep
 import { restorePreviewRuntimeSession, restoreSingleSavedRuntimeWorld } from '../persistence/runtime-restore-orchestrator'
 import { savePreviewRuntimeSession } from '../persistence/runtime-save-orchestrator'
 import { exportPortableSave, type PortableSaveExportResult } from '../persistence/portable-save-export'
+import { commitPortableSaveFile, preparePortableSaveFile, type PortableSaveImportResult, type PortableSavePrepareResult } from '../persistence/portable-save-import'
 import type { SaveRepository } from '../persistence/save-repository'
 import type { WorldId } from '../domain/event-ledger'
 import type { RuntimeStartupView } from '../persistence/runtime-startup-types'
@@ -177,6 +178,17 @@ export function useGuanyuanGame() {
     return exportPortableSave(session, repository, {
       pending: (pendingSaveCountsRef.current.get(String(session.worldId)) ?? 0) > 0,
     })
+  }, [])
+
+  // Import preflight/commit only touch the repository; they never replace runtimeRef or React world state.
+  const preparePortableImport = useCallback((file: File): Promise<PortableSavePrepareResult> => (
+    preparePortableSaveFile(file)
+  ), [])
+
+  const commitPortableImport = useCallback(async (file: File): Promise<PortableSaveImportResult> => {
+    const repository = repositoryRef.current
+    if (!repository) return { status: 'rejected', issue: 'storage-error' }
+    return commitPortableSaveFile(file, repository)
   }, [])
 
   const chooseSavedWorld = useCallback(async (worldId: string) => {
@@ -354,6 +366,8 @@ export function useGuanyuanGame() {
     chooseSavedWorld,
     retryStartup,
     exportPortableSavePackage,
+    preparePortableImport,
+    commitPortableImport,
     setGoal,
     rememberDocument,
     rememberLedger,
