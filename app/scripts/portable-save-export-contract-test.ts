@@ -76,7 +76,7 @@ async function main(): Promise<void> {
   const validIncremental = repo.current!
   const brokenBase = Object.freeze({
     ...validIncremental,
-    packageChain: Object.freeze({ ...validIncremental.packageChain, basePackage: undefined }) as typeof validIncremental.packageChain,
+    packageChain: Object.freeze({ ...validIncremental.packageChain, basePackage: undefined }) as unknown as typeof validIncremental.packageChain,
   })
   repo.current = brokenBase
   const missingBase = await exportPortableSave(session2, repo)
@@ -85,7 +85,7 @@ async function main(): Promise<void> {
 
   repo.current = Object.freeze({
     ...validIncremental,
-    packageChain: Object.freeze({ ...validIncremental.packageChain, schemaVersion: 'unsupported-schema' }) as typeof validIncremental.packageChain,
+    packageChain: Object.freeze({ ...validIncremental.packageChain, schemaVersion: 'unsupported-schema' }) as unknown as typeof validIncremental.packageChain,
   })
   const unsupportedSchema = await exportPortableSave(session2, repo)
   check('unsupported package schema is rejected', unsupportedSchema.status === 'rejected'
@@ -93,7 +93,7 @@ async function main(): Promise<void> {
 
   repo.current = Object.freeze({
     ...validIncremental,
-    streamHead: { kind: 'event', seq: 1, eventId: 'not-the-chain-head' },
+    streamHead: { kind: 'event', seq: 1, eventId: 'not-the-chain-head' } as unknown as StreamCursor,
   })
   const headMismatch = await exportPortableSave(session2, repo)
   check('repository stream head mismatch is rejected', headMismatch.status === 'rejected'
@@ -105,9 +105,9 @@ async function main(): Promise<void> {
       ...validIncremental.packageChain,
       snapshot: Object.freeze({
         ...validIncremental.packageChain.snapshot,
-        streamHead: { kind: 'event', seq: 1, eventId: 'not-the-session-head' },
+        streamHead: { kind: 'event', seq: 1, eventId: 'not-the-session-head' } as unknown as StreamCursor,
       }),
-    }) as typeof validIncremental.packageChain,
+    }) as unknown as typeof validIncremental.packageChain,
   })
   const chainHeadMismatch = await exportPortableSave(session2, repo)
   check('package snapshot head mismatch is rejected', chainHeadMismatch.status === 'rejected')
