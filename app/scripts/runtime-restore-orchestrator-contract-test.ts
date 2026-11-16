@@ -5,7 +5,7 @@ import type {
 } from '../src/persistence/save-repository'
 import { createPreviewRuntimeSession, dispatchPreviewRuntimeIntent } from '../src/game/runtime-orchestrator'
 import { savePreviewRuntimeSession } from '../src/persistence/runtime-save-orchestrator'
-import { restorePreviewRuntimeSession } from '../src/persistence/runtime-restore-orchestrator'
+import { restorePreviewRuntimeSession, restoreSingleSavedRuntimeWorld } from '../src/persistence/runtime-restore-orchestrator'
 
 let passed = 0
 let failed = 0
@@ -48,6 +48,52 @@ async function main(): Promise<void> {
   if (second.status !== 'appended') throw new Error('restore-test-second-append-failed')
   const incremented = await savePreviewRuntimeSession(second.session, repository)
   check('fixture extended by an incremental package', incremented.status === 'saved' && incremented.packageKind === 'incremental')
+
+
+  const schemaRepository = new MemorySaveRepository()
+  schemaRepository.current = Object.freeze({
+    ...incremented.status === 'saved' ? incremented.stored : null!,
+    packageChain: Object.freeze({
+      ...(incremented.status === 'saved' ? incremented.stored.packageChain : null!),
+      schemaVersion: 999,
+    }) as StoredWorldSave['packageChain'],
+  })
+  const schemaMismatch = await restorePreviewRuntimeSession(original.worldId, schemaRepository)
+  check('unknown save schema is rejected before replay', schemaMismatch.status === 'rejected'
+    && schemaMismatch.issue === 'runtime-restore-schema-mismatch')
+
+  const headRepository = new MemorySaveRepository()
+  headRepository.current = incremented.status === 'saved' ? Object.freeze({
+    ...incremented.stored,
+    streamHead: { kind: 'event', seq: 1, eventId: `evt:${original.worldId}:1` },
+  }) : null
+  const headMismatch = await restorePreviewRuntimeSession(original.worldId, headRepository)
+  check('repository head divergence from package head is rejected', headMismatch.status === 'rejected'
+    && headMismatch.issue === 'runtime-restore-package-invalid')
+
+  const missingBaseRepository = new MemorySaveRepository()
+  const incrementalPackage = incremented.status === 'saved' ? incremented.stored.packageChain : null
+  missingBaseRepository.current = incrementalPackage?.packageKind === 'incremental'
+    ? Object.freeze({
+      ...incremented.stored,
+      packageChain: Object.freeze({ ...incrementalPackage, basePackage: null }) as unknown as StoredWorldSave['packageChain'],
+    })
+    : null
+  const missingBase = await restorePreviewRuntimeSession(original.worldId, missingBaseRepository)
+  check('incremental package with missing base is rejected', missingBase.status === 'rejected'
+    && missingBase.issue === 'runtime-restore-package-invalid')
+
+  const multiRepository = new MemorySaveRepository()
+  multiRepository.listWorlds = async () => ({
+    status: 'success',
+    value: [
+      { worldId: original.worldId, streamHead: { kind: 'event', seq: 2, eventId: `evt:${original.worldId}:2` }, savedAt: '2026-11-16T00:00:00.000Z', packageKind: 'incremental', checksum: 'sha256:' + '1'.repeat(64) },
+      { worldId: otherWorld.worldId, streamHead: { kind: 'genesis', seq: 0 }, savedAt: '2026-11-15T00:00:00.000Z', packageKind: 'full', checksum: 'sha256:' + '2'.repeat(64) },
+    ],
+  })
+  const selection = await restoreSingleSavedRuntimeWorld(multiRepository)
+  check('multiple saved lives require explicit selection', selection.status === 'selection-required'
+    && selection.worlds.length === 2)
 
   const restored = await restorePreviewRuntimeSession(original.worldId, repository)
   check('full plus incremental chain restores the exact world and stream head', restored.status === 'restored'
