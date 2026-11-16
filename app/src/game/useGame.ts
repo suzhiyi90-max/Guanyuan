@@ -168,17 +168,21 @@ export function useGuanyuanGame() {
     const repository = repositoryRef.current
     if (!repository) return
     setStartup({ status: 'loading' })
-    const result = await restorePreviewRuntimeSession(worldId as WorldId, repository)
-    if (result.status === 'restored') {
-      runtimeRef.current = result.session
-      setState(result.session.state)
-      setRestored(true)
-      setStartup({ status: 'ready' })
-    } else {
-      setStartup({
-        status: 'error',
-        issue: result.status === 'rejected' ? result.issue : 'save-repository-record-corrupt',
-      })
+    try {
+      const result = await restorePreviewRuntimeSession(worldId as WorldId, repository)
+      if (result.status === 'restored') {
+        runtimeRef.current = result.session
+        setState(result.session.state)
+        setRestored(true)
+        setStartup({ status: 'ready' })
+      } else {
+        setStartup({
+          status: 'error',
+          issue: result.status === 'rejected' ? result.issue : 'save-repository-record-corrupt',
+        })
+      }
+    } catch {
+      setStartup({ status: 'error', issue: 'save-repository-storage-error' })
     }
   }, [])
 
