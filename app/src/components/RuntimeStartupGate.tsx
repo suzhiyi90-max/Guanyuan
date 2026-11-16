@@ -1,11 +1,6 @@
 import { useState } from 'react'
 import { AlertTriangle, BookOpen, LoaderCircle, ScrollText } from 'lucide-react'
-import type { SaveWorldSummary } from '../persistence/save-repository'
-
-export type RuntimeStartupView =
-  | { readonly status: 'loading' }
-  | { readonly status: 'selection-required'; readonly worlds: readonly SaveWorldSummary[] }
-  | { readonly status: 'error'; readonly issue: string }
+import type { RuntimeStartupView } from '../persistence/runtime-startup-types'
 
 function issueLabel(issue: string): string {
   const labels: Record<string, string> = {
