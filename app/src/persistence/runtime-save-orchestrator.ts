@@ -3,6 +3,7 @@ import { readLedgerEvents } from '../domain/event-ledger'
 import type { StreamCursor } from '../domain/event-replay'
 import {
   createFullSavePackage,
+  validateSavePackageChain,
   type SavePackageVerification,
 } from '../domain/save-package'
 import {
@@ -104,13 +105,16 @@ export async function savePreviewRuntimeSession(
   const loaded = await repository.loadWorld(session.worldId)
   if (loaded.status === 'rejected') return { status: 'rejected', issue: loaded.issue }
   const existing = loaded.value
+  const verification = verificationFor(session)
   if (existing && existing.worldId !== session.worldId) {
     return { status: 'rejected', issue: 'runtime-save-world-mismatch' }
   }
 
   const toInclusive = cursorAt(session)
   if (existing) {
-    if (!sameCursor(existing.streamHead, existing.packageChain.snapshot.streamHead)) {
+    const validatedExisting = await validateSavePackageChain(existing.packageChain, verification)
+    if (validatedExisting.status !== 'valid'
+      || !sameCursor(existing.streamHead, validatedExisting.package.snapshot.streamHead)) {
       return { status: 'rejected', issue: 'runtime-save-package-invalid' }
     }
     if (existing.streamHead.seq > toInclusive.seq) {
@@ -139,7 +143,6 @@ export async function savePreviewRuntimeSession(
     return { status: 'rejected', issue: 'runtime-save-package-invalid' }
   }
 
-  const verification = verificationFor(session)
   let packageChain: SavePackageChain
   const mustCheckpoint = !existing
     || existing.packageChain.schemaVersion !== PREVIEW_RUNTIME_SCHEMA_VERSION
