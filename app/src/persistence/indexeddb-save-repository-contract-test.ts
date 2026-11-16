@@ -41,7 +41,7 @@ export async function runIndexedDbSaveRepositoryContractTests(): Promise<readonl
   }
   const suffix = `contract-${Date.now()}-${Math.random().toString(36).slice(2)}`
   const repository = new IndexedDbSaveRepository(globalThis.indexedDB, `guanyuan-${suffix}`)
-  const unavailable = new IndexedDbSaveRepository(undefined, `guanyuan-${suffix}-none`)
+  const unavailable = new IndexedDbSaveRepository(null, `guanyuan-${suffix}-none`)
   check('missing IndexedDB is reported as unavailable', (await unavailable.loadWorld(worldId)).status === 'rejected')
   const first = await repository.commitWorld({
     worldId, packageChain: full, expectedHead: null, savedAt: '2026-11-16T00:00:00.000Z',
