@@ -181,7 +181,7 @@ function GameApp({ game }: { game: ReturnType<typeof useGuanyuanGame> }) {
         'storage-error': '本机存档读取失败，未生成导出文件。',
       }
       notify('便携存档未导出', messages[result.issue] ?? `存档读取失败：${result.issue}`)
-      return
+      throw new Error(result.issue)
     }
     const envelope: PortableSaveEnvelope = result.envelope
     const blob = new Blob([JSON.stringify(envelope, null, 2)], { type: 'application/json' })
