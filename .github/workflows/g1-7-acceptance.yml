@@ -35,6 +35,8 @@ on:
       - work/w5-d2-runtime-save-package-orchestration
       - work/w5-d3-runtime-startup-restore
       - work/w5-d3b-app-startup-lifecycle
+      - work/w5-e1-portable-save-export
+      - work/w5-e1-portable-save-export
   pull_request:
     branches:
       - feat/g1-engine
