@@ -14,7 +14,7 @@
 1. 读取当前 runtime session。
 2. 调用 `dispatchPreviewRuntimeCandidate`，执行 CandidateLog、可信验证回执、AI 事实追加与 genesis 全量重放。
 3. 无论成功或拒绝，都接收服务返回的 session，以保留 CandidateLog 的终局拒绝状态及 request sequence。
-4. 只有 `appended` 或 `duplicate` 才向 React state 提交重放后的 projection。
+4. 只有 `appended` 才向 React state 提交新 projection；`duplicate` 是成功的幂等确认，但保留当前 React projection，不制造无意义的状态替换。
 5. `rejected` 必须返回原世界 projection，并携带拒绝原因；不得调用旧式直接 setState 或绕过账本写入。
 
 ## 3. UI 交互边界
@@ -31,7 +31,7 @@
 `dispatchGeneratedEventForGame` 是 Hook 使用的唯一适配器，并由专项测试直接覆盖：
 
 - 有效候选：回执 + 事实追加 + 重放后返回 committed 与新 projection。
-- 相同选项重试：返回 committed duplicate，Ledger head 与 projection 不重复变化。
+- 相同选项重试：返回无拒绝原因的 duplicate 确认；Ledger head 不变，React projection 保持原引用。
 - 过期候选或校验拒绝：返回 rejected，旧 projection 引用保持不变，Ledger 不增加事实。
 - CandidateLog 验证状态随 session 返回，供运行时继续处理；它不是世界事实。
 
