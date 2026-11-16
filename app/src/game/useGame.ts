@@ -14,6 +14,13 @@ import {
   type PreviewRuntimeSession,
 } from './runtime-orchestrator'
 import { createRuntimeSmokeFixture, type RuntimeSmokeFixture } from './runtime-smoke-fixture'
+import { createInitialGameState } from './initial-state'
+import { createIndexedDbSaveRepository } from '../persistence/indexeddb-save-repository'
+import { restorePreviewRuntimeSession, restoreSingleSavedRuntimeWorld } from '../persistence/runtime-restore-orchestrator'
+import { savePreviewRuntimeSession } from '../persistence/runtime-save-orchestrator'
+import type { SaveRepository } from '../persistence/save-repository'
+import type { WorldId } from '../domain/event-ledger'
+import type { RuntimeStartupView } from '../components/RuntimeStartupGate'
 import type { GeneratedEvent } from '../narrative/types'
 
 export { periods, goalReckoningOf, verdictOf, officialAvailableOf }
@@ -93,19 +100,111 @@ export function nextCheckpointOf(state: GameState): { when: string; label: strin
 }
 
 export function useGuanyuanGame() {
+  type StartupState = RuntimeStartupView | { readonly status: 'ready' }
   const runtimeRef = useRef<PreviewRuntimeSession | null>(null)
-  if (!runtimeRef.current) runtimeRef.current = createInitialRuntimeSession()
-  const [state, setState] = useState<GameState>(() => runtimeRef.current!.state)
+  const repositoryRef = useRef<SaveRepository | null>(null)
+  const persistenceQueueRef = useRef<Promise<void>>(Promise.resolve())
+  const persistenceEnabledRef = useRef(false)
+  const [state, setState] = useState<GameState>(() => createInitialGameState())
   const [toast, setToast] = useState<ToastMessage | null>(null)
-  const restored = useRef(false)
+  const [restored, setRestored] = useState(false)
+  const [startup, setStartup] = useState<StartupState>({ status: 'loading' })
+  const [retryNonce, setRetryNonce] = useState(0)
+
+  // 启动期间不创建可交互的新世界：先列档、验链、重放，再一次性发布 session。
+  useEffect(() => {
+    let cancelled = false
+    const repository = createIndexedDbSaveRepository()
+    repositoryRef.current = repository
+    setStartup({ status: 'loading' })
+
+    const development = Boolean((import.meta as ImportMeta & { readonly env?: { readonly DEV?: boolean } }).env?.DEV)
+    const requested = development && typeof window !== 'undefined'
+      ? new URLSearchParams(window.location.search).get('smoke')
+      : null
+    const fixtures: readonly RuntimeSmokeFixture[] = ['day8', 'day9', 'day10', 'day10-night']
+    if (requested && fixtures.includes(requested as RuntimeSmokeFixture)) {
+      const session = createInitialRuntimeSession()
+      runtimeRef.current = session
+      setState(session.state)
+      setRestored(false)
+      persistenceEnabledRef.current = false
+      setStartup({ status: 'ready' })
+    } else {
+      persistenceEnabledRef.current = true
+      void restoreSingleSavedRuntimeWorld(repository).then(result => {
+        if (cancelled) return
+        if (result.status === 'restored') {
+          runtimeRef.current = result.session
+          setState(result.session.state)
+          setRestored(true)
+          setStartup({ status: 'ready' })
+        } else if (result.status === 'missing') {
+          const session = createInitialRuntimeSession()
+          runtimeRef.current = session
+          setState(session.state)
+          setRestored(false)
+          setStartup({ status: 'ready' })
+        } else if (result.status === 'selection-required') {
+          setStartup(result)
+        } else {
+          setStartup({ status: 'error', issue: result.issue })
+        }
+      }).catch(() => {
+        if (!cancelled) setStartup({ status: 'error', issue: 'save-repository-storage-error' })
+      })
+    }
+
+    return () => {
+      cancelled = true
+      if (repositoryRef.current === repository) repositoryRef.current = null
+      ;(repository as SaveRepository & { close?: () => void }).close?.()
+    }
+  }, [retryNonce])
+
+  const retryStartup = useCallback(() => setRetryNonce(value => value + 1), [])
+
+  const chooseSavedWorld = useCallback(async (worldId: string) => {
+    const repository = repositoryRef.current
+    if (!repository) return
+    setStartup({ status: 'loading' })
+    const result = await restorePreviewRuntimeSession(worldId as WorldId, repository)
+    if (result.status === 'restored') {
+      runtimeRef.current = result.session
+      setState(result.session.state)
+      setRestored(true)
+      setStartup({ status: 'ready' })
+    } else {
+      setStartup({
+        status: 'error',
+        issue: result.status === 'rejected' ? result.issue : 'save-repository-record-corrupt',
+      })
+    }
+  }, [])
+
+  // 成功 append 后按顺序落盘，避免多个异步保存争抢同一 CAS head。
+  // 落盘失败只报告持久化故障，不回滚已提交的内存账本，也不伪装为已保存。
+  const scheduleSave = useCallback((session: PreviewRuntimeSession) => {
+    const repository = repositoryRef.current
+    if (!repository || !persistenceEnabledRef.current) return
+    persistenceQueueRef.current = persistenceQueueRef.current.then(async () => {
+      const result = await savePreviewRuntimeSession(session, repository)
+      if (result.status === 'rejected') {
+        setToast({ id: Date.now(), title: '本机存档未写成', detail: `事件仍在当前会话中；存档失败：${result.issue}` })
+      }
+    }).catch(() => {
+      setToast({ id: Date.now(), title: '本机存档未写成', detail: '事件仍在当前会话中；存储服务发生异常。' })
+    })
+  }, [])
 
   // 所有世界事实只能通过此入口 append + replay；React state 只接收不可变投影。
   const commitIntent = useCallback((intent: PreviewRuntimeIntent) => {
     const result = dispatchPreviewRuntimeIntent(runtimeRef.current!, intent)
     runtimeRef.current = result.session
     if (result.status !== 'rejected') setState(result.session.state)
+    if (result.status === 'appended') scheduleSave(result.session)
     return result
-  }, [])
+  }, [scheduleSave])
 
   const notify = useCallback((title: string, detail: string) => {
     setToast({ id: Date.now(), title, detail })
@@ -191,14 +290,18 @@ export function useGuanyuanGame() {
   const resolveGeneratedEvent = useCallback(async (event: GeneratedEvent, optionId: string): Promise<CommandResult> => {
     const resolution = await dispatchGeneratedEventForGame(runtimeRef.current!, event, optionId)
     runtimeRef.current = resolution.session
-    if (resolution.committed) setState(resolution.result.state)
+    if (resolution.committed) {
+      setState(resolution.result.state)
+      scheduleSave(resolution.session)
+    }
     return resolution.result
-  }, [])
+  }, [scheduleSave])
 
   // 重立志是创建新世界，不删除或覆盖 legacy v1 key，也不伪造旧世界的事件历史。
   const resetGame = useCallback(() => {
     runtimeRef.current = createPreviewRuntimeSession(allocatePreviewWorldId())
     setState(runtimeRef.current.state)
+    setRestored(false)
   }, [])
 
   useEffect(() => {
@@ -212,7 +315,10 @@ export function useGuanyuanGame() {
     toast,
     notify,
     dismissToast,
-    restored: restored.current,
+    restored,
+    startup,
+    chooseSavedWorld,
+    retryStartup,
     setGoal,
     rememberDocument,
     rememberLedger,
