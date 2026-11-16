@@ -786,6 +786,9 @@ try {
   check('刷新后自动恢复已保存的人生时段', (await page.locator('.date-block span').innerText()) === dayBeforeRestore)
   check('恢复启动明确提示已接续本机案头', (await page.locator('.toast h3').count()) > 0 && (await page.locator('.toast h3').innerText()).includes('已接上上次'))
   await click('.goal-seal')
+  await page.waitForSelector('.save-folio-head', { timeout: 8000 })
+  await click('.save-folio-head')
+  await page.waitForSelector('.save-folio-act:has-text("导出便携存档")', { state: 'visible', timeout: 8000 })
   const [portableDownload] = await Promise.all([
     page.waitForEvent('download'),
     click('.save-folio-act:has-text("导出便携存档")'),
