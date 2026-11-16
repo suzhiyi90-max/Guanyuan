@@ -585,6 +585,7 @@ export default function App() {
   const officialAvailable = officialAvailableOf(state)
   const narrator = useNarrator({ state, scene, period, officialAvailable })
   const [narrationIntent, setNarrationIntent] = useState<NarrationIntent>('旁白')
+  const resolvingEventOption = useRef(false)
   const generatedEvent = narrator.run.event
   // 正式世界事件优先；只在没有任何 pendingEvent 时展示本轮新生成事件。
   const currentEvent: WorldEvent | GeneratedEvent | null = worldEvents.find(e => e.id === state.pendingEvent)
@@ -599,32 +600,47 @@ export default function App() {
     ? Object.fromEntries(generatedEvent.options.map(option => [option.id, effectById(option.effect)?.hint ?? '']))
     : undefined
 
-  const chooseEventOption = (optionId: string) => {
-    if (!currentEvent) return
-    const isGenerated = 'origin' in currentEvent
-    const result = isGenerated
-      ? game.resolveGeneratedEvent(currentEvent as GeneratedEvent, optionId)
-      : game.resolveWorldOption(currentEvent.id, optionId)
-    const reasons: Record<string, string> = {
-      'world-event-pending': '正式世界事件尚待处理，生成事件不能抢占。',
-      'already-handled': '此事件已经结算，不会重复记账。',
-      'not-pending': '此事件已不在待决队列，请重新查看当前案头。',
-      'unknown-option': '所选方案无效，事件没有结算。',
-      'effect-unavailable': '当前条件不满足，事件没有结算。',
-      'unknown-effect': '该效果未登记，事件没有结算。',
-      'not-generated': '生成事件来源校验失败，事件没有结算。',
-      'unknown-event': '未找到对应世界事件，事件没有结算。',
-      'repeated': '此动作已经执行，不会重复结算。',
-      'ai-candidate-flow-not-integrated': 'AI 候选回执与事实提交尚在接线，本次选项未改变世界。',
+  const chooseEventOption = async (optionId: string) => {
+    if (!currentEvent || resolvingEventOption.current) return
+    resolvingEventOption.current = true
+    const selectedEvent = currentEvent
+    const isGenerated = 'origin' in selectedEvent
+    try {
+      const result = isGenerated
+        ? await game.resolveGeneratedEvent(selectedEvent as GeneratedEvent, optionId)
+        : game.resolveWorldOption(selectedEvent.id, optionId)
+      const reasons: Record<string, string> = {
+        'world-event-pending': '正式世界事件尚待处理，生成事件不能抢占。',
+        'already-handled': '此事件已经结算，不会重复记账。',
+        'not-pending': '此事件已不在待决队列，请重新查看当前案头。',
+        'unknown-option': '所选方案无效，事件没有结算。',
+        'effect-unavailable': '当前条件不满足，事件没有结算。',
+        'unknown-effect': '该效果未登记，事件没有结算。',
+        'not-generated': '生成事件来源校验失败，事件没有结算。',
+        'not-generated-or-stale': '生成事件已过期或来源不合法，世界状态未改变。',
+        'unknown-event': '未找到对应世界事件，事件没有结算。',
+        'candidate-payload-invalid': '候选内容未通过本地契约校验，世界状态未改变。',
+        'candidate-payload-conflict': '同一候选编号对应的内容发生变化，拒绝重复提交。',
+        'candidate-submit-rejected': '候选登记未通过，世界状态未改变。',
+        'candidate-terminal-rejected': '该候选已被终局拒绝，不能再次提交。',
+        'validation-receipt-missing': '可信验证回执缺失，事实没有写入。',
+        'replay-rejected': '事实重放未通过，世界状态保持原样。',
+        'world-time-invalid': '当前世界时刻无效，事件没有结算。',
+        'repeated': '此动作已经执行，不会重复结算。',
+      }
+      if (!routeCommandFeedback(
+        result,
+        reason => notify('事件未结算', reasons[reason] ?? `结算被拒绝（${reason}），状态未改变。`),
+        () => undefined,
+      )) return
+      if (isGenerated) narrator.dismiss()
+      setOverlay(null)
+      notify('事已记下', `${selectedEvent.title} · 选择已入卷 世界继续按日程走`)
+    } catch {
+      notify('事件未结算', '候选验证未能完成，世界状态未改变；可稍后重新选择。')
+    } finally {
+      resolvingEventOption.current = false
     }
-    if (!routeCommandFeedback(
-      result,
-      reason => notify('事件未结算', reasons[reason] ?? `结算被拒绝（${reason}），状态未改变。`),
-      () => undefined,
-    )) return
-    if (isGenerated) narrator.dismiss()
-    setOverlay(null)
-    notify('事已记下', `${currentEvent.title} · 选择已入卷 世界继续按日程走`)
   }
 
   const todayAsideProps = {

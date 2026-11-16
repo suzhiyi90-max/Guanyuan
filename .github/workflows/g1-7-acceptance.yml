@@ -30,6 +30,7 @@ on:
       - work/w5-b-runtime-event-catalog-projection
       - work/w5-c-runtime-command-orchestration
       - work/w5-c2-ai-candidate-runtime-integration
+      - work/w5-c2b-generated-event-ui-integration
   pull_request:
     branches:
       - feat/g1-engine
@@ -74,6 +75,7 @@ on:
       - work/w5-a-runtime-connection-audit
       - work/w5-b-runtime-event-catalog-projection
       - work/w5-c-runtime-command-orchestration
+      - work/w5-c2-ai-candidate-runtime-integration
   workflow_dispatch:
 
 permissions:
@@ -176,6 +178,8 @@ jobs:
         run: npm run test:domain:runtime-orchestrator
       - name: Runtime AI candidate receipt and fact contracts
         run: npm run test:domain:runtime-ai-candidate
+      - name: Generated event game-hook integration contracts
+        run: npm run test:domain:generated-event-hook
       - name: Review index integrity
         run: npm run check:docs
       - name: Patch whitespace integrity
