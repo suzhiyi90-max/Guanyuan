@@ -1,5 +1,5 @@
 import { chromium } from 'playwright'
-import { mkdirSync } from 'node:fs'
+import { mkdirSync, readFileSync } from 'node:fs'
 
 const BASE = process.env.GUANYUAN_URL ?? 'http://127.0.0.1:5199'
 const OUT = process.env.SMOKE_OUT ?? `${process.env.TEMP}/guanyuan-smoke`
@@ -785,6 +785,17 @@ try {
   await settle(500)
   check('刷新后自动恢复已保存的人生时段', (await page.locator('.date-block span').innerText()) === dayBeforeRestore)
   check('恢复启动明确提示已接续本机案头', (await page.locator('.toast h3').count()) > 0 && (await page.locator('.toast h3').innerText()).includes('已接上上次'))
+  await click('.goal-seal')
+  const [portableDownload] = await Promise.all([
+    page.waitForEvent('download'),
+    click('.save-folio-act:has-text("导出便携存档")'),
+  ])
+  const portablePath = await portableDownload.path()
+  const portableEnvelope = portablePath ? JSON.parse(readFileSync(portablePath, 'utf8')) : null
+  check('便携导出下载的是正式 envelope 而非 React projection', portableEnvelope?.format === 'guanyuan.portable-save'
+    && portableEnvelope?.formatVersion === 1 && typeof portableEnvelope?.envelopeChecksum === 'string'
+    && portableEnvelope?.packageChain?.snapshot?.streamHead?.seq === portableEnvelope?.streamHead?.seq)
+  check('便携导出文件名含 WorldId 安全标识', /观远-便携存档-.*-[a-zA-Z0-9-]+\\.json$/u.test(portableDownload.suggestedFilename()))
   await nav('事务')
   await settle(450)
   check('刷新恢复后事件投影仍在且可继续查阅', (await page.locator('.task-outcome').count()) === 1)
