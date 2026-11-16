@@ -1,7 +1,7 @@
 /**
  * C-92 存档案卷：立志纸左下的一枚压角折页。
  * 只做三件事——读本档现状（只读投影）、导出底稿（只读下载）、另立新志（两段落印，复用既有 resetGame）。
- * 不改存档结构、不新增存储 key、不设多档位；骑缝与半印只作装帧，不作印信。
+ * 目录只读列出既有 WorldId；恢复必须经 restore coordinator 完整验链与重放，不直接发布索引数据。
  */
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
