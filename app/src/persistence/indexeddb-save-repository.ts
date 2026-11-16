@@ -304,9 +304,6 @@ export class IndexedDbSaveRepository implements SaveRepository {
       || !sameCursor(input.packageChain.streamRange.toInclusive, input.streamHead)) {
       return { status: 'rejected', issue: 'save-repository-package-invalid' }
     }
-    if (newestFirst.length === 0 || newestFirst[newestFirst.length - 1].packageKind !== 'full') {
-      return { status: 'rejected', issue: 'save-repository-package-invalid' }
-    }
     const rootFirst = newestFirst.reverse()
     const rows = rootFirst.map(rowForPackage)
     for (let index = 0; index < rows.length; index += 1) {
