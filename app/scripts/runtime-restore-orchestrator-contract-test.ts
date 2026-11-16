@@ -64,9 +64,10 @@ async function main(): Promise<void> {
   } else check('restored ledger remains writable and appends the next sequence', false)
 
   const activeBefore = second.session
+  const beforeCorruption = repository.current!
   repository.current = Object.freeze({
-    ...repository.current!,
-    packageChain: Object.freeze({ ...repository.current!.packageChain, checksum: 'sha256:' + '0'.repeat(64) }) as typeof repository.current.packageChain,
+    ...beforeCorruption,
+    packageChain: Object.freeze({ ...beforeCorruption.packageChain, checksum: 'sha256:' + '0'.repeat(64) }) as typeof beforeCorruption.packageChain,
   })
   const corrupt = await restorePreviewRuntimeSession(original.worldId, repository)
   check('corrupt checksum rejects restore', corrupt.status === 'rejected' && corrupt.issue === 'runtime-restore-package-invalid')
@@ -81,10 +82,13 @@ async function main(): Promise<void> {
 
   repository.loadIssue = null
   const otherWorld = createPreviewRuntimeSession('w5-d3-other-world')
-  const mismatch = await restorePreviewRuntimeSession(otherWorld.worldId, {
-    ...repository,
-    loadWorld: async () => ({ status: 'success', value: Object.freeze({ ...incremented.status === 'saved' ? incremented.stored : null!, worldId: otherWorld.worldId }) }),
-  } as SaveRepository)
+  const validStored = incremented.status === 'saved' ? incremented.stored : null
+  const mismatchRepository = new MemorySaveRepository()
+  mismatchRepository.loadWorld = async () => ({
+    status: 'success',
+    value: validStored ? Object.freeze({ ...validStored, worldId: otherWorld.worldId }) : null,
+  })
+  const mismatch = await restorePreviewRuntimeSession(otherWorld.worldId, mismatchRepository)
   check('world identity mismatch is rejected', mismatch.status === 'rejected'
     && mismatch.issue === 'runtime-restore-world-mismatch')
 
