@@ -196,6 +196,8 @@ jobs:
         run: npm run test:domain:runtime-save-orchestrator
       - name: Runtime startup restore contracts
         run: npm run test:domain:runtime-restore-orchestrator
+      - name: Verified portable save export contracts
+        run: npm run test:domain:portable-save-export
       - name: Review index integrity
         run: npm run check:docs
       - name: Patch whitespace integrity
