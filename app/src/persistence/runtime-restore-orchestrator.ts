@@ -117,7 +117,7 @@ export async function restorePreviewRuntimeSession(
     return { status: 'rejected', issue: 'runtime-restore-replay-failed' }
   }
 
-  const ledger = restoreEventLedgerFromVerifiedEvents(worldId, events)
+  const ledger = await restoreEventLedgerFromVerifiedEvents(worldId, events, verification.registry)
   if (ledger.status !== 'restored' || ledger.ledger.head !== cursor.seq) {
     return { status: 'rejected', issue: 'runtime-restore-ledger-invalid' }
   }
