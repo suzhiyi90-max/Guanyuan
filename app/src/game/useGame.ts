@@ -174,6 +174,13 @@ export function useGuanyuanGame() {
   const listSavedWorlds = useCallback(async (): Promise<SaveRepositoryResult<readonly SaveWorldSummary[]>> => {
     const repository = repositoryRef.current
     if (!repository) return { status: 'rejected', issue: 'save-repository-unavailable' }
+    // The index must not race writes already queued by the active runtime.
+    let queued = persistenceQueueRef.current
+    while (true) {
+      await queued
+      if (queued === persistenceQueueRef.current) break
+      queued = persistenceQueueRef.current
+    }
     return repository.listWorlds()
   }, [])
 
@@ -200,11 +207,30 @@ export function useGuanyuanGame() {
   const chooseSavedWorld = useCallback(async (worldId: string) => {
     const repository = repositoryRef.current
     if (!repository) return
-    const preserveActiveSession = runtimeRef.current !== null
+    const requestedSession = runtimeRef.current
+    const preserveActiveSession = requestedSession !== null
     if (!preserveActiveSession) setStartup({ status: 'loading' })
     try {
+      // Flush all saves queued before selection. This matters when restoring the
+      // currently active WorldId: otherwise an older persisted head could win.
+      let queued = persistenceQueueRef.current
+      while (true) {
+        await queued
+        if (queued === persistenceQueueRef.current) break
+        queued = persistenceQueueRef.current
+      }
+      // Do not overwrite player actions made while the save queue was draining.
+      if (requestedSession && runtimeRef.current !== requestedSession) {
+        setToast({ id: Date.now(), title: '档案恢复已取消', detail: '等待存档写入期间当前人生已有新行动，请刷新档案目录后重试。' })
+        return
+      }
       const result = await restorePreviewRuntimeSession(worldId as WorldId, repository)
       if (result.status === 'restored') {
+        // Restore is asynchronous; guard again so actions made during replay survive.
+        if (requestedSession && runtimeRef.current !== requestedSession) {
+          setToast({ id: Date.now(), title: '档案恢复已取消', detail: '验卷期间当前人生已有新行动，未替换当前人生。' })
+          return
+        }
         runtimeRef.current = result.session
         setState(result.session.state)
         setRestored(true)
