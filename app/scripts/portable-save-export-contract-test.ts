@@ -73,6 +73,46 @@ async function main(): Promise<void> {
     && session2.ledger.head === 2 && session2.state.day === 1)
   const foreign = createPreviewRuntimeSession('w5-e1-foreign-world')
   check('different WorldId cannot export another world package', (await exportPortableSave(foreign, repo)).status === 'rejected')
+  const validIncremental = repo.current!
+  const brokenBase = Object.freeze({
+    ...validIncremental,
+    packageChain: Object.freeze({ ...validIncremental.packageChain, basePackage: undefined }) as typeof validIncremental.packageChain,
+  })
+  repo.current = brokenBase
+  const missingBase = await exportPortableSave(session2, repo)
+  check('incremental chain without base package is rejected', missingBase.status === 'rejected'
+    && (missingBase.issue === 'chain-corrupt' || missingBase.issue === 'checksum-failed'))
+
+  repo.current = Object.freeze({
+    ...validIncremental,
+    packageChain: Object.freeze({ ...validIncremental.packageChain, schemaVersion: 'unsupported-schema' }) as typeof validIncremental.packageChain,
+  })
+  const unsupportedSchema = await exportPortableSave(session2, repo)
+  check('unsupported package schema is rejected', unsupportedSchema.status === 'rejected'
+    && unsupportedSchema.issue === 'schema-unsupported')
+
+  repo.current = Object.freeze({
+    ...validIncremental,
+    streamHead: { kind: 'event', seq: 1, eventId: 'not-the-chain-head' },
+  })
+  const headMismatch = await exportPortableSave(session2, repo)
+  check('repository stream head mismatch is rejected', headMismatch.status === 'rejected'
+    && headMismatch.issue === 'world-mismatch')
+
+  repo.current = Object.freeze({
+    ...validIncremental,
+    packageChain: Object.freeze({
+      ...validIncremental.packageChain,
+      snapshot: Object.freeze({
+        ...validIncremental.packageChain.snapshot,
+        streamHead: { kind: 'event', seq: 1, eventId: 'not-the-session-head' },
+      }),
+    }) as typeof validIncremental.packageChain,
+  })
+  const chainHeadMismatch = await exportPortableSave(session2, repo)
+  check('package snapshot head mismatch is rejected', chainHeadMismatch.status === 'rejected')
+
+  repo.current = validIncremental
   const corrupt = repo.current!
   repo.current = Object.freeze({ ...corrupt, packageChain: Object.freeze({
     ...corrupt.packageChain, checksum: 'sha256:' + '0'.repeat(64),
