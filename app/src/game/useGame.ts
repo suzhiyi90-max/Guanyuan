@@ -20,7 +20,7 @@ import { restorePreviewRuntimeSession, restoreSingleSavedRuntimeWorld } from '..
 import { savePreviewRuntimeSession } from '../persistence/runtime-save-orchestrator'
 import { exportPortableSave, type PortableSaveExportResult } from '../persistence/portable-save-export'
 import { commitPortableSaveFile, preparePortableSaveFile, type PortableSaveImportResult, type PortableSavePrepareResult } from '../persistence/portable-save-import'
-import type { SaveRepository } from '../persistence/save-repository'
+import type { SaveRepository, SaveWorldSummary, SaveRepositoryResult } from '../persistence/save-repository'
 import type { WorldId } from '../domain/event-ledger'
 import type { RuntimeStartupView } from '../persistence/runtime-startup-types'
 import type { GeneratedEvent } from '../narrative/types'
@@ -170,6 +170,12 @@ export function useGuanyuanGame() {
   }, [retryNonce])
 
   const retryStartup = useCallback(() => setRetryNonce(value => value + 1), [])
+
+  const listSavedWorlds = useCallback(async (): Promise<SaveRepositoryResult<readonly SaveWorldSummary[]>> => {
+    const repository = repositoryRef.current
+    if (!repository) return { status: 'rejected', issue: 'save-repository-unavailable' }
+    return repository.listWorlds()
+  }, [])
 
   const exportPortableSavePackage = useCallback(async (): Promise<PortableSaveExportResult> => {
     const session = runtimeRef.current
@@ -365,6 +371,7 @@ export function useGuanyuanGame() {
     startup,
     chooseSavedWorld,
     retryStartup,
+    listSavedWorlds,
     exportPortableSavePackage,
     preparePortableImport,
     commitPortableImport,
