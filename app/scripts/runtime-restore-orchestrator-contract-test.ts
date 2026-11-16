@@ -52,13 +52,11 @@ async function main(): Promise<void> {
 
   const otherWorld = createPreviewRuntimeSession('w5-d3-other-world')
   const storedIncrement = incremented.status === 'saved' ? incremented.stored : null
+  const savedChain = storedIncrement?.packageChain ?? null
   const schemaRepository = new MemorySaveRepository()
-  schemaRepository.current = storedIncrement ? Object.freeze({
+  schemaRepository.current = storedIncrement && savedChain ? Object.freeze({
     ...storedIncrement,
-    packageChain: Object.freeze({
-      ...(incremented.status === 'saved' ? incremented.stored.packageChain : null!),
-      schemaVersion: 999,
-    }) as StoredWorldSave['packageChain'],
+    packageChain: Object.freeze({ ...savedChain, schemaVersion: 999 }) as StoredWorldSave['packageChain'],
   }) : null
   const schemaMismatch = await restorePreviewRuntimeSession(original.worldId, schemaRepository)
   check('unknown save schema is rejected before replay', schemaMismatch.status === 'rejected'
@@ -67,17 +65,17 @@ async function main(): Promise<void> {
   const headRepository = new MemorySaveRepository()
   headRepository.current = incremented.status === 'saved' ? Object.freeze({
     ...incremented.stored,
-    streamHead: { kind: 'event', seq: 1, eventId: `evt:${original.worldId}:1` },
+    streamHead: { kind: 'event', seq: 1, eventId: `evt:${original.worldId}:1` } as StreamCursor,
   }) : null
   const headMismatch = await restorePreviewRuntimeSession(original.worldId, headRepository)
   check('repository head divergence from package head is rejected', headMismatch.status === 'rejected'
     && headMismatch.issue === 'runtime-restore-package-invalid')
 
   const missingBaseRepository = new MemorySaveRepository()
-  const incrementalPackage = incremented.status === 'saved' ? incremented.stored.packageChain : null
+  const incrementalPackage = savedChain
   missingBaseRepository.current = incrementalPackage?.packageKind === 'incremental'
     ? Object.freeze({
-      ...incremented.stored,
+      ...storedIncrement!,
       packageChain: Object.freeze({ ...incrementalPackage, basePackage: null }) as unknown as StoredWorldSave['packageChain'],
     })
     : null
@@ -89,7 +87,7 @@ async function main(): Promise<void> {
   multiRepository.listWorlds = async () => ({
     status: 'success',
     value: [
-      { worldId: original.worldId, streamHead: { kind: 'event', seq: 2, eventId: `evt:${original.worldId}:2` }, savedAt: '2026-11-16T00:00:00.000Z', packageKind: 'incremental', checksum: 'sha256:' + '1'.repeat(64) },
+      { worldId: original.worldId, streamHead: { kind: 'event', seq: 2, eventId: `evt:${original.worldId}:2` } as StreamCursor, savedAt: '2026-11-16T00:00:00.000Z', packageKind: 'incremental', checksum: 'sha256:' + '1'.repeat(64) },
       { worldId: otherWorld.worldId, streamHead: { kind: 'genesis', seq: 0 }, savedAt: '2026-11-15T00:00:00.000Z', packageKind: 'full', checksum: 'sha256:' + '2'.repeat(64) },
     ],
   })
