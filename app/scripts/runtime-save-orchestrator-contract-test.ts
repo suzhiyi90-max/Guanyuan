@@ -119,6 +119,14 @@ async function main(): Promise<void> {
     && second.stored.packageChain.packageKind === 'incremental'
     && second.stored.packageChain.events.length === 1)
 
+  const savedAtBeforeRetry = repository.current?.savedAt
+  const repeated = await savePreviewRuntimeSession(oneEvent, repository, { now: () => '2026-11-16T08:02:00.000Z' })
+  check('repeated save at the exact head is idempotent and does not append an empty package',
+    repeated.status === 'saved' && repeated.stored === repository.current
+      && repeated.packageKind === 'incremental'
+      && repository.current?.savedAt === savedAtBeforeRetry
+      && second.status === 'saved' && repository.current?.packageChain === second.stored.packageChain)
+
   const validChain = repository.current
   const validated = validChain
     ? await import('../src/domain/incremental-save-package').then(module =>
