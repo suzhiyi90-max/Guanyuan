@@ -42,6 +42,10 @@ function verificationFor(): SavePackageVerification<PreviewRuntimeEventKind> {
   }
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
 function sameCursor(left: unknown, right: unknown): boolean {
   if (!left || !right || typeof left !== 'object' || typeof right !== 'object') return false
   const a = left as Record<string, unknown>
@@ -117,8 +121,12 @@ export async function importPortableSaveBytes(
   if (!countAndCheckChain(raw.packageChain, raw.worldId)) {
     return { status: 'rejected', issue: 'chain-corrupt' }
   }
-  if (!sameCursor(raw.streamHead, raw.packageChain.snapshot.streamHead)
-    || !sameCursor(raw.streamHead, raw.packageChain.streamRange.toInclusive)) {
+  const chainRecord = raw.packageChain as unknown as Record<string, unknown>
+  const snapshot = chainRecord.snapshot
+  const streamRange = chainRecord.streamRange
+  if (!isRecord(snapshot) || !isRecord(streamRange)
+    || !sameCursor(raw.streamHead, snapshot.streamHead)
+    || !sameCursor(raw.streamHead, (streamRange as Record<string, unknown>).toInclusive)) {
     return { status: 'rejected', issue: 'world-mismatch' }
   }
   if (!await validatePortableSaveEnvelope(raw)) {
