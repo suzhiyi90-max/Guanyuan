@@ -133,6 +133,16 @@ export async function savePreviewRuntimeSession(
         return { status: 'rejected', issue: 'runtime-save-base-diverged' }
       }
     }
+    // A repeated save at the exact verified head is a true no-op: do not
+    // manufacture an empty incremental package or advance savedAt metadata.
+    if (sameCursor(existing.streamHead, toInclusive)) {
+      return {
+        status: 'saved',
+        packageKind: existing.packageChain.packageKind,
+        streamHead: toInclusive,
+        stored: existing,
+      }
+    }
   }
 
   const period = periods[session.state.periodIndex]
