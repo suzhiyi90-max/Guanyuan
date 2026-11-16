@@ -799,6 +799,9 @@ try {
     && portableEnvelope?.formatVersion === 1 && typeof portableEnvelope?.envelopeChecksum === 'string'
     && portableEnvelope?.packageChain?.snapshot?.streamHead?.seq === portableEnvelope?.streamHead?.seq)
   check('便携导出文件名含 WorldId 安全标识', /观远-便携存档-.*-[a-zA-Z0-9-]+\.json$/u.test(portableDownload.suggestedFilename()))
+  // Close the explicitly opened goal/save overlay before exercising the underlying navigation.
+  await page.keyboard.press('Escape')
+  await page.waitForSelector('.prologue', { state: 'detached', timeout: 8000 })
   await nav('事务')
   await settle(450)
   check('刷新恢复后事件投影仍在且可继续查阅', (await page.locator('.task-outcome').count()) === 1)
