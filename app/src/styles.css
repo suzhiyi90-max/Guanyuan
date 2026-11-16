@@ -6883,3 +6883,16 @@ button.archive-node:hover { border-color: var(--cinnabar); color: var(--cinnabar
   .runtime-startup-world { align-items: flex-start; flex-wrap: wrap; }
   .runtime-startup-world-action { margin-left: 50px; }
 }
+
+/* W5-E2C: 本机人生档案目录 */
+.save-folio-library { margin-top: 12px; padding-top: 10px; border-top: 1px solid #ddcfb4; }
+.save-folio-library-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.save-folio-library-head > b { font: 500 10px var(--serif); letter-spacing: .12em; color: var(--ink-1); }
+.save-folio-world-list { display: grid; gap: 6px; margin: 8px 0; padding: 0; list-style: none; }
+.save-folio-world { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px; border: 1px solid #d8c8ad; background: #fffdf6a8; }
+.save-folio-world > div { display: grid; gap: 3px; min-width: 0; }
+.save-folio-world > div > b { font: 500 9.5px var(--serif); color: var(--ink-1); }
+.save-folio-world > div > small { font: 8px/1.5 var(--serif); color: var(--ink-3); overflow-wrap: anywhere; }
+.save-folio-library > p { margin: 7px 0 0; font: 8px/1.65 var(--serif); color: var(--ink-3); }
+.save-folio-world .save-folio-act { flex: 0 0 auto; }
+@media (max-width: 520px) { .save-folio-world { align-items: flex-start; flex-direction: column; } }
