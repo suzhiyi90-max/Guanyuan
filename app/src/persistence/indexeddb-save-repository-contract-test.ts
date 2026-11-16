@@ -34,10 +34,12 @@ const incremental = {
 
 function check(name: string, condition: boolean): void {
   if (!condition) throw new Error(`FAIL ${name}`)
+  passed.push(name)
   console.log(`PASS ${name}`)
 }
 
-async function run(): Promise<void> {
+export async function runIndexedDbSaveRepositoryContractTests(): Promise<readonly string[]> {
+  const passed: string[] = []
   const suffix = `contract-${Date.now()}-${Math.random().toString(36).slice(2)}`
   const repository = new IndexedDbSaveRepository(globalThis.indexedDB, `guanyuan-${suffix}`)
   const unavailable = new IndexedDbSaveRepository(undefined, `guanyuan-${suffix}-none`)
@@ -73,6 +75,5 @@ async function run(): Promise<void> {
   check('deletion removes the world and its package chain', afterDelete.status === 'success' && afterDelete.value === null)
   repository.close()
   unavailable.close()
+  return Object.freeze(passed)
 }
-
-void run().catch(error => { console.error(error); throw error })
