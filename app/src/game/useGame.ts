@@ -346,6 +346,7 @@ export function useGuanyuanGame() {
     startup,
     chooseSavedWorld,
     retryStartup,
+    exportPortableSavePackage,
     setGoal,
     rememberDocument,
     rememberLedger,
