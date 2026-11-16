@@ -5,7 +5,8 @@
  */
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import { ChevronDown, Download, RotateCcw, ShieldAlert } from 'lucide-react'
+import { ChevronDown, Download, RotateCcw, ShieldAlert, Upload, X } from 'lucide-react'
+import type { PortableSaveImportResult, PortableSavePrepareResult } from '../persistence/portable-save-import'
 
 export interface SaveSummary {
   day: number
@@ -19,10 +20,14 @@ export interface SaveSummary {
 
 const dayNames = ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十']
 
-export function SaveFolio({ summary, onExport, onReset, extra }: { summary: SaveSummary, onExport?: () => void | Promise<void>, onReset: () => void, extra?: ReactNode }) {
+export function SaveFolio({ summary, onExport, onReset, onPrepareImport, onCommitImport, extra }: { summary: SaveSummary, onExport?: () => void | Promise<void>, onReset: () => void, onPrepareImport?: (file: File) => Promise<PortableSavePrepareResult>, onCommitImport?: (file: File) => Promise<PortableSaveImportResult>, extra?: ReactNode }) {
   const [open, setOpen] = useState(false)
   const [armed, setArmed] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [importFile, setImportFile] = useState<File | null>(null)
+  const [importPreview, setImportPreview] = useState<PortableSavePrepareResult | null>(null)
+  const [importStatus, setImportStatus] = useState<'idle' | 'checking' | 'ready' | 'committing' | 'success' | 'error'>('idle')
+  const [importError, setImportError] = useState<string | null>(null)
   const reduceMotion = useReducedMotion()
   const panelId = useId()
   const rootRef = useRef<HTMLDivElement | null>(null)
@@ -65,6 +70,72 @@ export function SaveFolio({ summary, onExport, onReset, extra }: { summary: Save
     } catch {
       setSaved(false)
     }
+  }
+
+
+  const clearImport = () => {
+    setImportFile(null)
+    setImportPreview(null)
+    setImportStatus('idle')
+    setImportError(null)
+  }
+
+  const handleImportSelect = async (file: File | undefined) => {
+    if (!file) return
+    setImportFile(file)
+    setImportPreview(null)
+    setImportError(null)
+    setImportStatus('checking')
+    if (file.size > 128 * 1024 * 1024) {
+      setImportStatus('error')
+      setImportError('文件超过 128 MiB 上限。')
+      return
+    }
+    const result = await onPrepareImport?.(file)
+    if (!result) {
+      setImportStatus('error')
+      setImportError('导入服务尚未就绪。')
+    } else if (result.status === 'rejected') {
+      setImportStatus('error')
+      setImportError(importIssueText(result.issue))
+    } else {
+      setImportPreview(result)
+      setImportStatus('ready')
+    }
+  }
+
+  const handleImportCommit = async () => {
+    if (!importFile || !importPreview || !onCommitImport) return
+    setImportStatus('committing')
+    setImportError(null)
+    const result = await onCommitImport(importFile)
+    if (result.status === 'imported') {
+      setImportStatus('success')
+      setImportError('导入成功：档案已加入本机存档列表；当前人生未切换。')
+    } else {
+      setImportStatus('error')
+      setImportError(importIssueText(result.issue))
+    }
+  }
+
+  function importIssueText(issue: string): string {
+    const messages: Record<string, string> = {
+      'file-too-large': '文件超过 128 MiB 上限。',
+      'file-read-failed': '文件读取失败，请重新选择。',
+      'json-invalid': 'JSON 格式无效或包含不允许的结构。',
+      'envelope-invalid': '存档包结构不完整。',
+      'format-unsupported': '不支持此存档格式或版本。',
+      'envelope-checksum-failed': '存档摘要校验失败，文件可能已被修改。',
+      'world-mismatch': '世界标识或事件流头不一致。',
+      'schema-unsupported': '此存档版本与当前运行时不兼容。',
+      'chain-corrupt': '存档链损坏，无法通过完整重放验证。',
+      'checksum-failed': '存档校验和不匹配。',
+      'world-exists': '本机已存在相同 WorldId 的档案。',
+      'storage-quota-exceeded': '本机存储空间不足。',
+      'storage-conflict': '存档写入发生并发冲突，请重试。',
+      'storage-error': '本机存储不可用，导入未完成。',
+    }
+    return messages[issue] ?? '导入失败，未写入档案。'
   }
 
   const handleReset = () => {
@@ -124,7 +195,46 @@ export function SaveFolio({ summary, onExport, onReset, extra }: { summary: Save
               </div>
 
               {armed && <div className="save-folio-countdown" aria-hidden="true"><i /></div>}
-              <p className={`save-folio-note ${armed ? 'is-armed' : ''}`} id={`${panelId}-note`}>
+
+              {onPrepareImport && onCommitImport && (
+                <section className="save-folio-import" aria-label="导入便携存档">
+                  <label className="save-folio-act" htmlFor={`${panelId}-import-file`}>
+                    <Upload size={13} aria-hidden="true" />
+                    <span>选择便携存档导入（JSON）</span>
+                  </label>
+                  <input
+                    id={`${panelId}-import-file`}
+                    type="file"
+                    accept="application/json,.json"
+                    onChange={event => { void handleImportSelect(event.currentTarget.files?.[0]); event.currentTarget.value = '' }}
+                    disabled={importStatus === 'checking' || importStatus === 'committing'}
+                    className="sr-only"
+                  />
+                  {importStatus === 'checking' && <p role="status">正在读取并完整验证存档；此阶段不会写入。</p>}
+                  {importPreview?.status === 'prepared' && importStatus !== 'success' && (
+                    <div className="save-folio-import-preview">
+                      <b>预检通过 · 尚未写入</b>
+                      <dl>
+                        <div><dt>WorldId</dt><dd>{importPreview.worldId}</dd></div>
+                        <div><dt>导出时间</dt><dd>{importPreview.exportedAt}</dd></div>
+                        <div><dt>事件流序号</dt><dd>{importPreview.streamHead.seq}</dd></div>
+                        <div><dt>存档链节点</dt><dd>{importPreview.chainNodeCount}</dd></div>
+                      </dl>
+                      <p>确认后将重新读取并验证文件，再新增本机档案；不会切换当前人生。</p>
+                      <button type="button" className="save-folio-act" onClick={() => void handleImportCommit()} disabled={importStatus === 'committing'}>
+                        {importStatus === 'committing' ? '正在提交…' : '确认导入'}
+                      </button>
+                      <button type="button" className="save-folio-act" onClick={clearImport} disabled={importStatus === 'committing'}>
+                        <X size={13} />取消
+                      </button>
+                    </div>
+                  )}
+                  {importError && <p role={importStatus === 'error' ? 'alert' : 'status'}>{importError}</p>}
+                  {(importStatus === 'error' || importStatus === 'success') && <button type="button" className="save-folio-act" onClick={clearImport}>关闭</button>}
+                </section>
+              )}
+
+                            <p className={`save-folio-note ${armed ? 'is-armed' : ''}`} id={`${panelId}-note`}>
                 {armed
                   ? '重立志会创建新世界；已有本机存档保留，不自动删除。'
                   : '当前世界自动保存于本机；便携存档包含完整校验链，可供后续独立导入流程使用。'}
