@@ -42,6 +42,7 @@ export function SaveFolio({ summary, onExport, onReset, onPrepareImport, onCommi
   const rootRef = useRef<HTMLDivElement | null>(null)
   const headRef = useRef<HTMLButtonElement | null>(null)
   const deleteConfirmRef = useRef<HTMLButtonElement | null>(null)
+  const deleteCancelRef = useRef<HTMLButtonElement | null>(null)
   const deleteTriggerRef = useRef<HTMLButtonElement | null>(null)
   const armTimer = useRef(0)
   const savedTimer = useRef(0)
@@ -160,6 +161,19 @@ export function SaveFolio({ summary, onExport, onReset, onPrepareImport, onCommi
         setDeleteTarget(null)
         setDeleteError(null)
         window.requestAnimationFrame(() => deleteTriggerRef.current?.focus())
+        return
+      }
+      if (event.key === 'Tab') {
+        const first = deleteCancelRef.current
+        const last = deleteConfirmRef.current
+        if (!first || !last) return
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault()
+          last.focus()
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault()
+          first.focus()
+        }
       }
     }
     document.addEventListener('keydown', onKeyDown, true)
@@ -338,7 +352,7 @@ export function SaveFolio({ summary, onExport, onReset, onPrepareImport, onCommi
                         <p>此操作不可撤销，只删除本机该人生及其完整存档链，不影响当前正在接续的人生。</p>
                         {deleteError && <p role="alert">{deleteError}</p>}
                         <div className="save-folio-delete-actions">
-                          <button type="button" className="save-folio-act" onClick={() => { if (deletingWorldId) return; setDeleteTarget(null); setDeleteError(null); window.requestAnimationFrame(() => deleteTriggerRef.current?.focus()) }} disabled={deletingWorldId !== null}>取消</button>
+                          <button ref={deleteCancelRef} type="button" className="save-folio-act" onClick={() => { if (deletingWorldId) return; setDeleteTarget(null); setDeleteError(null); window.requestAnimationFrame(() => deleteTriggerRef.current?.focus()) }} disabled={deletingWorldId !== null}>取消</button>
                           <button ref={deleteConfirmRef} type="button" className="save-folio-act is-danger" onClick={() => void handleDeleteConfirm()} disabled={deletingWorldId !== null || worldsStatus !== 'ready' || activeWorldId === deleteTarget.worldId}>
                             {deletingWorldId === deleteTarget.worldId ? '正在删除…' : '确认删除此档案'}
                           </button>
