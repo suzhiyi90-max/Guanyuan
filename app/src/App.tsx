@@ -36,7 +36,7 @@ import { placeSpecs, recordPlace, type PlaceId } from './placeTrail'
 import { lastReviewOrigin, originLabels, recordReviewOrigin, useReviewTrail, type ReviewOrigin } from './reviewTrail'
 import { readView } from './viewMemory'
 import type { FolioKey } from './folioIndex'
-import type { PortableSaveEnvelope } from './persistence/portable-save-export'
+import { serializePortableSaveEnvelope, type PortableSaveEnvelope } from './persistence/portable-save-export'
 import { useReadPrefs } from './readPrefs'
 import { installSoundHooks } from './audio'
 import { worldEvents, type WorldEvent } from './game/schedule'
@@ -180,13 +180,19 @@ function GameApp({ game }: { game: ReturnType<typeof useGuanyuanGame> }) {
         'chain-corrupt': '存档链校验未通过，未生成导出文件。',
         'schema-unsupported': '存档版本暂不支持便携导出。',
         'checksum-failed': '校验摘要生成失败，未生成导出文件。',
+        'file-too-large': '存档超过便携文件大小上限，未生成导出文件。',
         'storage-error': '本机存档读取失败，未生成导出文件。',
       }
       notify('便携存档未导出', messages[result.issue] ?? `存档读取失败：${result.issue}`)
       throw new Error(result.issue)
     }
     const envelope: PortableSaveEnvelope = result.envelope
-    const blob = new Blob([JSON.stringify(envelope, null, 2)], { type: 'application/json' })
+    const serialized = serializePortableSaveEnvelope(envelope)
+    if (serialized.status !== 'serialized') {
+      notify('便携存档未导出', '存档超过 128 MiB 上限，未生成导出文件。')
+      throw new Error(serialized.issue)
+    }
+    const blob = new Blob([serialized.content], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const anchor = document.createElement('a')
     const date = new Date().toISOString().slice(0, 10)
