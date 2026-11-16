@@ -7,6 +7,7 @@ import { periods } from '../game/engine'
 import { reducePreviewRuntimeEvent } from '../game/runtime-projection'
 import { PREVIEW_RUNTIME_SCHEMA_VERSION, type PreviewRuntimeEventKind } from '../game/runtime-registry'
 import type { SaveRepository, SaveRepositoryIssue } from './save-repository'
+import { PORTABLE_SAVE_MAX_BYTES } from './strict-json'
 
 export interface PortableSaveEnvelope {
   readonly format: 'guanyuan.portable-save'
@@ -25,6 +26,7 @@ export type PortableSaveExportIssue =
   | 'chain-corrupt'
   | 'schema-unsupported'
   | 'checksum-failed'
+  | 'file-too-large'
   | 'storage-error'
   | SaveRepositoryIssue
 
@@ -147,4 +149,15 @@ export async function validatePortableSaveEnvelope(input: unknown): Promise<bool
     return checksum !== null && checksum === value.envelopeChecksum
       && canonicalSavePackageJson(value.packageChain).length > 0
   } catch { return false }
+}
+
+/** Serialize the exact downloadable representation under the shared import/export byte ceiling. */
+export function serializePortableSaveEnvelope(
+  envelope: PortableSaveEnvelope,
+): { readonly status: 'serialized'; readonly content: string } | { readonly status: 'rejected'; readonly issue: 'file-too-large' } {
+  const content = JSON.stringify(envelope, null, 2)
+  if (new TextEncoder().encode(content).byteLength > PORTABLE_SAVE_MAX_BYTES) {
+    return { status: 'rejected', issue: 'file-too-large' }
+  }
+  return { status: 'serialized', content }
 }
