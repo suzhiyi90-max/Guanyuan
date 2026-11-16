@@ -796,6 +796,11 @@ try {
   await page.waitForSelector('.scene-panel', { timeout: 15000 })
   await settle(500)
   check('从本机档案目录手动选择后经完整恢复流程接续当前人生', (await page.locator('.date-block span').innerText()) === dayBeforeRestore)
+  // 手动恢复发生在志向纸内；明确收起志向纸，再从主界面重新打开存档案卷。
+  if (await page.locator('.prologue').isVisible()) {
+    await click('.start-button')
+    await page.waitForSelector('.prologue', { state: 'hidden', timeout: 8000 })
+  }
   await click('.goal-seal')
   await page.waitForSelector('.save-folio-head', { timeout: 8000 })
   await click('.save-folio-head')
