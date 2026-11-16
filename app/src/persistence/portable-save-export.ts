@@ -5,7 +5,7 @@ import { createInitialGameState } from '../game/initial-state'
 import type { PreviewRuntimeSession } from '../game/runtime-orchestrator'
 import { periods } from '../game/engine'
 import { reducePreviewRuntimeEvent } from '../game/runtime-projection'
-import type { PreviewRuntimeEventKind } from '../game/runtime-registry'
+import { PREVIEW_RUNTIME_SCHEMA_VERSION, type PreviewRuntimeEventKind } from '../game/runtime-registry'
 import type { SaveRepository, SaveRepositoryIssue } from './save-repository'
 
 export interface PortableSaveEnvelope {
@@ -82,7 +82,7 @@ export async function exportPortableSave(
   if (stored.worldId !== session.worldId || stored.packageChain.worldId !== session.worldId) {
     return { status: 'rejected', issue: 'world-mismatch' }
   }
-  if (stored.packageChain.schemaVersion !== 1) return { status: 'rejected', issue: 'schema-unsupported' }
+  if (stored.packageChain.schemaVersion !== PREVIEW_RUNTIME_SCHEMA_VERSION) return { status: 'rejected', issue: 'schema-unsupported' }
   const tail = session.ledger.events[session.ledger.events.length - 1]
   const sessionHead = tail
     ? { kind: 'event' as const, seq: tail.seq, eventId: tail.id }
@@ -123,12 +123,17 @@ export async function exportPortableSave(
 export async function validatePortableSaveEnvelope(input: unknown): Promise<boolean> {
   if (!input || typeof input !== 'object' || Array.isArray(input)) return false
   const value = input as Record<string, unknown>
-  if (value.format !== 'guanyuan.portable-save' || value.formatVersion !== 1
+  const expectedKeys = ['format', 'formatVersion', 'exportedAt', 'worldId', 'streamHead', 'packageChain', 'envelopeChecksum']
+  if (Object.keys(value).length !== expectedKeys.length || Object.keys(value).some(key => !expectedKeys.includes(key))
+    || value.format !== 'guanyuan.portable-save' || value.formatVersion !== 1
     || typeof value.exportedAt !== 'string' || !Number.isFinite(Date.parse(value.exportedAt))
     || typeof value.worldId !== 'string' || !value.worldId.trim()
     || typeof value.envelopeChecksum !== 'string' || !/^sha256:[0-9a-f]{64}$/u.test(value.envelopeChecksum)
     || !value.streamHead || typeof value.streamHead !== 'object'
     || !value.packageChain || typeof value.packageChain !== 'object') return false
+  const chain = value.packageChain as Record<string, unknown>
+  if (chain.worldId !== value.worldId || !chain.snapshot || typeof chain.snapshot !== 'object'
+    || canonicalSavePackageJson((chain.snapshot as Record<string, unknown>).streamHead) !== canonicalSavePackageJson(value.streamHead)) return false
   try {
     const payload = {
       format: value.format,
