@@ -111,6 +111,8 @@ function GameApp({ game }: { game: ReturnType<typeof useGuanyuanGame> }) {
   // FE-132：批阅来处只多记一枚滚轴位置（会话内存），「回那处」不再落在纸页顶端。
   const reviewOriginScroll = useRef<Partial<Record<ReviewOrigin, number>>>({})
   const [prologueDone, setPrologueDone] = useState(() => Boolean(state.goalId))
+  // A verified restore resumes the existing life; never leave the first-life prologue over it.
+  useEffect(() => { if (game.restored) setPrologueDone(true) }, [game.restored])
   const [activeSection, setActiveSection] = useState<SectionId>('today')
   const [scene, setScene] = useState<SceneId>('county')
   const [sceneDirection, setSceneDirection] = useState(1)
