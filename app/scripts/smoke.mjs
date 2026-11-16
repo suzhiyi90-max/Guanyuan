@@ -799,8 +799,10 @@ try {
     && portableEnvelope?.formatVersion === 1 && typeof portableEnvelope?.envelopeChecksum === 'string'
     && portableEnvelope?.packageChain?.snapshot?.streamHead?.seq === portableEnvelope?.streamHead?.seq)
   check('便携导出文件名含 WorldId 安全标识', /观远-便携存档-.*-[a-zA-Z0-9-]+\.json$/u.test(portableDownload.suggestedFilename()))
-  // Close the explicitly opened goal/save overlay before exercising the underlying navigation.
-  await page.keyboard.press('Escape')
+  // GoalPrologue is a blocking resume/goal sheet, not an Escape-dismissible modal.
+  // Confirm the already-selected goal to close it before exercising underlying navigation.
+  await page.waitForSelector('.prologue button:has-text("以此立志，进入第一日")', { state: 'visible', timeout: 8000 })
+  await click('.prologue button:has-text("以此立志，进入第一日")')
   await page.waitForSelector('.prologue', { state: 'detached', timeout: 8000 })
   await nav('事务')
   await settle(450)
