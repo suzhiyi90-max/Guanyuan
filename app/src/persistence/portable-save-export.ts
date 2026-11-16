@@ -131,10 +131,10 @@ export async function validatePortableSaveEnvelope(input: unknown): Promise<bool
     || typeof value.envelopeChecksum !== 'string' || !/^sha256:[0-9a-f]{64}$/u.test(value.envelopeChecksum)
     || !value.streamHead || typeof value.streamHead !== 'object'
     || !value.packageChain || typeof value.packageChain !== 'object') return false
-  const chain = value.packageChain as Record<string, unknown>
-  if (chain.worldId !== value.worldId || !chain.snapshot || typeof chain.snapshot !== 'object'
-    || canonicalSavePackageJson((chain.snapshot as Record<string, unknown>).streamHead) !== canonicalSavePackageJson(value.streamHead)) return false
   try {
+    const chain = value.packageChain as Record<string, unknown>
+    if (chain.worldId !== value.worldId || !chain.snapshot || typeof chain.snapshot !== 'object'
+      || canonicalSavePackageJson((chain.snapshot as Record<string, unknown>).streamHead) !== canonicalSavePackageJson(value.streamHead)) return false
     const payload = {
       format: value.format,
       formatVersion: value.formatVersion,
