@@ -275,26 +275,34 @@ export class IndexedDbSaveRepository implements SaveRepository {
    * is the concurrency authority and any failure rolls the complete write back.
    */
   async importWorld(input: ImportWorldSaveInput): Promise<SaveRepositoryResult<StoredWorldSave>> {
-    if (!packageEnvelope(input.packageChain) || input.packageChain.worldId !== input.worldId
-      || !sameCursor(input.packageChain.snapshot.streamHead, input.streamHead)
-      || !sameCursor(input.packageChain.streamRange.toInclusive, input.streamHead)
-      || !Number.isFinite(Date.parse(input.savedAt))) {
+    if (!Number.isFinite(Date.parse(input.savedAt))) {
       return { status: 'rejected', issue: 'save-repository-package-invalid' }
     }
 
     const newestFirst: SavePackageChain[] = []
     const seenKeys = new Set<string>()
-    let cursor: SavePackageChain = input.packageChain
-    while (true) {
-      if (newestFirst.length >= MAX_CHAIN_DEPTH || cursor.worldId !== input.worldId) {
+    let candidate: unknown = input.packageChain
+    while (candidate && typeof candidate === 'object' && !Array.isArray(candidate)) {
+      const value = candidate as Record<string, unknown>
+      if (newestFirst.length >= MAX_CHAIN_DEPTH || value.worldId !== input.worldId
+        || typeof value.checksum !== 'string' || !/^sha256:[0-9a-f]{64}$/u.test(value.checksum)) {
         return { status: 'rejected', issue: 'save-repository-package-invalid' }
       }
-      const key = packageKey(cursor.worldId, cursor.checksum)
+      const key = packageKey(input.worldId, value.checksum)
       if (seenKeys.has(key)) return { status: 'rejected', issue: 'save-repository-package-invalid' }
       seenKeys.add(key)
-      newestFirst.push(cursor)
-      if (cursor.packageKind === 'full') break
-      cursor = cursor.basePackage
+      if (value.packageKind !== 'full' && value.packageKind !== 'incremental') {
+        return { status: 'rejected', issue: 'save-repository-package-invalid' }
+      }
+      newestFirst.push(candidate as SavePackageChain)
+      if (value.packageKind === 'full') break
+      candidate = value.basePackage
+    }
+    if (newestFirst.length === 0 || newestFirst[newestFirst.length - 1].packageKind !== 'full'
+      || !packageEnvelope(input.packageChain) || input.packageChain.worldId !== input.worldId
+      || !sameCursor(input.packageChain.snapshot.streamHead, input.streamHead)
+      || !sameCursor(input.packageChain.streamRange.toInclusive, input.streamHead)) {
+      return { status: 'rejected', issue: 'save-repository-package-invalid' }
     }
     if (newestFirst.length === 0 || newestFirst[newestFirst.length - 1].packageKind !== 'full') {
       return { status: 'rejected', issue: 'save-repository-package-invalid' }
