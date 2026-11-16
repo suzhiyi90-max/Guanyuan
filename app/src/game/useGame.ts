@@ -44,6 +44,23 @@ function asCommandResult(result: PreviewRuntimeDispatchResult): CommandResult {
   }
 }
 
+/** Adapter shared by the React hook and its contract test: only committed/duplicate results advance the visible projection. */
+export async function dispatchGeneratedEventForGame(
+  session: PreviewRuntimeSession,
+  event: GeneratedEvent,
+  optionId: string,
+): Promise<{ readonly session: PreviewRuntimeSession; readonly result: CommandResult; readonly committed: boolean }> {
+  const dispatched = await dispatchPreviewRuntimeCandidate(session, event, optionId)
+  return {
+    session: dispatched.session,
+    result: {
+      state: dispatched.session.state,
+      ...(dispatched.status === 'rejected' ? { rejected: dispatched.reason } : {}),
+    },
+    committed: dispatched.status !== 'rejected',
+  }
+}
+
 export function taskStageOf(state: GameState): TaskStage {
   if (state.plan) {
     if (state.day >= 10) return '结'
@@ -171,13 +188,10 @@ export function useGuanyuanGame() {
   // AI 选项先走账外候选与可信回执，再由运行时原子追加事实并完整重放。
   // 拒绝时只保留候选日志反馈，不更新世界投影；成功/幂等重试才提交 React state。
   const resolveGeneratedEvent = useCallback(async (event: GeneratedEvent, optionId: string): Promise<CommandResult> => {
-    const result = await dispatchPreviewRuntimeCandidate(runtimeRef.current!, event, optionId)
-    runtimeRef.current = result.session
-    if (result.status !== 'rejected') setState(result.session.state)
-    return {
-      state: result.session.state,
-      ...(result.status === 'rejected' ? { rejected: result.reason } : {}),
-    }
+    const resolution = await dispatchGeneratedEventForGame(runtimeRef.current!, event, optionId)
+    runtimeRef.current = resolution.session
+    if (resolution.committed) setState(resolution.result.state)
+    return resolution.result
   }, [])
 
   // 重立志是创建新世界，不删除或覆盖 legacy v1 key，也不伪造旧世界的事件历史。
