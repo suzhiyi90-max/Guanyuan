@@ -381,3 +381,50 @@ export function readLedgerEvents<Kind extends string>(
   }
   return ledger.events.slice(fromExclusive, toInclusive)
 }
+
+
+export type RestoreEventLedgerResult<Kind extends string = string> =
+  | { readonly status: 'restored'; readonly ledger: EventLedger<Kind> }
+  | { readonly status: 'rejected'; readonly issue: 'ledger-restore-event-invalid' | 'ledger-restore-idempotency-conflict' }
+
+/** Rebuilds the in-memory idempotency index from a replay-verified immutable event stream. */
+export function restoreEventLedgerFromVerifiedEvents<Kind extends string>(
+  worldId: WorldId,
+  events: readonly LedgerEvent<Kind>[],
+): RestoreEventLedgerResult<Kind> {
+  let ledger = createEventLedger<Kind>(worldId)
+  for (const event of events) {
+    if (!event || event.worldId !== worldId || event.seq !== ledger.head + 1
+      || event.id !== brandedId<'EventId'>(`evt:${worldId}:${event.seq}`)) {
+      return { status: 'rejected', issue: 'ledger-restore-event-invalid' }
+    }
+    const input: LedgerEventInput<Kind> = {
+      source: event.source,
+      kind: event.kind,
+      intentKind: event.intentKind,
+      actor: event.actor,
+      requestWorldTime: event.requestWorldTime,
+      clientRequestId: event.clientRequestId,
+      payload: event.payload,
+      ...(event.candidateRef === undefined ? {} : { candidateRef: event.candidateRef }),
+      ...(event.validationRef === undefined ? {} : { validationRef: event.validationRef }),
+    }
+    const appended = appendLedgerEventCore(
+      ledger,
+      input,
+      event.committedAt,
+      event.kind === 'candidate.validated',
+      event.source === 'ai-candidate',
+    )
+    if (appended.status !== 'appended' || canonicalJson(appended.event) !== canonicalJson(event)) {
+      return {
+        status: 'rejected',
+        issue: appended.status === 'idempotency-conflict' || appended.status === 'duplicate'
+          ? 'ledger-restore-idempotency-conflict'
+          : 'ledger-restore-event-invalid',
+      }
+    }
+    ledger = appended.ledger
+  }
+  return { status: 'restored', ledger }
+}
