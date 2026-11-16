@@ -191,6 +191,8 @@ export function useGuanyuanGame() {
       const result = await savePreviewRuntimeSession(session, repository)
       if (result.status === 'rejected') {
         setToast({ id: Date.now(), title: '本机存档未写成', detail: `事件仍在当前会话中；存档失败：${result.issue}` })
+      } else {
+        setRestored(true)
       }
     }).catch(() => {
       setToast({ id: Date.now(), title: '本机存档未写成', detail: '事件仍在当前会话中；存储服务发生异常。' })
