@@ -10,6 +10,8 @@ const genesis = { kind: 'genesis', seq: 0 } as const
 const head1 = { kind: 'event', seq: 1, eventId: brandedId<'EventId'>(`evt:${worldId}:1`) as EventId } as const
 const checksum1 = `sha256:${'1'.repeat(64)}`
 const checksum2 = `sha256:${'2'.repeat(64)}`
+const checksum3 = `sha256:${'3'.repeat(64)}`
+const checksum4 = `sha256:${'4'.repeat(64)}`
 
 const full = {
   packageKind: 'full',
@@ -40,9 +42,16 @@ export async function runIndexedDbSaveRepositoryContractTests(): Promise<readonl
     console.log(`PASS ${name}`)
   }
   const suffix = `contract-${Date.now()}-${Math.random().toString(36).slice(2)}`
-  const repository = new IndexedDbSaveRepository(globalThis.indexedDB, `guanyuan-${suffix}`)
-  const unavailable = new IndexedDbSaveRepository(null, `guanyuan-${suffix}-none`)
+  const databaseName = `guanyuan-${suffix}`
+  const repository = new IndexedDbSaveRepository(globalThis.indexedDB, databaseName)
+  const unavailable = new IndexedDbSaveRepository(null, `${databaseName}-none`)
   check('missing IndexedDB is reported as unavailable', (await unavailable.loadWorld(worldId)).status === 'rejected')
+  const malformed = await repository.commitWorld({
+    worldId, packageChain: { ...full, checksum: 'bad-checksum' } as unknown as FullSavePackage,
+    expectedHead: null, savedAt: '2026-11-16T00:00:00.000Z',
+  })
+  check('malformed package envelope is rejected before storage', malformed.status === 'rejected'
+    && malformed.issue === 'save-repository-package-invalid')
   const first = await repository.commitWorld({
     worldId, packageChain: full, expectedHead: null, savedAt: '2026-11-16T00:00:00.000Z',
   })
@@ -55,6 +64,25 @@ export async function runIndexedDbSaveRepositoryContractTests(): Promise<readonl
   })
   check('stale expected head is rejected without replacing current world pointer', conflict.status === 'rejected'
     && conflict.issue === 'save-repository-head-conflict')
+  const missingBasePackage = { ...full, checksum: checksum3 } as FullSavePackage
+  const missingBaseIncremental = { ...incremental, basePackage: missingBasePackage, checksum: checksum4 } as IncrementalSavePackage
+  const missingBase = await repository.commitWorld({
+    worldId, packageChain: missingBaseIncremental, expectedHead: genesis, savedAt: '2026-11-16T00:01:30.000Z',
+  })
+  check('incremental package cannot reference a base absent from repository', missingBase.status === 'rejected'
+    && missingBase.issue === 'save-repository-base-missing')
+  const wrongBase = {
+    ...full,
+    streamRange: { fromExclusive: genesis, toInclusive: head1 },
+    snapshot: { ...full.snapshot, streamHead: head1 },
+    checksum: checksum3,
+  } as unknown as FullSavePackage
+  const mismatchedIncremental = { ...incremental, basePackage: wrongBase } as IncrementalSavePackage
+  const mismatch = await repository.commitWorld({
+    worldId, packageChain: mismatchedIncremental, expectedHead: genesis, savedAt: '2026-11-16T00:01:45.000Z',
+  })
+  check('incremental package base head must equal its fromExclusive cursor', mismatch.status === 'rejected'
+    && mismatch.issue === 'save-repository-package-invalid')
   const second = await repository.commitWorld({
     worldId, packageChain: incremental, expectedHead: genesis, savedAt: '2026-11-16T00:02:00.000Z',
   })
@@ -67,6 +95,28 @@ export async function runIndexedDbSaveRepositoryContractTests(): Promise<readonl
   const list = await repository.listWorlds()
   check('world index exposes head metadata without loading package payloads', list.status === 'success'
     && list.value.some(item => item.worldId === worldId && item.streamHead.seq === 1))
+  const staleDelete = await repository.deleteWorld(worldId, genesis)
+  check('stale delete cannot remove a world after its head advanced', staleDelete.status === 'rejected'
+    && staleDelete.issue === 'save-repository-head-conflict')
+  const db = await new Promise<IDBDatabase>((resolve, reject) => {
+    const request = globalThis.indexedDB.open(databaseName, 1)
+    request.onsuccess = () => resolve(request.result)
+    request.onerror = () => reject(request.error)
+  })
+  const tamper = db.transaction('worlds', 'readwrite')
+  const tamperDone = new Promise<void>((resolve, reject) => {
+    tamper.oncomplete = () => resolve()
+    tamper.onabort = () => reject(tamper.error)
+    tamper.onerror = () => reject(tamper.error)
+  })
+  const worlds = tamper.objectStore('worlds')
+  const worldRequest = worlds.get(worldId)
+  worldRequest.onsuccess = () => worlds.put({ ...worldRequest.result, latestPackageKey: 'missing-package-node' })
+  await tamperDone
+  db.close()
+  const corrupted = await repository.loadWorld(worldId)
+  check('corrupt package pointer is reported, never treated as an empty world', corrupted.status === 'rejected'
+    && corrupted.issue === 'save-repository-record-corrupt')
   const deleted = await repository.deleteWorld(worldId, head1)
   check('world deletion is guarded by the expected head', deleted.status === 'success' && deleted.value)
   const afterDelete = await repository.loadWorld(worldId)
