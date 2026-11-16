@@ -145,11 +145,13 @@ async function main(): Promise<void> {
   check('stale runtime cannot overwrite a newer persisted head', stale.status === 'rejected'
     && stale.issue === 'runtime-save-base-ahead')
 
+  const threeEvents = appendGoal(twoEvents, 'flood-control-review')
   repository.failNextCommit = 'save-repository-head-conflict'
-  const concurrent = await savePreviewRuntimeSession(twoEvents, repository)
+  const concurrent = await savePreviewRuntimeSession(threeEvents, repository)
   check('repository CAS conflict is surfaced without mutating runtime state', concurrent.status === 'rejected'
     && concurrent.issue === 'save-repository-head-conflict'
-    && twoEvents.ledger.head === 2)
+    && threeEvents.ledger.head === 3
+    && repository.current?.streamHead.seq === 2)
 
   const beforeCorruption = repository.current!
   repository.current = Object.freeze({
