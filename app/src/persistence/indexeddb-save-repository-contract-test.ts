@@ -1,7 +1,8 @@
 import { brandedId } from '../domain/shared/ids'
 import type { FullSavePackage } from '../domain/save-package'
 import type { IncrementalSavePackage } from '../domain/incremental-save-package'
-import type { EventId, WorldId } from '../domain/event-ledger'
+import type { WorldId } from '../domain/event-ledger'
+import type { EventId } from '../domain/shared/ids'
 import { IndexedDbSaveRepository } from './indexeddb-save-repository'
 
 const worldId = brandedId<'WorldId'>('w5-d1-browser-contract') as WorldId
@@ -67,8 +68,8 @@ async function run(): Promise<void> {
     && list.value.some(item => item.worldId === worldId && item.streamHead.seq === 1))
   const deleted = await repository.deleteWorld(worldId, head1)
   check('world deletion is guarded by the expected head', deleted.status === 'success' && deleted.value)
-  check('deletion removes the world and its package chain', (await repository.loadWorld(worldId)).status === 'success'
-    && (await repository.loadWorld(worldId)).value === null)
+  const afterDelete = await repository.loadWorld(worldId)
+  check('deletion removes the world and its package chain', afterDelete.status === 'success' && afterDelete.value === null)
   repository.close()
   unavailable.close()
 }
