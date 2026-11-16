@@ -8,6 +8,7 @@ import type { CommandResult } from './commands'
 import {
   createPreviewRuntimeSession,
   dispatchPreviewRuntimeIntent,
+  dispatchPreviewRuntimeCandidate,
   type PreviewRuntimeDispatchResult,
   type PreviewRuntimeIntent,
   type PreviewRuntimeSession,
@@ -167,11 +168,17 @@ export function useGuanyuanGame() {
     asCommandResult(commitIntent({ kind: 'world.event.resolved', payload: { eventId, optionId } }))
   ), [commitIntent])
 
-  // AI 候选回执与 ai-candidate 事实提交在 W5-C2 接入；此处严禁旧式直接 setState。
-  const resolveGeneratedEvent = useCallback((_event: GeneratedEvent, _optionId: string): CommandResult => ({
-    state: runtimeRef.current!.state,
-    rejected: 'ai-candidate-flow-not-integrated',
-  }), [])
+  // AI 选项先走账外候选与可信回执，再由运行时原子追加事实并完整重放。
+  // 拒绝时只保留候选日志反馈，不更新世界投影；成功/幂等重试才提交 React state。
+  const resolveGeneratedEvent = useCallback(async (event: GeneratedEvent, optionId: string): Promise<CommandResult> => {
+    const result = await dispatchPreviewRuntimeCandidate(runtimeRef.current!, event, optionId)
+    runtimeRef.current = result.session
+    if (result.status !== 'rejected') setState(result.session.state)
+    return {
+      state: result.session.state,
+      ...(result.status === 'rejected' ? { rejected: result.reason } : {}),
+    }
+  }, [])
 
   // 重立志是创建新世界，不删除或覆盖 legacy v1 key，也不伪造旧世界的事件历史。
   const resetGame = useCallback(() => {
