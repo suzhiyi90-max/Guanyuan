@@ -1,12 +1,12 @@
 import { brandedId } from '../domain/shared/ids'
 import type { FullSavePackage } from '../domain/save-package'
 import type { IncrementalSavePackage } from '../domain/incremental-save-package'
-import type { WorldId } from '../domain/event-ledger'
+import type { EventId, WorldId } from '../domain/event-ledger'
 import { IndexedDbSaveRepository } from './indexeddb-save-repository'
 
 const worldId = brandedId<'WorldId'>('w5-d1-browser-contract') as WorldId
 const genesis = { kind: 'genesis', seq: 0 } as const
-const head1 = { kind: 'event', seq: 1, eventId: `evt:${worldId}:1` } as const
+const head1 = { kind: 'event', seq: 1, eventId: brandedId<'EventId'>(`evt:${worldId}:1`) as EventId } as const
 const checksum1 = `sha256:${'1'.repeat(64)}`
 const checksum2 = `sha256:${'2'.repeat(64)}`
 
