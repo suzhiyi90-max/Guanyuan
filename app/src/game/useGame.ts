@@ -51,13 +51,14 @@ export async function dispatchGeneratedEventForGame(
   optionId: string,
 ): Promise<{ readonly session: PreviewRuntimeSession; readonly result: CommandResult; readonly committed: boolean }> {
   const dispatched = await dispatchPreviewRuntimeCandidate(session, event, optionId)
+  const projectionChanged = dispatched.status === 'appended'
   return {
     session: dispatched.session,
     result: {
-      state: dispatched.session.state,
+      state: projectionChanged ? dispatched.session.state : session.state,
       ...(dispatched.status === 'rejected' ? { rejected: dispatched.reason } : {}),
     },
-    committed: dispatched.status !== 'rejected',
+    committed: projectionChanged,
   }
 }
 
