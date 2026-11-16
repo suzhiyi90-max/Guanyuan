@@ -70,6 +70,10 @@ function chainNodeCount(chain: SavePackageChain): number {
   return count
 }
 
+export function shouldPromoteToFullCheckpoint(chain: SavePackageChain): boolean {
+  return chainNodeCount(chain) >= SAVE_PACKAGE_CHAIN_NODE_LIMIT
+}
+
 function verificationFor(session: PreviewRuntimeSession): SavePackageVerification<PreviewRuntimeEventKind> {
   return {
     registry: session.registry,
@@ -146,7 +150,7 @@ export async function savePreviewRuntimeSession(
   let packageChain: SavePackageChain
   const mustCheckpoint = !existing
     || existing.packageChain.schemaVersion !== PREVIEW_RUNTIME_SCHEMA_VERSION
-    || chainNodeCount(existing.packageChain) >= SAVE_PACKAGE_CHAIN_NODE_LIMIT
+    || shouldPromoteToFullCheckpoint(existing.packageChain)
 
   if (mustCheckpoint) {
     const full = await createFullSavePackage({
