@@ -15,6 +15,7 @@ import type { PreviewRuntimeEventKind } from '../src/game/runtime-registry'
 import {
   savePreviewRuntimeSession,
   SAVE_PACKAGE_CHAIN_NODE_LIMIT,
+  shouldPromoteToFullCheckpoint,
 } from '../src/persistence/runtime-save-orchestrator'
 
 let passed = 0
@@ -154,8 +155,12 @@ async function main(): Promise<void> {
   check('corrupt existing chain is rejected rather than overwritten', corrupt.status === 'rejected'
     && corrupt.issue === 'runtime-save-package-invalid')
 
-  check('checkpoint policy matches the IndexedDB chain-node safety ceiling',
-    SAVE_PACKAGE_CHAIN_NODE_LIMIT === 128)
+  let syntheticChain = { packageKind: 'full' } as unknown as import('../src/domain/incremental-save-package').SavePackageChain
+  for (let index = 1; index < SAVE_PACKAGE_CHAIN_NODE_LIMIT; index += 1) {
+    syntheticChain = { packageKind: 'incremental', basePackage: syntheticChain } as typeof syntheticChain
+  }
+  check('checkpoint policy promotes at the adapter chain-node ceiling',
+    SAVE_PACKAGE_CHAIN_NODE_LIMIT === 128 && shouldPromoteToFullCheckpoint(syntheticChain))
 
   if (failed > 0) throw new Error(`runtime-save-orchestrator: ${failed} failed, ${passed} passed`)
   console.log(`runtime-save-orchestrator: ${passed}/${passed} passed`)
