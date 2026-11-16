@@ -6,7 +6,7 @@ import type {
 import { createPreviewRuntimeSession, dispatchPreviewRuntimeIntent } from '../src/game/runtime-orchestrator'
 import { savePreviewRuntimeSession } from '../src/persistence/runtime-save-orchestrator'
 import { exportPortableSave, validatePortableSaveEnvelope } from '../src/persistence/portable-save-export'
-import { importPortableSaveBytes } from '../src/persistence/portable-save-import'
+import { commitPortableSaveFile, importPortableSaveBytes, preparePortableSaveBytes } from '../src/persistence/portable-save-import'
 
 let passed = 0
 let failed = 0
@@ -74,6 +74,28 @@ async function main(): Promise<void> {
       && session0.state === initialState && importedRepo.current?.worldId === session0.worldId)
     const duplicate = await importPortableSaveBytes(bytes, importedRepo)
     check('portable import refuses an existing WorldId', duplicate.status === 'rejected' && duplicate.issue === 'world-exists')
+
+    const previewRepo = new MemorySaveRepository()
+    const prepared = await preparePortableSaveBytes(bytes)
+    check('portable preflight fully verifies package without writing repository',
+      prepared.status === 'prepared' && previewRepo.current === null)
+    let currentFileBytes = bytes
+    const mutableFile = {
+      get size() { return currentFileBytes.byteLength },
+      async arrayBuffer() { return currentFileBytes.slice().buffer },
+    } as File
+    const previewFromFile = await (await import('../src/persistence/portable-save-import')).preparePortableSaveFile(mutableFile)
+    check('file preflight checks and prepares without persistence',
+      previewFromFile.status === 'prepared' && previewRepo.current === null)
+    currentFileBytes = new TextEncoder().encode('{"format":"tampered"}')
+    const changedAfterPreview = await commitPortableSaveFile(mutableFile, previewRepo)
+    check('commit re-reads and rejects file changed after preview',
+      changedAfterPreview.status === 'rejected' && previewRepo.current === null)
+    currentFileBytes = bytes
+    const committedAfterConfirm = await commitPortableSaveFile(mutableFile, previewRepo,
+      { now: () => '2026-11-16T08:03:30.000Z' })
+    check('confirmed commit revalidates and writes exactly one archive',
+      committedAfterConfirm.status === 'imported' && previewRepo.current?.worldId === session0.worldId)
     const malformedShape = {
       ...fullExport.envelope,
       packageChain: { ...fullExport.envelope.packageChain, snapshot: undefined },
