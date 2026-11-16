@@ -33,6 +33,7 @@ on:
       - work/w5-c2b-generated-event-ui-integration
       - work/w5-d1-indexeddb-save-repository
       - work/w5-d2-runtime-save-package-orchestration
+      - work/w5-d3-runtime-startup-restore
   pull_request:
     branches:
       - feat/g1-engine
@@ -80,6 +81,8 @@ on:
       - work/w5-c2-ai-candidate-runtime-integration
       - work/w5-c2b-generated-event-ui-integration
       - work/w5-d1-indexeddb-save-repository
+      - work/w5-d2-runtime-save-package-orchestration
+      - work/w5-d3-runtime-startup-restore
   workflow_dispatch:
 
 permissions:
@@ -188,6 +191,8 @@ jobs:
         run: npm run test:domain:indexeddb-save-repository
       - name: Runtime SavePackage orchestration contracts
         run: npm run test:domain:runtime-save-orchestrator
+      - name: Runtime startup restore contracts
+        run: npm run test:domain:runtime-restore-orchestrator
       - name: Review index integrity
         run: npm run check:docs
       - name: Patch whitespace integrity

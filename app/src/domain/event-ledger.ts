@@ -381,3 +381,88 @@ export function readLedgerEvents<Kind extends string>(
   }
   return ledger.events.slice(fromExclusive, toInclusive)
 }
+
+
+export type RestoreEventLedgerResult<Kind extends string = string> =
+  | { readonly status: 'restored'; readonly ledger: EventLedger<Kind> }
+  | { readonly status: 'rejected'; readonly issue: 'ledger-restore-event-invalid' | 'ledger-restore-idempotency-conflict' | 'ledger-restore-ai-candidate-invalid' }
+
+/** Rebuilds the idempotency index from replay-verified events and rechecks AI digests. */
+export async function restoreEventLedgerFromVerifiedEvents<Kind extends string>(
+  worldId: WorldId,
+  events: readonly LedgerEvent<Kind>[],
+  registry: EventRegistry<Kind>,
+): Promise<RestoreEventLedgerResult<Kind>> {
+  let ledger = createEventLedger<Kind>(worldId)
+  for (const event of events) {
+    if (!event || event.worldId !== worldId || event.seq !== ledger.head + 1
+      || event.id !== brandedId<'EventId'>(`evt:${worldId}:${event.seq}`)) {
+      return { status: 'rejected', issue: 'ledger-restore-event-invalid' }
+    }
+    if (event.kind === 'candidate.validated') {
+      const proof = event.payload
+      if (!proof || typeof proof !== 'object' || Array.isArray(proof)) {
+        return { status: 'rejected', issue: 'ledger-restore-ai-candidate-invalid' }
+      }
+      const metadata = proof as Record<string, JsonValue>
+      const fact = events.find(candidate => candidate.source === 'ai-candidate'
+        && candidate.validationRef === event.id && candidate.candidateRef === metadata.candidate)
+      if (!fact || typeof metadata.targetKind !== 'string' || typeof metadata.registryVersion !== 'string'
+        || typeof metadata.payloadDigest !== 'string' || typeof metadata.validatedBy !== 'string') {
+        return { status: 'rejected', issue: 'ledger-restore-ai-candidate-invalid' }
+      }
+      const appended = await appendCandidateValidationReceipt(ledger, registry, {
+        candidateId: String(metadata.candidate),
+        targetKind: metadata.targetKind,
+        candidatePayload: fact.payload,
+        payloadDigest: metadata.payloadDigest,
+        registryVersion: metadata.registryVersion,
+        validatedBy: metadata.validatedBy,
+      }, event.requestWorldTime, event.committedAt)
+      if (appended.status !== 'appended' || canonicalJson(appended.event) !== canonicalJson(event)) {
+        return { status: 'rejected', issue: 'ledger-restore-ai-candidate-invalid' }
+      }
+      ledger = appended.ledger as EventLedger<Kind>
+      continue
+    }
+    if (event.source === 'ai-candidate') {
+      const input: Omit<LedgerEventInput, 'source'> & { readonly source: 'ai-candidate' } = {
+        source: 'ai-candidate',
+        kind: event.kind,
+        intentKind: event.intentKind,
+        actor: event.actor,
+        requestWorldTime: event.requestWorldTime,
+        clientRequestId: event.clientRequestId,
+        payload: event.payload,
+        candidateRef: event.candidateRef!,
+        validationRef: event.validationRef!,
+      }
+      const appended = await appendAiCandidateFact(ledger, registry, input, event.committedAt)
+      if (appended.status !== 'appended' || canonicalJson(appended.event) !== canonicalJson(event)) {
+        return { status: 'rejected', issue: 'ledger-restore-ai-candidate-invalid' }
+      }
+      ledger = appended.ledger as EventLedger<Kind>
+      continue
+    }
+    const input: LedgerEventInput<Kind> = {
+      source: event.source,
+      kind: event.kind,
+      intentKind: event.intentKind,
+      actor: event.actor,
+      requestWorldTime: event.requestWorldTime,
+      clientRequestId: event.clientRequestId,
+      payload: event.payload,
+    }
+    const appended = appendLedgerEventCore(ledger, input, event.committedAt)
+    if (appended.status !== 'appended' || canonicalJson(appended.event) !== canonicalJson(event)) {
+      return {
+        status: 'rejected',
+        issue: appended.status === 'idempotency-conflict' || appended.status === 'duplicate'
+          ? 'ledger-restore-idempotency-conflict'
+          : 'ledger-restore-event-invalid',
+      }
+    }
+    ledger = appended.ledger
+  }
+  return { status: 'restored', ledger }
+}
