@@ -112,7 +112,7 @@ function GameApp({ game }: { game: ReturnType<typeof useGuanyuanGame> }) {
   const reviewOriginScroll = useRef<Partial<Record<ReviewOrigin, number>>>({})
   const [prologueDone, setPrologueDone] = useState(() => Boolean(state.goalId))
   // A verified restore resumes the existing life; never leave the first-life prologue over it.
-  useEffect(() => { if (game.restored) setPrologueDone(true) }, [game.restored])
+  useEffect(() => { if (game.resumed) setPrologueDone(true) }, [game.resumed])
   const [activeSection, setActiveSection] = useState<SectionId>('today')
   const [scene, setScene] = useState<SceneId>('county')
   const [sceneDirection, setSceneDirection] = useState(1)
