@@ -50,14 +50,16 @@ async function main(): Promise<void> {
   check('fixture extended by an incremental package', incremented.status === 'saved' && incremented.packageKind === 'incremental')
 
 
+  const otherWorld = createPreviewRuntimeSession('w5-d3-other-world')
+  const storedIncrement = incremented.status === 'saved' ? incremented.stored : null
   const schemaRepository = new MemorySaveRepository()
-  schemaRepository.current = Object.freeze({
-    ...incremented.status === 'saved' ? incremented.stored : null!,
+  schemaRepository.current = storedIncrement ? Object.freeze({
+    ...storedIncrement,
     packageChain: Object.freeze({
       ...(incremented.status === 'saved' ? incremented.stored.packageChain : null!),
       schemaVersion: 999,
     }) as StoredWorldSave['packageChain'],
-  })
+  }) : null
   const schemaMismatch = await restorePreviewRuntimeSession(original.worldId, schemaRepository)
   check('unknown save schema is rejected before replay', schemaMismatch.status === 'rejected'
     && schemaMismatch.issue === 'runtime-restore-schema-mismatch')
@@ -127,7 +129,6 @@ async function main(): Promise<void> {
     && storageFailure.issue === 'save-repository-storage-error')
 
   repository.loadIssue = null
-  const otherWorld = createPreviewRuntimeSession('w5-d3-other-world')
   const validStored = incremented.status === 'saved' ? incremented.stored : null
   const mismatchRepository = new MemorySaveRepository()
   mismatchRepository.loadWorld = async () => ({
