@@ -121,6 +121,39 @@ export async function runIndexedDbSaveRepositoryContractTests(): Promise<readonl
   check('world deletion is guarded by the expected head', deleted.status === 'success' && deleted.value)
   const afterDelete = await repository.loadWorld(worldId)
   check('deletion removes the world and its package chain', afterDelete.status === 'success' && afterDelete.value === null)
+
+  const importRepository = new IndexedDbSaveRepository(globalThis.indexedDB, `${databaseName}-import`)
+  const imported = await importRepository.importWorld({
+    worldId, packageChain: incremental, streamHead: head1, savedAt: '2026-11-16T00:03:00.000Z',
+  })
+  check('foreign Full-to-Incremental chain imports into an empty repository', imported.status === 'success')
+  const importedLoad = await importRepository.loadWorld(worldId)
+  check('imported chain hydrates with its complete base ancestry', importedLoad.status === 'success'
+    && importedLoad.value?.packageChain.packageKind === 'incremental'
+    && importedLoad.value.packageChain.basePackage.packageKind === 'full'
+    && importedLoad.value.streamHead.seq === 1)
+  const importedList = await importRepository.listWorlds()
+  check('imported world appears in local world index', importedList.status === 'success'
+    && importedList.value.some(item => item.worldId === worldId && item.streamHead.seq === 1))
+  const duplicateImport = await importRepository.importWorld({
+    worldId, packageChain: full, streamHead: genesis, savedAt: '2026-11-16T00:04:00.000Z',
+  })
+  check('existing WorldId is rejected without overwriting imported chain', duplicateImport.status === 'rejected'
+    && duplicateImport.issue === 'save-repository-world-exists')
+  const stillImported = await importRepository.loadWorld(worldId)
+  check('duplicate import preserves original imported head', stillImported.status === 'success'
+    && stillImported.value?.streamHead.seq === 1)
+
+  const concurrentRepository = new IndexedDbSaveRepository(globalThis.indexedDB, `${databaseName}-concurrent`)
+  const concurrent = await Promise.all([1, 2].map(() => concurrentRepository.importWorld({
+    worldId, packageChain: incremental, streamHead: head1, savedAt: '2026-11-16T00:05:00.000Z',
+  })))
+  check('concurrent same-WorldId imports allow exactly one winner', concurrent.filter(result => result.status === 'success').length === 1
+    && concurrent.filter(result => result.status === 'rejected' && result.issue === 'save-repository-world-exists').length === 1)
+  await importRepository.deleteWorld(worldId, head1)
+  await concurrentRepository.deleteWorld(worldId, head1)
+  importRepository.close()
+  concurrentRepository.close()
   repository.close()
   unavailable.close()
   return Object.freeze(passed)
