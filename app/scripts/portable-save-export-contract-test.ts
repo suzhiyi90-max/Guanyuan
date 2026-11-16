@@ -74,6 +74,16 @@ async function main(): Promise<void> {
       && session0.state === initialState && importedRepo.current?.worldId === session0.worldId)
     const duplicate = await importPortableSaveBytes(bytes, importedRepo)
     check('portable import refuses an existing WorldId', duplicate.status === 'rejected' && duplicate.issue === 'world-exists')
+    const malformedShape = {
+      ...fullExport.envelope,
+      packageChain: { ...fullExport.envelope.packageChain, snapshot: undefined },
+    }
+    const malformedResult = await importPortableSaveBytes(
+      new TextEncoder().encode(JSON.stringify(malformedShape)),
+      new MemorySaveRepository(),
+    )
+    check('malformed package shape is rejected without throwing', malformedResult.status === 'rejected'
+      && malformedResult.issue === 'world-mismatch')
   } else {
     check('verified Full-only portable envelope imports through domain replay', false)
     check('portable import adds a local archive without changing active session', false)
