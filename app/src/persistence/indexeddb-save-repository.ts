@@ -66,24 +66,31 @@ function packageEnvelope(value: unknown, depth = 0): value is SavePackageChain {
     || typeof value.checksum !== 'string' || !/^sha256:[0-9a-f]{64}$/u.test(value.checksum)) return false
   if (value.packageKind === 'full') return value.streamRange.fromExclusive.kind === 'genesis'
     && value.basePackage === undefined
-  return packageEnvelope(value.basePackage, depth + 1)
-    && value.basePackage.worldId === value.worldId
-    && sameCursor(value.basePackage.snapshot.streamHead, value.streamRange.fromExclusive)
+  const basePackage = value.basePackage
+  if (!packageEnvelope(basePackage, depth + 1)) return false
+  return basePackage.worldId === value.worldId
+    && sameCursor(basePackage.snapshot.streamHead, value.streamRange.fromExclusive)
 }
 
 function rowForPackage(chain: SavePackageChain): PackageRow {
-  const { basePackage, ...body } = chain.packageKind === 'incremental'
-    ? chain as Extract<SavePackageChain, { packageKind: 'incremental' }>
-    : { ...chain, basePackage: undefined }
+  if (chain.packageKind === 'incremental') {
+    const { basePackage, ...body } = chain
+    return {
+      key: packageKey(chain.worldId, chain.checksum),
+      worldId: chain.worldId,
+      packageKind: chain.packageKind,
+      checksum: chain.checksum,
+      body: body as unknown as Record<string, unknown>,
+      basePackageKey: packageKey(basePackage.worldId, basePackage.checksum),
+    }
+  }
   return {
     key: packageKey(chain.worldId, chain.checksum),
     worldId: chain.worldId,
     packageKind: chain.packageKind,
     checksum: chain.checksum,
-    body: body as unknown as Record<string, unknown>,
-    basePackageKey: chain.packageKind === 'incremental'
-      ? packageKey(basePackage.worldId, basePackage.checksum)
-      : null,
+    body: chain as unknown as Record<string, unknown>,
+    basePackageKey: null,
   }
 }
 
@@ -128,7 +135,7 @@ export class IndexedDbSaveRepository implements SaveRepository {
   private open(): Promise<IDBDatabase> {
     if (!this.factory) return Promise.reject(new Error('indexeddb-unavailable'))
     if (this.database) return this.database
-    this.database = new Promise((resolve, reject) => {
+    const opening = new Promise<IDBDatabase>((resolve, reject) => {
       const request = this.factory!.open(this.databaseName, DATABASE_VERSION)
       request.onupgradeneeded = () => {
         const db = request.result
@@ -152,7 +159,8 @@ export class IndexedDbSaveRepository implements SaveRepository {
       this.database = null
       throw error
     })
-    return this.database
+    this.database = opening
+    return opening
   }
 
   private async hydratePackage(db: IDBDatabase, key: string, worldId: string, seen = new Set<string>()): Promise<SavePackageChain | null> {
