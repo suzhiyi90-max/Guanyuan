@@ -48,6 +48,48 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
 
+function isJsonSafe(value: unknown): boolean {
+  const ancestors = new WeakSet<object>()
+  const stack: Array<{ value: unknown; depth: number; exit?: boolean }> = [{ value, depth: 0 }]
+  let visited = 0
+  while (stack.length > 0) {
+    const item = stack.pop()!
+    if (item.exit) {
+      ancestors.delete(item.value as object)
+      continue
+    }
+    const current = item.value
+    if (current === null || typeof current === 'string' || typeof current === 'boolean') continue
+    if (typeof current === 'number') {
+      if (!Number.isFinite(current)) return false
+      continue
+    }
+    if (typeof current !== 'object' || item.depth > 256 || ancestors.has(current)) return false
+    visited += 1
+    if (visited > 1_000_000) return false
+    ancestors.add(current)
+    stack.push({ value: current, depth: item.depth, exit: true })
+    if (Array.isArray(current)) {
+      if (Object.getPrototypeOf(current) !== Array.prototype
+        || Reflect.ownKeys(current).some(key => key !== 'length' && (typeof key !== 'string' || !/^(0|[1-9][0-9]*)$/u.test(key)))) return false
+      for (let index = 0; index < current.length; index += 1) {
+        if (!Object.hasOwn(current, index)) return false
+        stack.push({ value: current[index], depth: item.depth + 1 })
+      }
+      continue
+    }
+    const prototype = Object.getPrototypeOf(current)
+    if (prototype !== Object.prototype && prototype !== null) return false
+    for (const key of Reflect.ownKeys(current)) {
+      if (typeof key !== 'string' || key === '__proto__') return false
+      const descriptor = Object.getOwnPropertyDescriptor(current, key)
+      if (!descriptor || !descriptor.enumerable || !Object.hasOwn(descriptor, 'value')) return false
+      stack.push({ value: descriptor.value, depth: item.depth + 1 })
+    }
+  }
+  return true
+}
+
 function isCursor(value: unknown): value is StreamCursor {
   if (!isRecord(value)) return false
   if (value.kind === 'genesis') return value.seq === 0 && Object.keys(value).every(key => key === 'kind' || key === 'seq')
@@ -275,7 +317,7 @@ export class IndexedDbSaveRepository implements SaveRepository {
    * is the concurrency authority and any failure rolls the complete write back.
    */
   async importWorld(input: ImportWorldSaveInput): Promise<SaveRepositoryResult<StoredWorldSave>> {
-    if (!Number.isFinite(Date.parse(input.savedAt))) {
+    if (!isJsonSafe(input.packageChain) || !Number.isFinite(Date.parse(input.savedAt))) {
       return { status: 'rejected', issue: 'save-repository-package-invalid' }
     }
 
@@ -333,11 +375,18 @@ export class IndexedDbSaveRepository implements SaveRepository {
         packageKind: input.packageChain.packageKind,
         checksum: input.packageChain.checksum,
       }
-      const worldRequest = worlds.add(worldRow)
-      worldRequest.onerror = () => { worldConflict = true }
-      for (const row of rows) {
-        const request = packages.add(row)
-        request.onerror = () => { packageConflict = true }
+      try {
+        const worldRequest = worlds.add(worldRow)
+        worldRequest.onerror = () => { worldConflict = true }
+        for (const row of rows) {
+          const request = packages.add(row)
+          request.onerror = () => { packageConflict = true }
+        }
+      } catch (error) {
+        // Synchronous structured-clone / request-construction failures must
+        // abort the already-queued world pointer as well.
+        try { tx.abort() } catch { /* transaction may already be inactive */ }
+        throw error
       }
       await done
       return { status: 'success', value: Object.freeze({
