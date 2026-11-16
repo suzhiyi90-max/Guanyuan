@@ -788,6 +788,17 @@ try {
   await click('.goal-seal')
   await page.waitForSelector('.save-folio-head', { timeout: 8000 })
   await click('.save-folio-head')
+  await page.waitForSelector('.save-folio-library', { state: 'visible', timeout: 8000 })
+  await page.waitForFunction(() => document.querySelector('.save-folio-world-list .save-folio-world') !== null, null, { timeout: 10000 })
+  check('本机档案目录列出当前人生及事件流摘要', (await page.locator('.save-folio-world').count()) >= 1
+    && (await page.locator('.save-folio-world').first().innerText()).includes('条事件'))
+  await click('.save-folio-world .save-folio-act:has-text("选择并恢复")')
+  await page.waitForSelector('.scene-panel', { timeout: 15000 })
+  await settle(500)
+  check('从本机档案目录手动选择后经完整恢复流程接续当前人生', (await page.locator('.date-block span').innerText()) === dayBeforeRestore)
+  await click('.goal-seal')
+  await page.waitForSelector('.save-folio-head', { timeout: 8000 })
+  await click('.save-folio-head')
   await page.waitForSelector('.save-folio-act:has-text("导出便携存档")', { state: 'visible', timeout: 8000 })
   const [portableDownload] = await Promise.all([
     page.waitForEvent('download'),
