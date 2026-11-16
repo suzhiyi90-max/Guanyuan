@@ -20,7 +20,7 @@ import { restorePreviewRuntimeSession, restoreSingleSavedRuntimeWorld } from '..
 import { savePreviewRuntimeSession } from '../persistence/runtime-save-orchestrator'
 import type { SaveRepository } from '../persistence/save-repository'
 import type { WorldId } from '../domain/event-ledger'
-import type { RuntimeStartupView } from '../components/RuntimeStartupGate'
+import type { RuntimeStartupView } from '../persistence/runtime-startup-types'
 import type { GeneratedEvent } from '../narrative/types'
 
 export { periods, goalReckoningOf, verdictOf, officialAvailableOf }
