@@ -798,7 +798,7 @@ try {
   check('便携导出下载的是正式 envelope 而非 React projection', portableEnvelope?.format === 'guanyuan.portable-save'
     && portableEnvelope?.formatVersion === 1 && typeof portableEnvelope?.envelopeChecksum === 'string'
     && portableEnvelope?.packageChain?.snapshot?.streamHead?.seq === portableEnvelope?.streamHead?.seq)
-  check('便携导出文件名含 WorldId 安全标识', /观远-便携存档-.*-[a-zA-Z0-9-]+\\.json$/u.test(portableDownload.suggestedFilename()))
+  check('便携导出文件名含 WorldId 安全标识', /观远-便携存档-.*-[a-zA-Z0-9-]+\.json$/u.test(portableDownload.suggestedFilename()))
   await nav('事务')
   await settle(450)
   check('刷新恢复后事件投影仍在且可继续查阅', (await page.locator('.task-outcome').count()) === 1)
