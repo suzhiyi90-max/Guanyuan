@@ -35,7 +35,11 @@ on:
       - work/w5-d2-runtime-save-package-orchestration
       - work/w5-d3-runtime-startup-restore
       - work/w5-d3b-app-startup-lifecycle
+      - work/w5-e2-portable-save-import-contract
+      - work/w5-e2a-portable-import-core
       - work/w5-e1-portable-save-export
+      - work/w5-e2-portable-save-import-contract
+      - work/w5-e2a-portable-import-core
   pull_request:
     branches:
       - feat/g1-engine
@@ -198,6 +202,8 @@ jobs:
         run: npm run test:domain:runtime-restore-orchestrator
       - name: Verified portable save export contracts
         run: npm run test:domain:portable-save-export
+      - name: Strict JSON import parser contracts
+        run: npm run test:domain:strict-json
       - name: Review index integrity
         run: npm run check:docs
       - name: Patch whitespace integrity

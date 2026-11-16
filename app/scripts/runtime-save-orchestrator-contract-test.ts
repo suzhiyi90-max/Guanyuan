@@ -70,6 +70,22 @@ class MemorySaveRepository implements SaveRepository {
     return { status: 'success', value: this.current }
   }
 
+  async importWorld(input: {
+    readonly worldId: WorldId
+    readonly packageChain: StoredWorldSave['packageChain']
+    readonly streamHead: StreamCursor
+    readonly savedAt: string
+  }): Promise<SaveRepositoryResult<StoredWorldSave>> {
+    if (this.current) return { status: 'rejected', issue: 'save-repository-world-exists' }
+    this.current = Object.freeze({
+      worldId: input.worldId,
+      packageChain: input.packageChain,
+      streamHead: input.streamHead,
+      savedAt: input.savedAt,
+    })
+    return { status: 'success', value: this.current }
+  }
+
   async listWorlds(): Promise<SaveRepositoryResult<readonly SaveWorldSummary[]>> {
     return { status: 'success', value: [] }
   }

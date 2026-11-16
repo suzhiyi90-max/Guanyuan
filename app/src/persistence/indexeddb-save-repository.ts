@@ -3,6 +3,7 @@ import type { WorldId } from '../domain/event-ledger'
 import type { StreamCursor } from '../domain/event-replay'
 import type {
   CommitWorldSaveInput,
+  ImportWorldSaveInput,
   SaveRepository,
   SaveRepositoryIssue,
   SaveRepositoryResult,
@@ -45,6 +46,48 @@ function packageKey(worldId: string, checksum: string): string {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function isJsonSafe(value: unknown): boolean {
+  const ancestors = new WeakSet<object>()
+  const stack: Array<{ value: unknown; depth: number; exit?: boolean }> = [{ value, depth: 0 }]
+  let visited = 0
+  while (stack.length > 0) {
+    const item = stack.pop()!
+    if (item.exit) {
+      ancestors.delete(item.value as object)
+      continue
+    }
+    const current = item.value
+    if (current === null || typeof current === 'string' || typeof current === 'boolean') continue
+    if (typeof current === 'number') {
+      if (!Number.isFinite(current)) return false
+      continue
+    }
+    if (typeof current !== 'object' || item.depth > 256 || ancestors.has(current)) return false
+    visited += 1
+    if (visited > 1_000_000) return false
+    ancestors.add(current)
+    stack.push({ value: current, depth: item.depth, exit: true })
+    if (Array.isArray(current)) {
+      if (Object.getPrototypeOf(current) !== Array.prototype
+        || Reflect.ownKeys(current).some(key => key !== 'length' && (typeof key !== 'string' || !/^(0|[1-9][0-9]*)$/u.test(key)))) return false
+      for (let index = 0; index < current.length; index += 1) {
+        if (!Object.hasOwn(current, index)) return false
+        stack.push({ value: current[index], depth: item.depth + 1 })
+      }
+      continue
+    }
+    const prototype = Object.getPrototypeOf(current)
+    if (prototype !== Object.prototype && prototype !== null) return false
+    for (const key of Reflect.ownKeys(current)) {
+      if (typeof key !== 'string' || key === '__proto__') return false
+      const descriptor = Object.getOwnPropertyDescriptor(current, key)
+      if (!descriptor || !descriptor.enumerable || !Object.hasOwn(descriptor, 'value')) return false
+      stack.push({ value: descriptor.value, depth: item.depth + 1 })
+    }
+  }
+  return true
 }
 
 function isCursor(value: unknown): value is StreamCursor {
@@ -264,6 +307,97 @@ export class IndexedDbSaveRepository implements SaveRepository {
         savedAt: worldRow.savedAt,
       }) }
     } catch (error) {
+      return { status: 'rejected', issue: issueFrom(error) }
+    }
+  }
+
+  /**
+   * Imports a fully verified foreign chain into an empty WorldId. All rows are
+   * queued synchronously in one readwrite transaction; the world primary key
+   * is the concurrency authority and any failure rolls the complete write back.
+   */
+  async importWorld(input: ImportWorldSaveInput): Promise<SaveRepositoryResult<StoredWorldSave>> {
+    if (!isJsonSafe(input.packageChain) || !Number.isFinite(Date.parse(input.savedAt))) {
+      return { status: 'rejected', issue: 'save-repository-package-invalid' }
+    }
+
+    const newestFirst: SavePackageChain[] = []
+    const seenKeys = new Set<string>()
+    let candidate: unknown = input.packageChain
+    while (candidate && typeof candidate === 'object' && !Array.isArray(candidate)) {
+      const value = candidate as Record<string, unknown>
+      if (newestFirst.length >= MAX_CHAIN_DEPTH || value.worldId !== input.worldId
+        || typeof value.checksum !== 'string' || !/^sha256:[0-9a-f]{64}$/u.test(value.checksum)) {
+        return { status: 'rejected', issue: 'save-repository-package-invalid' }
+      }
+      const key = packageKey(input.worldId, value.checksum)
+      if (seenKeys.has(key)) return { status: 'rejected', issue: 'save-repository-package-invalid' }
+      seenKeys.add(key)
+      if (value.packageKind !== 'full' && value.packageKind !== 'incremental') {
+        return { status: 'rejected', issue: 'save-repository-package-invalid' }
+      }
+      newestFirst.push(candidate as SavePackageChain)
+      if (value.packageKind === 'full') break
+      candidate = value.basePackage
+    }
+    if (newestFirst.length === 0 || newestFirst[newestFirst.length - 1].packageKind !== 'full'
+      || !packageEnvelope(input.packageChain) || input.packageChain.worldId !== input.worldId
+      || !sameCursor(input.packageChain.snapshot.streamHead, input.streamHead)
+      || !sameCursor(input.packageChain.streamRange.toInclusive, input.streamHead)) {
+      return { status: 'rejected', issue: 'save-repository-package-invalid' }
+    }
+    const rootFirst = newestFirst.reverse()
+    const rows = rootFirst.map(rowForPackage)
+    for (let index = 0; index < rows.length; index += 1) {
+      const expectedBase = index === 0 ? null : rows[index - 1].key
+      if (rows[index].basePackageKey !== expectedBase) {
+        return { status: 'rejected', issue: 'save-repository-package-invalid' }
+      }
+    }
+
+    let db: IDBDatabase
+    try { db = await this.open() } catch {
+      return { status: 'rejected', issue: 'save-repository-unavailable' }
+    }
+
+    let worldConflict = false
+    let packageConflict = false
+    try {
+      const tx = db.transaction([WORLD_STORE, PACKAGE_STORE], 'readwrite')
+      const done = transactionDone(tx)
+      const worlds = tx.objectStore(WORLD_STORE)
+      const packages = tx.objectStore(PACKAGE_STORE)
+      const worldRow: WorldRow = {
+        worldId: input.worldId,
+        latestPackageKey: rows[rows.length - 1].key,
+        streamHead: input.streamHead,
+        savedAt: input.savedAt,
+        packageKind: input.packageChain.packageKind,
+        checksum: input.packageChain.checksum,
+      }
+      try {
+        const worldRequest = worlds.add(worldRow)
+        worldRequest.onerror = () => { worldConflict = true }
+        for (const row of rows) {
+          const request = packages.add(row)
+          request.onerror = () => { packageConflict = true }
+        }
+      } catch (error) {
+        // Synchronous structured-clone / request-construction failures must
+        // abort the already-queued world pointer as well.
+        try { tx.abort() } catch { /* transaction may already be inactive */ }
+        throw error
+      }
+      await done
+      return { status: 'success', value: Object.freeze({
+        worldId: input.worldId,
+        packageChain: input.packageChain,
+        streamHead: input.streamHead,
+        savedAt: input.savedAt,
+      }) }
+    } catch (error) {
+      if (worldConflict) return { status: 'rejected', issue: 'save-repository-world-exists' }
+      if (packageConflict) return { status: 'rejected', issue: 'save-repository-storage-conflict' }
       return { status: 'rejected', issue: issueFrom(error) }
     }
   }

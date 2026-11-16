@@ -6,6 +6,7 @@ import type {
 import { createPreviewRuntimeSession, dispatchPreviewRuntimeIntent } from '../src/game/runtime-orchestrator'
 import { savePreviewRuntimeSession } from '../src/persistence/runtime-save-orchestrator'
 import { exportPortableSave, validatePortableSaveEnvelope } from '../src/persistence/portable-save-export'
+import { importPortableSaveBytes } from '../src/persistence/portable-save-import'
 
 let passed = 0
 let failed = 0
@@ -26,6 +27,11 @@ class MemorySaveRepository implements SaveRepository {
   async commitWorld(input: { worldId: WorldId; packageChain: StoredWorldSave['packageChain']; expectedHead: StreamCursor | null; savedAt: string }): Promise<SaveRepositoryResult<StoredWorldSave>> {
     if (!sameCursor(this.current?.streamHead ?? null, input.expectedHead)) return { status: 'rejected', issue: 'save-repository-head-conflict' }
     this.current = Object.freeze({ worldId: input.worldId, packageChain: input.packageChain, streamHead: input.packageChain.snapshot.streamHead, savedAt: input.savedAt })
+    return { status: 'success', value: this.current }
+  }
+  async importWorld(input: { worldId: WorldId; packageChain: StoredWorldSave['packageChain']; streamHead: StreamCursor; savedAt: string }): Promise<SaveRepositoryResult<StoredWorldSave>> {
+    if (this.current) return { status: 'rejected', issue: 'save-repository-world-exists' }
+    this.current = Object.freeze({ worldId: input.worldId, packageChain: input.packageChain, streamHead: input.streamHead, savedAt: input.savedAt })
     return { status: 'success', value: this.current }
   }
   async listWorlds(): Promise<SaveRepositoryResult<readonly SaveWorldSummary[]>> { return { status: 'success', value: [] } }
@@ -58,6 +64,31 @@ async function main(): Promise<void> {
   } else check('envelope field tampering fails checksum validation', false)
   check('export is read-only for Full-only repository', repo.current === fullBefore
     && session0.ledger === initialLedger && session0.state === initialState)
+  if (fullExport.status === 'exported') {
+    const importedRepo = new MemorySaveRepository()
+    const bytes = new TextEncoder().encode(JSON.stringify(fullExport.envelope))
+    const imported = await importPortableSaveBytes(bytes, importedRepo, { now: () => '2026-11-16T08:03:00.000Z' })
+    check('verified Full-only portable envelope imports through domain replay', imported.status === 'imported'
+      && imported.value.packageChain.packageKind === 'full')
+    check('portable import adds a local archive without changing active session', session0.ledger === initialLedger
+      && session0.state === initialState && importedRepo.current?.worldId === session0.worldId)
+    const duplicate = await importPortableSaveBytes(bytes, importedRepo)
+    check('portable import refuses an existing WorldId', duplicate.status === 'rejected' && duplicate.issue === 'world-exists')
+    const malformedShape = {
+      ...fullExport.envelope,
+      packageChain: { ...fullExport.envelope.packageChain, snapshot: undefined },
+    }
+    const malformedResult = await importPortableSaveBytes(
+      new TextEncoder().encode(JSON.stringify(malformedShape)),
+      new MemorySaveRepository(),
+    )
+    check('malformed package shape is rejected without throwing', malformedResult.status === 'rejected'
+      && malformedResult.issue === 'world-mismatch')
+  } else {
+    check('verified Full-only portable envelope imports through domain replay', false)
+    check('portable import adds a local archive without changing active session', false)
+    check('portable import refuses an existing WorldId', false)
+  }
 
   const session1 = appendGoal(session0, 'river-repair')
   await savePreviewRuntimeSession(session1, repo)
