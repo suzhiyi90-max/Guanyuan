@@ -18,6 +18,7 @@ import { createInitialGameState } from './initial-state'
 import { createIndexedDbSaveRepository } from '../persistence/indexeddb-save-repository'
 import { restorePreviewRuntimeSession, restoreSingleSavedRuntimeWorld } from '../persistence/runtime-restore-orchestrator'
 import { savePreviewRuntimeSession } from '../persistence/runtime-save-orchestrator'
+import { exportPortableSave, type PortableSaveExportResult } from '../persistence/portable-save-export'
 import type { SaveRepository } from '../persistence/save-repository'
 import type { WorldId } from '../domain/event-ledger'
 import type { RuntimeStartupView } from '../persistence/runtime-startup-types'
@@ -164,6 +165,15 @@ export function useGuanyuanGame() {
   }, [retryNonce])
 
   const retryStartup = useCallback(() => setRetryNonce(value => value + 1), [])
+
+  const exportPortableSavePackage = useCallback(async (): Promise<PortableSaveExportResult> => {
+    const session = runtimeRef.current
+    const repository = repositoryRef.current
+    if (!session || !repository) return { status: 'rejected', issue: 'not-saved-yet' }
+    return exportPortableSave(session, repository, {
+      pending: (pendingSaveCountsRef.current.get(String(session.worldId)) ?? 0) > 0,
+    })
+  }, [])
 
   const chooseSavedWorld = useCallback(async (worldId: string) => {
     const repository = repositoryRef.current
