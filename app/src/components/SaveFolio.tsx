@@ -7,6 +7,7 @@ import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { ChevronDown, Download, RotateCcw, ShieldAlert, Upload, X } from 'lucide-react'
 import type { PortableSaveImportResult, PortableSavePrepareResult } from '../persistence/portable-save-import'
+import { PORTABLE_SAVE_MAX_BYTES } from '../persistence/strict-json'
 
 export interface SaveSummary {
   day: number
@@ -86,12 +87,19 @@ export function SaveFolio({ summary, onExport, onReset, onPrepareImport, onCommi
     setImportPreview(null)
     setImportError(null)
     setImportStatus('checking')
-    if (file.size > 128 * 1024 * 1024) {
+    if (file.size > PORTABLE_SAVE_MAX_BYTES) {
       setImportStatus('error')
       setImportError('文件超过 128 MiB 上限。')
       return
     }
-    const result = await onPrepareImport?.(file)
+    let result: PortableSavePrepareResult | undefined
+    try {
+      result = await onPrepareImport?.(file)
+    } catch {
+      setImportStatus('error')
+      setImportError('文件预检意外中断；未写入档案，请重新选择。')
+      return
+    }
     if (!result) {
       setImportStatus('error')
       setImportError('导入服务尚未就绪。')
@@ -108,7 +116,14 @@ export function SaveFolio({ summary, onExport, onReset, onPrepareImport, onCommi
     if (!importFile || !importPreview || !onCommitImport) return
     setImportStatus('committing')
     setImportError(null)
-    const result = await onCommitImport(importFile)
+    let result: PortableSaveImportResult
+    try {
+      result = await onCommitImport(importFile)
+    } catch {
+      setImportStatus('error')
+      setImportError('导入提交意外中断；请检查本机档案后再重试。')
+      return
+    }
     if (result.status === 'imported') {
       setImportStatus('success')
       setImportError('导入成功：档案已加入本机存档列表；当前人生未切换。')
@@ -234,7 +249,7 @@ export function SaveFolio({ summary, onExport, onReset, onPrepareImport, onCommi
                 </section>
               )}
 
-                            <p className={`save-folio-note ${armed ? 'is-armed' : ''}`} id={`${panelId}-note`}>
+              <p className={`save-folio-note ${armed ? 'is-armed' : ''}`} id={`${panelId}-note`}>
                 {armed
                   ? '重立志会创建新世界；已有本机存档保留，不自动删除。'
                   : '当前世界自动保存于本机；便携存档包含完整校验链，可供后续独立导入流程使用。'}
