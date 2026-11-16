@@ -25,6 +25,12 @@ const click = async selector => {
 }
 const nav = async label => click(`.main-nav button:has-text("${label}")`)
 const settle = (ms = 450) => page.waitForTimeout(ms)
+const clearRuntimeSaves = async () => page.evaluate(() => new Promise(resolve => {
+  const request = indexedDB.deleteDatabase('guanyuan-world-saves')
+  request.onsuccess = () => resolve(true)
+  request.onerror = () => resolve(false)
+  request.onblocked = () => resolve(false)
+}))
 const dialogState = selector => page.evaluate(target => {
   const dialog = document.querySelector(target)
   const labelId = dialog?.getAttribute('aria-labelledby')
@@ -758,6 +764,31 @@ try {
   await settle(500)
   check('同一事件流投影保留结果', (await page.locator('.task-outcome').count()) === 1)
 
+  // W5-D3-B：验证自动续存确实能在刷新后恢复，而不是只在内存中保留。
+  const dayBeforeRestore = await page.locator('.date-block span').innerText()
+  await click('.goal-seal')
+  await page.waitForSelector('.save-folio-title small', { timeout: 8000 })
+  await page.waitForFunction(() => document.querySelector('.save-folio-title small')?.textContent?.includes('本机存档 · 可继续接续') ?? false, null, { timeout: 10000 })
+  await page.waitForFunction(async () => new Promise(resolve => {
+    const request = indexedDB.open('guanyuan-world-saves', 1)
+    request.onerror = () => resolve(false)
+    request.onsuccess = () => {
+      const db = request.result
+      if (!db.objectStoreNames.contains('worlds')) { db.close(); resolve(false); return }
+      const count = db.transaction('worlds', 'readonly').objectStore('worlds').count()
+      count.onsuccess = () => { const exists = count.result > 0; db.close(); resolve(exists) }
+      count.onerror = () => { db.close(); resolve(false) }
+    }
+  }), null, { timeout: 10000 })
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await page.waitForSelector('.scene-panel', { timeout: 10000 })
+  await settle(500)
+  check('刷新后自动恢复已保存的人生时段', (await page.locator('.date-block span').innerText()) === dayBeforeRestore)
+  check('恢复启动明确提示已接续本机案头', (await page.locator('.toast h3').count()) > 0 && (await page.locator('.toast h3').innerText()).includes('已接上上次'))
+  await nav('事务')
+  await settle(450)
+  check('刷新恢复后事件投影仍在且可继续查阅', (await page.locator('.task-outcome').count()) === 1)
+
   // 7.85 FE-020 东堤暴雨与洪峰只读投影
   await page.goto(smokeFixtureUrl('day8'), { waitUntil: 'domcontentloaded' })
   await settle(500)
@@ -968,6 +999,8 @@ try {
   check('390px 证据展开无横向滚动', !(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1)))
   // 9 路线 B 亲赴宴席 产生不同私囊与证据
   await page.setViewportSize({ width: 1440, height: 900 })
+  // 路线 B 是独立新局；删除本次 Smoke 产生的 IndexedDB 世界，避免自动恢复串入上一条路线。
+  check('路线 B 前清理独立测试存档', await clearRuntimeSaves())
   await page.goto(BASE, { waitUntil: 'domcontentloaded' })
   await page.evaluate(() => localStorage.clear())
   await page.reload({ waitUntil: 'domcontentloaded' })

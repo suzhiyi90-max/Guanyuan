@@ -28,6 +28,7 @@ import { FocusContext, type FocusTarget } from './focusContext'
 import { FocusBridge } from './components/FocusBridge'
 import { PaperTexture } from './components/PaperTexture'
 import { ReadPrefs } from './components/ReadPrefs'
+import { RuntimeStartupGate } from './components/RuntimeStartupGate'
 import { ReadingRibbon } from './components/ReadingRibbon'
 import { type RecentSpot } from './components/RecentlyRead'
 import { type ReadAcrossTarget } from './components/ReadAcross'
@@ -90,6 +91,13 @@ const sectionLabels: Record<SectionId, string> = { today: '今日案头', cases:
 
 export default function App() {
   const game = useGuanyuanGame()
+  if (game.startup.status !== 'ready') {
+    return <RuntimeStartupGate startup={game.startup} onSelect={game.chooseSavedWorld} onRetry={game.retryStartup} />
+  }
+  return <GameApp game={game} />
+}
+
+function GameApp({ game }: { game: ReturnType<typeof useGuanyuanGame> }) {
   const { state, toast, notify, dismissToast } = game
 
   // FE-080 跨屏跳转后留一枚「回 · 上一处」，只记表面与焦点，不改业务、不写存档。

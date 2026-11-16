@@ -6850,3 +6850,36 @@ button.archive-node:hover { border-color: var(--cinnabar); color: var(--cinnabar
 @media print {
   .person-archive, .archive-entry { display: none; }
 }
+
+
+/* W5-D3-B: no world UI is mounted until startup restore is resolved. */
+.runtime-startup { min-height: 100dvh; display: grid; place-items: center; overflow: auto; padding: 28px; color: var(--ink-1); background: radial-gradient(ellipse at 50% 38%, #f8f1e4 0, #e9e1d2 72%); }
+.runtime-startup-paper { width: min(680px, 100%); min-height: 360px; padding: clamp(28px, 6vw, 58px); position: relative; border: 1px solid #cdbfa8; background: linear-gradient(135deg, #fbf7ee, #f1e8d8); box-shadow: 0 22px 70px #30291e1c, inset 0 0 0 5px #ffffff70; }
+.runtime-startup-paper::before { content: ''; position: absolute; inset: 12px; border: 1px solid #d9cbb3; pointer-events: none; }
+.runtime-startup-mark { position: absolute; right: 42px; top: 34px; width: 48px; height: 48px; display: grid; place-items: center; border: 1px solid #a33a2b; color: var(--cinnabar); font: 600 19px var(--serif); transform: rotate(-4deg); }
+.runtime-startup-paper > .eyebrow { display: block; color: var(--ink-3); letter-spacing: .22em; font-size: 10px; }
+.runtime-startup-state { position: relative; z-index: 1; margin-top: 58px; }
+.runtime-startup-state > svg { color: var(--cinnabar); margin-bottom: 18px; }
+.runtime-startup-state h1 { font: 600 clamp(26px, 4vw, 36px)/1.35 var(--serif); letter-spacing: .08em; }
+.runtime-startup-state p { max-width: 490px; margin-top: 14px; color: var(--ink-2); font-size: 13px; line-height: 1.9; }
+.runtime-startup-spinner { animation: runtime-startup-spin 1.2s linear infinite; }
+@keyframes runtime-startup-spin { to { transform: rotate(360deg); } }
+.runtime-startup-worlds { display: grid; gap: 10px; margin-top: 26px; }
+.runtime-startup-world { display: flex; align-items: center; gap: 14px; width: 100%; min-height: 76px; padding: 12px 15px; border: 1px solid #d3c4ad; background: #fffaf1b8; text-align: left; transition: border-color .18s, background .18s, transform .18s; }
+.runtime-startup-world:hover:not(:disabled) { border-color: var(--cinnabar); background: #fffdf8; transform: translateY(-1px); }
+.runtime-startup-world:disabled { opacity: .72; }
+.runtime-startup-world-seal { width: 36px; height: 36px; display: grid; place-items: center; flex: 0 0 36px; color: var(--cinnabar); border: 1px solid #caa18e; }
+.runtime-startup-world-copy { display: grid; gap: 5px; min-width: 0; flex: 1; }
+.runtime-startup-world-copy b { font: 600 14px var(--serif); }
+.runtime-startup-world-copy small { color: var(--ink-3); font-size: 10px; }
+.runtime-startup-world-action { color: var(--cinnabar); white-space: nowrap; font-size: 11px; }
+.runtime-startup-retry { margin-top: 24px; min-width: 142px; padding: 11px 18px; border: 1px solid var(--cinnabar); background: var(--cinnabar); color: #fff8ed; font-size: 12px; letter-spacing: .12em; }
+.runtime-startup-paper footer { position: relative; z-index: 1; margin-top: 54px; padding-top: 14px; border-top: 1px solid #d9cbb3; color: var(--ink-3); font-size: 10px; letter-spacing: .08em; }
+@media (max-width: 560px) {
+  .runtime-startup { padding: 14px; }
+  .runtime-startup-paper { padding: 28px 22px; }
+  .runtime-startup-mark { top: 24px; right: 26px; width: 40px; height: 40px; font-size: 16px; }
+  .runtime-startup-state { margin-top: 48px; }
+  .runtime-startup-world { align-items: flex-start; flex-wrap: wrap; }
+  .runtime-startup-world-action { margin-left: 50px; }
+}
