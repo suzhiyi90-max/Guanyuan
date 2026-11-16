@@ -799,6 +799,19 @@ try {
     && portableEnvelope?.formatVersion === 1 && typeof portableEnvelope?.envelopeChecksum === 'string'
     && portableEnvelope?.packageChain?.snapshot?.streamHead?.seq === portableEnvelope?.streamHead?.seq)
   check('便携导出文件名含 WorldId 安全标识', /观远-便携存档-.*-[a-zA-Z0-9-]+\.json$/u.test(portableDownload.suggestedFilename()))
+  await page.locator('.save-folio-import input[type="file"]').setInputFiles(portablePath)
+  await page.waitForSelector('.save-folio-import-preview', { state: 'visible', timeout: 15000 })
+  check('便携导入文件预检展示摘要且明确尚未写入',
+    (await page.locator('.save-folio-import-preview').innerText()).includes('预检通过 · 尚未写入'))
+  await click('.save-folio-import-preview button:has-text("取消")')
+  check('取消预检后关闭摘要，不触发提交',
+    (await page.locator('.save-folio-import-preview').count()) === 0)
+  await page.locator('.save-folio-import input[type="file"]').setInputFiles(portablePath)
+  await page.waitForSelector('.save-folio-import-preview', { state: 'visible', timeout: 15000 })
+  await click('.save-folio-import-preview button:has-text("确认导入")')
+  await page.waitForSelector('.save-folio-import [role="alert"]', { state: 'visible', timeout: 15000 })
+  check('用户确认后才进入提交，重复 WorldId 被仓储层拒绝',
+    (await page.locator('.save-folio-import [role="alert"]').innerText()).includes('相同 WorldId'))
   // GoalPrologue is a blocking resume/goal sheet, not an Escape-dismissible modal.
   // Confirm the already-selected goal to close it before exercising underlying navigation.
   await page.waitForSelector('.prologue button:has-text("以此立志，进入第一日")', { state: 'visible', timeout: 8000 })

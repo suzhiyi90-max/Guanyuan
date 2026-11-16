@@ -1,4 +1,5 @@
 import type { JsonValue, WorldId } from '../domain/event-ledger'
+import type { StreamCursor } from '../domain/event-replay'
 import { validateSavePackageChain, type SavePackageChain } from '../domain/incremental-save-package'
 import type { SavePackageVerification } from '../domain/save-package'
 import { createInitialGameState } from '../game/initial-state'
@@ -30,6 +31,23 @@ export type PortableSaveImportIssue =
 export type PortableSaveImportResult =
   | { readonly status: 'imported'; readonly value: StoredWorldSave; readonly envelope: PortableSaveEnvelope }
   | { readonly status: 'rejected'; readonly issue: PortableSaveImportIssue }
+
+export interface PortableSavePreview {
+  readonly status: 'prepared'
+  readonly worldId: string
+  readonly exportedAt: string
+  readonly streamHead: StreamCursor
+  readonly chainNodeCount: number
+}
+
+export type PortableSavePrepareResult =
+  | PortableSavePreview
+  | { readonly status: 'rejected'; readonly issue: PortableSaveImportIssue }
+
+interface ValidatedPortableSave {
+  readonly envelope: PortableSaveEnvelope
+  readonly packageChain: SavePackageChain
+}
 
 function verificationFor(): SavePackageVerification<PreviewRuntimeEventKind> {
   return {
@@ -73,6 +91,16 @@ function countAndCheckChain(input: unknown, worldId: string): input is SavePacka
   return false
 }
 
+function countChainNodes(input: SavePackageChain): number {
+  let current: unknown = input
+  let count = 0
+  while (isRecord(current)) {
+    count += 1
+    current = current.packageKind === 'incremental' ? current.basePackage : null
+  }
+  return count
+}
+
 function mapRepositoryIssue(issue: SaveRepositoryIssue): PortableSaveImportIssue {
   switch (issue) {
     case 'save-repository-world-exists': return 'world-exists'
@@ -83,30 +111,23 @@ function mapRepositoryIssue(issue: SaveRepositoryIssue): PortableSaveImportIssue
   }
 }
 
-/**
- * Validates an untrusted portable file completely before making one atomic
- * repository call. It never receives or mutates the active runtime session.
- */
-export async function importPortableSaveBytes(
-  bytes: Uint8Array,
-  repository: SaveRepository,
-  options: { readonly now?: () => string } = {},
-): Promise<PortableSaveImportResult> {
+/** Strictly parses and replays an untrusted package without touching persistence. */
+async function validatePortableSaveBytes(bytes: Uint8Array): Promise<
+  | { readonly status: 'valid'; readonly value: ValidatedPortableSave }
+  | { readonly status: 'rejected'; readonly issue: PortableSaveImportIssue }
+> {
   let parsed: unknown
   try {
     parsed = parseStrictJsonBytes(bytes)
   } catch (error) {
     if (error instanceof StrictJsonParseError) {
-      return { status: 'rejected', issue: error.issue === 'file-too-large' ? 'file-too-large'
-        : error.issue === 'json-resource-limit' ? 'json-invalid' : 'json-invalid' }
+      return { status: 'rejected', issue: error.issue === 'file-too-large' ? 'file-too-large' : 'json-invalid' }
     }
     return { status: 'rejected', issue: 'json-invalid' }
   }
 
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    return { status: 'rejected', issue: 'envelope-invalid' }
-  }
-  const raw = parsed as Record<string, unknown>
+  if (!isRecord(parsed)) return { status: 'rejected', issue: 'envelope-invalid' }
+  const raw = parsed
   if (raw.format !== 'guanyuan.portable-save' || raw.formatVersion !== 1) {
     return { status: 'rejected', issue: 'format-unsupported' }
   }
@@ -126,7 +147,7 @@ export async function importPortableSaveBytes(
   const streamRange = chainRecord.streamRange
   if (!isRecord(snapshot) || !isRecord(streamRange)
     || !sameCursor(raw.streamHead, snapshot.streamHead)
-    || !sameCursor(raw.streamHead, (streamRange as Record<string, unknown>).toInclusive)) {
+    || !sameCursor(raw.streamHead, streamRange.toInclusive)) {
     return { status: 'rejected', issue: 'world-mismatch' }
   }
   if (!await validatePortableSaveEnvelope(raw)) {
@@ -152,32 +173,40 @@ export async function importPortableSaveBytes(
     || !sameCursor(raw.streamHead, validated.package.streamRange.toInclusive)) {
     return { status: 'rejected', issue: 'world-mismatch' }
   }
-
-  const savedAt = (options.now ?? (() => new Date().toISOString()))()
-  if (!Number.isFinite(Date.parse(savedAt))) return { status: 'rejected', issue: 'storage-error' }
-  let imported
-  try {
-    imported = await repository.importWorld({
-      worldId: raw.worldId as WorldId,
-      packageChain: validated.package,
-      streamHead: validated.package.snapshot.streamHead,
-      savedAt,
-    })
-  } catch {
-    return { status: 'rejected', issue: 'storage-error' }
-  }
-  if (imported.status === 'rejected') {
-    return { status: 'rejected', issue: mapRepositoryIssue(imported.issue) }
-  }
   return {
-    status: 'imported',
-    value: imported.value,
-    envelope: raw as unknown as PortableSaveEnvelope,
+    status: 'valid',
+    value: {
+      envelope: raw as unknown as PortableSaveEnvelope,
+      packageChain: validated.package,
+    },
+  }
+}
+
+/** Preview API: complete validation/replay, guaranteed no repository write. */
+export async function preparePortableSaveBytes(bytes: Uint8Array): Promise<PortableSavePrepareResult> {
+  const checked = await validatePortableSaveBytes(bytes)
+  if (checked.status === 'rejected') return checked
+  return {
+    status: 'prepared',
+    worldId: checked.value.envelope.worldId,
+    exportedAt: checked.value.envelope.exportedAt,
+    streamHead: checked.value.packageChain.snapshot.streamHead,
+    chainNodeCount: countChainNodes(checked.value.packageChain),
   }
 }
 
 /** File adapter checks File.size before reading any untrusted bytes. */
-export async function importPortableSaveFile(
+export async function preparePortableSaveFile(file: File): Promise<PortableSavePrepareResult> {
+  if (file.size > PORTABLE_SAVE_MAX_BYTES) return { status: 'rejected', issue: 'file-too-large' }
+  let bytes: ArrayBuffer
+  try { bytes = await file.arrayBuffer() } catch {
+    return { status: 'rejected', issue: 'file-read-failed' }
+  }
+  return preparePortableSaveBytes(new Uint8Array(bytes))
+}
+
+/** Commit API deliberately re-reads and re-validates the file after user confirmation. */
+export async function commitPortableSaveFile(
   file: File,
   repository: SaveRepository,
   options: { readonly now?: () => string } = {},
@@ -187,5 +216,59 @@ export async function importPortableSaveFile(
   try { bytes = await file.arrayBuffer() } catch {
     return { status: 'rejected', issue: 'file-read-failed' }
   }
-  return importPortableSaveBytes(new Uint8Array(bytes), repository, options)
+  const checked = await validatePortableSaveBytes(new Uint8Array(bytes))
+  if (checked.status === 'rejected') return checked
+  const savedAt = (options.now ?? (() => new Date().toISOString()))()
+  if (!Number.isFinite(Date.parse(savedAt))) return { status: 'rejected', issue: 'storage-error' }
+  let imported
+  try {
+    imported = await repository.importWorld({
+      worldId: checked.value.envelope.worldId as WorldId,
+      packageChain: checked.value.packageChain,
+      streamHead: checked.value.packageChain.snapshot.streamHead,
+      savedAt,
+    })
+  } catch {
+    return { status: 'rejected', issue: 'storage-error' }
+  }
+  if (imported.status === 'rejected') {
+    return { status: 'rejected', issue: mapRepositoryIssue(imported.issue) }
+  }
+  return { status: 'imported', value: imported.value, envelope: checked.value.envelope }
+}
+
+/** Backward-compatible one-step API for non-interactive callers and existing contracts. */
+export async function importPortableSaveBytes(
+  bytes: Uint8Array,
+  repository: SaveRepository,
+  options: { readonly now?: () => string } = {},
+): Promise<PortableSaveImportResult> {
+  const checked = await validatePortableSaveBytes(bytes)
+  if (checked.status === 'rejected') return checked
+  const savedAt = (options.now ?? (() => new Date().toISOString()))()
+  if (!Number.isFinite(Date.parse(savedAt))) return { status: 'rejected', issue: 'storage-error' }
+  let imported
+  try {
+    imported = await repository.importWorld({
+      worldId: checked.value.envelope.worldId as WorldId,
+      packageChain: checked.value.packageChain,
+      streamHead: checked.value.packageChain.snapshot.streamHead,
+      savedAt,
+    })
+  } catch {
+    return { status: 'rejected', issue: 'storage-error' }
+  }
+  if (imported.status === 'rejected') {
+    return { status: 'rejected', issue: mapRepositoryIssue(imported.issue) }
+  }
+  return { status: 'imported', value: imported.value, envelope: checked.value.envelope }
+}
+
+/** Legacy File adapter remains an explicit immediate-import operation. */
+export async function importPortableSaveFile(
+  file: File,
+  repository: SaveRepository,
+  options: { readonly now?: () => string } = {},
+): Promise<PortableSaveImportResult> {
+  return commitPortableSaveFile(file, repository, options)
 }

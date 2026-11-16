@@ -37,11 +37,14 @@ on:
       - work/w5-d3b-app-startup-lifecycle
       - work/w5-e2-portable-save-import-contract
       - work/w5-e2a-portable-import-core
+      - work/w5-e2b-portable-import-ui
       - work/w5-e1-portable-save-export
       - work/w5-e2-portable-save-import-contract
       - work/w5-e2a-portable-import-core
   pull_request:
     branches:
+      - work/w5-e2a-portable-import-core
+      - work/w5-e2b-portable-import-ui
       - feat/g1-engine
       - work/w1-a-person-core
       - work/w1-b-identity-office-auth
