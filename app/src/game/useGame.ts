@@ -104,7 +104,7 @@ export function useGuanyuanGame() {
   const runtimeRef = useRef<PreviewRuntimeSession | null>(null)
   const repositoryRef = useRef<SaveRepository | null>(null)
   const persistenceQueueRef = useRef<Promise<void>>(Promise.resolve())
-  const pendingSaveCountRef = useRef(0)
+  const pendingSaveCountsRef = useRef(new Map<string, number>())
   const persistenceEnabledRef = useRef(false)
   const [state, setState] = useState<GameState>(() => createInitialGameState())
   const [toast, setToast] = useState<ToastMessage | null>(null)
@@ -192,8 +192,9 @@ export function useGuanyuanGame() {
   const scheduleSave = useCallback((session: PreviewRuntimeSession) => {
     const repository = repositoryRef.current
     if (!repository || !persistenceEnabledRef.current) return
-    pendingSaveCountRef.current += 1
-    setRestored(false)
+    const worldKey = String(session.worldId)
+    pendingSaveCountsRef.current.set(worldKey, (pendingSaveCountsRef.current.get(worldKey) ?? 0) + 1)
+    if (runtimeRef.current?.worldId === session.worldId) setRestored(false)
     persistenceQueueRef.current = persistenceQueueRef.current.then(async () => {
       let saved = false
       try {
@@ -205,8 +206,11 @@ export function useGuanyuanGame() {
       } catch {
         setToast({ id: Date.now(), title: '本机存档未写成', detail: '事件仍在当前会话中；存储服务发生异常。' })
       }
-      pendingSaveCountRef.current = Math.max(0, pendingSaveCountRef.current - 1)
-      if (pendingSaveCountRef.current === 0) setRestored(saved)
+      const remaining = Math.max(0, (pendingSaveCountsRef.current.get(worldKey) ?? 1) - 1)
+      if (remaining === 0) pendingSaveCountsRef.current.delete(worldKey)
+      else pendingSaveCountsRef.current.set(worldKey, remaining)
+      // A save queued for the previous life must never mark a newly reset life as persisted.
+      if (runtimeRef.current?.worldId === session.worldId && remaining === 0) setRestored(saved)
     })
   }, [])
 
