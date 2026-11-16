@@ -128,7 +128,7 @@ export class IndexedDbSaveRepository implements SaveRepository {
   private database: Promise<IDBDatabase> | null = null
 
   constructor(
-    private readonly factory: IDBFactory | undefined = globalThis.indexedDB,
+    private readonly factory: IDBFactory | null = globalThis.indexedDB,
     private readonly databaseName = DATABASE_NAME,
   ) {}
 
