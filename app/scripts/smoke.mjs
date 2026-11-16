@@ -788,6 +788,22 @@ try {
   await click('.goal-seal')
   await page.waitForSelector('.save-folio-head', { timeout: 8000 })
   await click('.save-folio-head')
+  await page.waitForSelector('.save-folio-library', { state: 'visible', timeout: 8000 })
+  await page.waitForFunction(() => document.querySelector('.save-folio-world-list .save-folio-world') !== null, null, { timeout: 10000 })
+  check('本机档案目录列出当前人生及事件流摘要', (await page.locator('.save-folio-world').count()) >= 1
+    && (await page.locator('.save-folio-world').first().innerText()).includes('条事件'))
+  await click('.save-folio-world .save-folio-act:has-text("选择并恢复")')
+  await page.waitForSelector('.scene-panel', { timeout: 15000 })
+  await settle(500)
+  check('从本机档案目录手动选择后经完整恢复流程接续当前人生', (await page.locator('.date-block span').innerText()) === dayBeforeRestore)
+  // 手动恢复发生在志向纸内；明确收起志向纸，再从主界面重新打开存档案卷。
+  if (await page.locator('.prologue').isVisible()) {
+    await click('.start-button')
+    await page.waitForSelector('.prologue', { state: 'hidden', timeout: 8000 })
+  }
+  await click('.goal-seal')
+  await page.waitForSelector('.save-folio-head', { timeout: 8000 })
+  await click('.save-folio-head')
   await page.waitForSelector('.save-folio-act:has-text("导出便携存档")', { state: 'visible', timeout: 8000 })
   const [portableDownload] = await Promise.all([
     page.waitForEvent('download'),
@@ -922,7 +938,17 @@ try {
     check(`${label}px 礼簿无横向滚动`, !(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1)))
     await click('.life-account-button:has-text("人情")')
     await settle(200)
-    check(`${label}px 五账查验与礼簿同步且无溢出`, (await page.locator('.life-account-inspector').innerText()).includes('县丞代往') && !(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1)))
+    const accountOverflow = await page.evaluate(() => ({
+      viewport: window.innerWidth,
+      document: document.documentElement.scrollWidth,
+      body: document.body.scrollWidth,
+      offenders: [...document.querySelectorAll('body *')].map(el => {
+        const r = el.getBoundingClientRect()
+        return { tag: el.tagName, className: typeof el.className === 'string' ? el.className : '', id: el.id, left: Math.round(r.left * 10) / 10, right: Math.round(r.right * 10) / 10, width: Math.round(r.width * 10) / 10, scrollWidth: el.scrollWidth, clientWidth: el.clientWidth }
+      }).filter(x => x.right > window.innerWidth + 1 || x.left < -1 || x.scrollWidth > x.clientWidth + 2).sort((a, b) => b.right - a.right).slice(0, 12)
+    }))
+    if (label === '1024') console.log('LIFE_ACCOUNT_OVERFLOW_DIAGNOSTIC', JSON.stringify(accountOverflow))
+    check(`${label}px 五账查验与礼簿同步且无溢出`, (await page.locator('.life-account-inspector').innerText()).includes('县丞代往') && accountOverflow.document <= accountOverflow.viewport + 1)
     await settle(300)
     await shot(`63-life-accounts-${label}`)
     await click('#life-tab-home')

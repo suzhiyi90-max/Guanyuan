@@ -1,13 +1,14 @@
 /**
  * C-92 存档案卷：立志纸左下的一枚压角折页。
  * 只做三件事——读本档现状（只读投影）、导出底稿（只读下载）、另立新志（两段落印，复用既有 resetGame）。
- * 不改存档结构、不新增存储 key、不设多档位；骑缝与半印只作装帧，不作印信。
+ * 目录只读列出既有 WorldId；恢复必须经 restore coordinator 完整验链与重放，不直接发布索引数据。
  */
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { ChevronDown, Download, RotateCcw, ShieldAlert, Upload, X } from 'lucide-react'
 import type { PortableSaveImportResult, PortableSavePrepareResult } from '../persistence/portable-save-import'
 import { PORTABLE_SAVE_MAX_BYTES } from '../persistence/strict-json'
+import type { SaveRepositoryResult, SaveWorldSummary } from '../persistence/save-repository'
 
 export interface SaveSummary {
   day: number
@@ -21,7 +22,7 @@ export interface SaveSummary {
 
 const dayNames = ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十']
 
-export function SaveFolio({ summary, onExport, onReset, onPrepareImport, onCommitImport, extra }: { summary: SaveSummary, onExport?: () => void | Promise<void>, onReset: () => void, onPrepareImport?: (file: File) => Promise<PortableSavePrepareResult>, onCommitImport?: (file: File) => Promise<PortableSaveImportResult>, extra?: ReactNode }) {
+export function SaveFolio({ summary, onExport, onReset, onPrepareImport, onCommitImport, onListSavedWorlds, onChooseSavedWorld, extra }: { summary: SaveSummary, onExport?: () => void | Promise<void>, onReset: () => void, onPrepareImport?: (file: File) => Promise<PortableSavePrepareResult>, onCommitImport?: (file: File) => Promise<PortableSaveImportResult>, onListSavedWorlds?: () => Promise<SaveRepositoryResult<readonly SaveWorldSummary[]>>, onChooseSavedWorld?: (worldId: string) => Promise<void>, extra?: ReactNode }) {
   const [open, setOpen] = useState(false)
   const [armed, setArmed] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -29,6 +30,10 @@ export function SaveFolio({ summary, onExport, onReset, onPrepareImport, onCommi
   const [importPreview, setImportPreview] = useState<PortableSavePrepareResult | null>(null)
   const [importStatus, setImportStatus] = useState<'idle' | 'checking' | 'ready' | 'committing' | 'success' | 'error'>('idle')
   const [importError, setImportError] = useState<string | null>(null)
+  const [worlds, setWorlds] = useState<readonly SaveWorldSummary[]>([])
+  const [worldsStatus, setWorldsStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
+  const [worldsError, setWorldsError] = useState<string | null>(null)
+  const [restoringWorldId, setRestoringWorldId] = useState<string | null>(null)
   const reduceMotion = useReducedMotion()
   const panelId = useId()
   const rootRef = useRef<HTMLDivElement | null>(null)
@@ -73,6 +78,39 @@ export function SaveFolio({ summary, onExport, onReset, onPrepareImport, onCommi
     }
   }
 
+
+  const refreshWorlds = useCallback(async () => {
+    if (!onListSavedWorlds) return
+    setWorldsStatus('loading')
+    setWorldsError(null)
+    try {
+      const result = await onListSavedWorlds()
+      if (result.status === 'success') {
+        setWorlds(result.value)
+        setWorldsStatus('ready')
+      } else {
+        setWorldsStatus('error')
+        setWorldsError(`读取本机档案失败：${result.issue}`)
+      }
+    } catch {
+      setWorldsStatus('error')
+      setWorldsError('读取本机档案时发生异常。')
+    }
+  }, [onListSavedWorlds])
+
+  useEffect(() => {
+    if (open && onListSavedWorlds) void refreshWorlds()
+  }, [open, onListSavedWorlds, refreshWorlds])
+
+  const handleChooseWorld = async (worldId: string) => {
+    if (!onChooseSavedWorld || restoringWorldId) return
+    setRestoringWorldId(worldId)
+    try {
+      await onChooseSavedWorld(worldId)
+    } finally {
+      setRestoringWorldId(null)
+    }
+  }
 
   const clearImport = () => {
     setImportFile(null)
@@ -127,6 +165,7 @@ export function SaveFolio({ summary, onExport, onReset, onPrepareImport, onCommi
     if (result.status === 'imported') {
       setImportStatus('success')
       setImportError('导入成功：档案已加入本机存档列表；当前人生未切换。')
+      await refreshWorlds()
     } else {
       setImportStatus('error')
       setImportError(importIssueText(result.issue))
@@ -210,6 +249,22 @@ export function SaveFolio({ summary, onExport, onReset, onPrepareImport, onCommi
               </div>
 
               {armed && <div className="save-folio-countdown" aria-hidden="true"><i /></div>}
+
+              {onListSavedWorlds && (
+                <section className="save-folio-library" aria-label="本机人生档案">
+                  <div className="save-folio-library-head"><b>本机人生档案</b><button type="button" className="save-folio-act" onClick={() => void refreshWorlds()} disabled={worldsStatus === 'loading'}>刷新列表</button></div>
+                  {worldsStatus === 'loading' && <p role="status">正在读取档案目录…</p>}
+                  {worldsError && <p role="alert">{worldsError}</p>}
+                  {worldsStatus === 'ready' && worlds.length === 0 && <p>本机尚无已保存的人生档案。</p>}
+                  {worldsStatus === 'ready' && worlds.length > 0 && <ul className="save-folio-world-list">{worlds.map(world => (
+                    <li key={world.worldId} className="save-folio-world">
+                      <div><b>人生档案 · {world.worldId.slice(-8)}</b><small>{new Date(world.savedAt).toLocaleString()} · {world.packageKind === 'full' ? '完整卷' : '续记卷'} · {world.streamHead.seq} 条事件</small><small>校验摘要：{world.checksum.slice(0, 19)}…</small></div>
+                      <button type="button" className="save-folio-act" onClick={() => void handleChooseWorld(world.worldId)} disabled={restoringWorldId !== null}>{restoringWorldId === world.worldId ? '正在验卷…' : '选择并恢复'}</button>
+                    </li>
+                  ))}</ul>}
+                  <p>列表仅展示索引摘要。选择恢复时会重新读取存档，并执行完整校验链与事件重放；未成功验证前不会替换当前人生。</p>
+                </section>
+              )}
 
               {onPrepareImport && onCommitImport && (
                 <section className="save-folio-import" aria-label="导入便携存档">

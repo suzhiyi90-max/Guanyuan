@@ -20,7 +20,7 @@ import { restorePreviewRuntimeSession, restoreSingleSavedRuntimeWorld } from '..
 import { savePreviewRuntimeSession } from '../persistence/runtime-save-orchestrator'
 import { exportPortableSave, type PortableSaveExportResult } from '../persistence/portable-save-export'
 import { commitPortableSaveFile, preparePortableSaveFile, type PortableSaveImportResult, type PortableSavePrepareResult } from '../persistence/portable-save-import'
-import type { SaveRepository } from '../persistence/save-repository'
+import type { SaveRepository, SaveWorldSummary, SaveRepositoryResult } from '../persistence/save-repository'
 import type { WorldId } from '../domain/event-ledger'
 import type { RuntimeStartupView } from '../persistence/runtime-startup-types'
 import type { GeneratedEvent } from '../narrative/types'
@@ -171,6 +171,19 @@ export function useGuanyuanGame() {
 
   const retryStartup = useCallback(() => setRetryNonce(value => value + 1), [])
 
+  const listSavedWorlds = useCallback(async (): Promise<SaveRepositoryResult<readonly SaveWorldSummary[]>> => {
+    const repository = repositoryRef.current
+    if (!repository) return { status: 'rejected', issue: 'save-repository-unavailable' }
+    // The index must not race writes already queued by the active runtime.
+    let queued = persistenceQueueRef.current
+    while (true) {
+      await queued
+      if (queued === persistenceQueueRef.current) break
+      queued = persistenceQueueRef.current
+    }
+    return repository.listWorlds()
+  }, [])
+
   const exportPortableSavePackage = useCallback(async (): Promise<PortableSaveExportResult> => {
     const session = runtimeRef.current
     const repository = repositoryRef.current
@@ -194,23 +207,49 @@ export function useGuanyuanGame() {
   const chooseSavedWorld = useCallback(async (worldId: string) => {
     const repository = repositoryRef.current
     if (!repository) return
-    setStartup({ status: 'loading' })
+    const requestedSession = runtimeRef.current
+    const preserveActiveSession = requestedSession !== null
+    if (!preserveActiveSession) setStartup({ status: 'loading' })
     try {
+      // Flush all saves queued before selection. This matters when restoring the
+      // currently active WorldId: otherwise an older persisted head could win.
+      let queued = persistenceQueueRef.current
+      while (true) {
+        await queued
+        if (queued === persistenceQueueRef.current) break
+        queued = persistenceQueueRef.current
+      }
+      // Do not overwrite player actions made while the save queue was draining.
+      if (requestedSession && runtimeRef.current !== requestedSession) {
+        setToast({ id: Date.now(), title: '档案恢复已取消', detail: '等待存档写入期间当前人生已有新行动，请刷新档案目录后重试。' })
+        return
+      }
       const result = await restorePreviewRuntimeSession(worldId as WorldId, repository)
       if (result.status === 'restored') {
+        // Restore is asynchronous; guard again so actions made during replay survive.
+        if (requestedSession && runtimeRef.current !== requestedSession) {
+          setToast({ id: Date.now(), title: '档案恢复已取消', detail: '验卷期间当前人生已有新行动，未替换当前人生。' })
+          return
+        }
         runtimeRef.current = result.session
         setState(result.session.state)
         setRestored(true)
         setResumed(true)
         setStartup({ status: 'ready' })
       } else {
-        setStartup({
-          status: 'error',
-          issue: result.status === 'rejected' ? result.issue : 'save-repository-record-corrupt',
-        })
+        const issue = result.status === 'rejected' ? result.issue : 'save-repository-record-corrupt'
+        if (preserveActiveSession) {
+          setToast({ id: Date.now(), title: '档案未能恢复', detail: `校验未通过（${issue}）。当前人生保持不变，可选择其他档案。` })
+        } else {
+          setStartup({ status: 'error', issue })
+        }
       }
     } catch {
-      setStartup({ status: 'error', issue: 'save-repository-storage-error' })
+      if (preserveActiveSession) {
+        setToast({ id: Date.now(), title: '档案恢复中断', detail: '本机存档读取发生异常；当前人生保持不变。' })
+      } else {
+        setStartup({ status: 'error', issue: 'save-repository-storage-error' })
+      }
     }
   }, [])
 
@@ -365,6 +404,7 @@ export function useGuanyuanGame() {
     startup,
     chooseSavedWorld,
     retryStartup,
+    listSavedWorlds,
     exportPortableSavePackage,
     preparePortableImport,
     commitPortableImport,
