@@ -45,6 +45,7 @@ async function run(): Promise<void> {
   const first = await repository.commitWorld({
     worldId, packageChain: full, expectedHead: null, savedAt: '2026-11-16T00:00:00.000Z',
   })
+  if (first.status !== 'success') console.error('first commit diagnostic', first)
   check('genesis full package is committed for a new world', first.status === 'success')
   const loaded = await repository.loadWorld(worldId)
   check('full package survives IndexedDB structured-clone round trip', loaded.status === 'success'
