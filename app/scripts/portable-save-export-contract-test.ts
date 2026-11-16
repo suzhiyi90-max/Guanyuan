@@ -6,6 +6,7 @@ import type {
 import { createPreviewRuntimeSession, dispatchPreviewRuntimeIntent } from '../src/game/runtime-orchestrator'
 import { savePreviewRuntimeSession } from '../src/persistence/runtime-save-orchestrator'
 import { exportPortableSave, validatePortableSaveEnvelope } from '../src/persistence/portable-save-export'
+import { importPortableSaveBytes } from '../src/persistence/portable-save-import'
 
 let passed = 0
 let failed = 0
@@ -63,6 +64,21 @@ async function main(): Promise<void> {
   } else check('envelope field tampering fails checksum validation', false)
   check('export is read-only for Full-only repository', repo.current === fullBefore
     && session0.ledger === initialLedger && session0.state === initialState)
+  if (fullExport.status === 'exported') {
+    const importedRepo = new MemorySaveRepository()
+    const bytes = new TextEncoder().encode(JSON.stringify(fullExport.envelope))
+    const imported = await importPortableSaveBytes(bytes, importedRepo, { now: () => '2026-11-16T08:03:00.000Z' })
+    check('verified Full-only portable envelope imports through domain replay', imported.status === 'imported'
+      && imported.value.packageChain.packageKind === 'full')
+    check('portable import adds a local archive without changing active session', session0.ledger === initialLedger
+      && session0.state === initialState && importedRepo.current?.worldId === session0.worldId)
+    const duplicate = await importPortableSaveBytes(bytes, importedRepo)
+    check('portable import refuses an existing WorldId', duplicate.status === 'rejected' && duplicate.issue === 'world-exists')
+  } else {
+    check('verified Full-only portable envelope imports through domain replay', false)
+    check('portable import adds a local archive without changing active session', false)
+    check('portable import refuses an existing WorldId', false)
+  }
 
   const session1 = appendGoal(session0, 'river-repair')
   await savePreviewRuntimeSession(session1, repo)
