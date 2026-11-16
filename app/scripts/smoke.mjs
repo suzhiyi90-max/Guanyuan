@@ -938,7 +938,17 @@ try {
     check(`${label}px 礼簿无横向滚动`, !(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1)))
     await click('.life-account-button:has-text("人情")')
     await settle(200)
-    check(`${label}px 五账查验与礼簿同步且无溢出`, (await page.locator('.life-account-inspector').innerText()).includes('县丞代往') && !(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1)))
+    const accountOverflow = await page.evaluate(() => ({
+      viewport: window.innerWidth,
+      document: document.documentElement.scrollWidth,
+      body: document.body.scrollWidth,
+      offenders: [...document.querySelectorAll('body *')].map(el => {
+        const r = el.getBoundingClientRect()
+        return { tag: el.tagName, className: typeof el.className === 'string' ? el.className : '', id: el.id, left: Math.round(r.left * 10) / 10, right: Math.round(r.right * 10) / 10, width: Math.round(r.width * 10) / 10, scrollWidth: el.scrollWidth, clientWidth: el.clientWidth }
+      }).filter(x => x.right > window.innerWidth + 1 || x.left < -1 || x.scrollWidth > x.clientWidth + 2).sort((a, b) => b.right - a.right).slice(0, 12)
+    }))
+    if (label === '1024') console.log('LIFE_ACCOUNT_OVERFLOW_DIAGNOSTIC', JSON.stringify(accountOverflow))
+    check(`${label}px 五账查验与礼簿同步且无溢出`, (await page.locator('.life-account-inspector').innerText()).includes('县丞代往') && accountOverflow.document <= accountOverflow.viewport + 1)
     await settle(300)
     await shot(`63-life-accounts-${label}`)
     await click('#life-tab-home')
