@@ -94,7 +94,7 @@ function isCursor(value: unknown): value is StreamCursor {
   if (!isRecord(value)) return false
   if (value.kind === 'genesis') return value.seq === 0 && Object.keys(value).every(key => key === 'kind' || key === 'seq')
   return value.kind === 'event' && Number.isSafeInteger(value.seq) && (value.seq as number) > 0
-    && typeof value.eventId === 'string' && Object.keys(value).every(key => key === 'kind' || key === 'seq' || key === 'eventId')
+    && typeof value.eventId === 'string' && value.eventId.trim().length > 0 && Object.keys(value).every(key => key === 'kind' || key === 'seq' || key === 'eventId')
 }
 
 function packageEnvelope(value: unknown, depth = 0): value is SavePackageChain {
@@ -422,8 +422,9 @@ export class IndexedDbSaveRepository implements SaveRepository {
       const normalized = rows.map(normalizeWorldRow)
       if (normalized.some(row => row === null)) return { status: 'rejected', issue: 'save-repository-record-corrupt' }
       const ordered = [...normalized].sort((left, right) => {
-        const bySavedAt = right!.savedAt.localeCompare(left!.savedAt)
-        return bySavedAt !== 0 ? bySavedAt : left!.worldId.localeCompare(right!.worldId)
+        if (left!.savedAt !== right!.savedAt) return left!.savedAt < right!.savedAt ? 1 : -1
+        if (left!.worldId === right!.worldId) return 0
+        return left!.worldId < right!.worldId ? -1 : 1
       })
       return { status: 'success', value: Object.freeze(ordered.map(row => Object.freeze({
         worldId: row!.worldId as WorldId,
