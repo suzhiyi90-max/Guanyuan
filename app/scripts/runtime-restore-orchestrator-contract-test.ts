@@ -95,6 +95,23 @@ async function main(): Promise<void> {
   check('multiple saved lives require explicit selection', selection.status === 'selection-required'
     && selection.worlds.length === 2)
 
+  const singleRepository = new MemorySaveRepository()
+  singleRepository.current = storedIncrement
+  singleRepository.listWorlds = async () => ({
+    status: 'success',
+    value: storedIncrement ? [{
+      worldId: storedIncrement.worldId,
+      streamHead: storedIncrement.streamHead,
+      savedAt: storedIncrement.savedAt,
+      packageKind: storedIncrement.packageChain.packageKind,
+      checksum: storedIncrement.packageChain.checksum,
+    }] : [],
+  })
+  const singleRestore = await restoreSingleSavedRuntimeWorld(singleRepository)
+  check('exactly one saved life is restored without requiring a manual choice',
+    singleRestore.status === 'restored' && singleRestore.session.worldId === original.worldId
+      && singleRestore.session.ledger.head === 2)
+
   const restored = await restorePreviewRuntimeSession(original.worldId, repository)
   check('full plus incremental chain restores the exact world and stream head', restored.status === 'restored'
     && restored.session.worldId === original.worldId && restored.session.ledger.head === 2
