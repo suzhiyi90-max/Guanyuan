@@ -47,15 +47,28 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
 
-function packageEnvelope(value: unknown): value is SavePackageChain {
-  if (!isRecord(value) || (value.packageKind !== 'full' && value.packageKind !== 'incremental')
-    || typeof value.worldId !== 'string' || !Number.isSafeInteger(value.schemaVersion)
+function isCursor(value: unknown): value is StreamCursor {
+  if (!isRecord(value)) return false
+  if (value.kind === 'genesis') return value.seq === 0 && Object.keys(value).every(key => key === 'kind' || key === 'seq')
+  return value.kind === 'event' && Number.isSafeInteger(value.seq) && (value.seq as number) > 0
+    && typeof value.eventId === 'string' && Object.keys(value).every(key => key === 'kind' || key === 'seq' || key === 'eventId')
+}
+
+function packageEnvelope(value: unknown, depth = 0): value is SavePackageChain {
+  if (depth > MAX_CHAIN_DEPTH || !isRecord(value)
+    || (value.packageKind !== 'full' && value.packageKind !== 'incremental')
+    || typeof value.worldId !== 'string' || !value.worldId.trim()
+    || !Number.isSafeInteger(value.schemaVersion) || (value.schemaVersion as number) < 1
     || !isRecord(value.snapshot) || !isRecord(value.streamRange)
+    || !isCursor(value.streamRange.fromExclusive) || !isCursor(value.streamRange.toInclusive)
+    || !isCursor(value.snapshot.streamHead)
+    || !sameCursor(value.snapshot.streamHead, value.streamRange.toInclusive)
     || typeof value.checksum !== 'string' || !/^sha256:[0-9a-f]{64}$/u.test(value.checksum)) return false
-  const cursor = value.snapshot.streamHead
-  return isRecord(cursor) && (cursor.kind === 'genesis' && cursor.seq === 0
-    || cursor.kind === 'event' && Number.isSafeInteger(cursor.seq) && (cursor.seq as number) > 0
-      && typeof cursor.eventId === 'string')
+  if (value.packageKind === 'full') return value.streamRange.fromExclusive.kind === 'genesis'
+    && value.basePackage === undefined
+  return packageEnvelope(value.basePackage, depth + 1)
+    && value.basePackage.worldId === value.worldId
+    && sameCursor(value.basePackage.snapshot.streamHead, value.streamRange.fromExclusive)
 }
 
 function rowForPackage(chain: SavePackageChain): PackageRow {
@@ -167,10 +180,11 @@ export class IndexedDbSaveRepository implements SaveRepository {
     try {
       const tx = db.transaction(WORLD_STORE, 'readonly')
       const done = transactionDone(tx)
-      const row = normalizeWorldRow(await requestValue(tx.objectStore(WORLD_STORE).get(worldId)))
+      const raw = await requestValue(tx.objectStore(WORLD_STORE).get(worldId))
       await done
-      if (!row) return { status: 'success', value: null }
-      if (row.worldId !== worldId) return { status: 'rejected', issue: 'save-repository-record-corrupt' }
+      if (raw === undefined) return { status: 'success', value: null }
+      const row = normalizeWorldRow(raw)
+      if (!row || row.worldId !== worldId) return { status: 'rejected', issue: 'save-repository-record-corrupt' }
       const packageChain = await this.hydratePackage(db, row.latestPackageKey, worldId)
       if (!packageChain || packageChain.checksum !== row.checksum || packageChain.packageKind !== row.packageKind
         || !sameCursor(packageChain.snapshot.streamHead, row.streamHead)) {
@@ -201,7 +215,13 @@ export class IndexedDbSaveRepository implements SaveRepository {
       const done = transactionDone(tx)
       const worlds = tx.objectStore(WORLD_STORE)
       const packages = tx.objectStore(PACKAGE_STORE)
-      const current = normalizeWorldRow(await requestValue(worlds.get(input.worldId)))
+      const currentRaw = await requestValue(worlds.get(input.worldId))
+      const current = currentRaw === undefined ? null : normalizeWorldRow(currentRaw)
+      if (currentRaw !== undefined && !current) {
+        tx.abort()
+        try { await done } catch { /* expected corrupt record abort */ }
+        return { status: 'rejected', issue: 'save-repository-record-corrupt' }
+      }
       const actualHead = current?.streamHead ?? null
       if ((input.expectedHead === null && actualHead !== null)
         || (input.expectedHead !== null && (actualHead === null || !sameCursor(actualHead, input.expectedHead)))) {
@@ -269,7 +289,13 @@ export class IndexedDbSaveRepository implements SaveRepository {
       const tx = db.transaction([WORLD_STORE, PACKAGE_STORE], 'readwrite')
       const done = transactionDone(tx)
       const worlds = tx.objectStore(WORLD_STORE)
-      const current = normalizeWorldRow(await requestValue(worlds.get(worldId)))
+      const currentRaw = await requestValue(worlds.get(worldId))
+      const current = currentRaw === undefined ? null : normalizeWorldRow(currentRaw)
+      if (currentRaw !== undefined && !current) {
+        tx.abort()
+        try { await done } catch { /* expected corrupt record abort */ }
+        return { status: 'rejected', issue: 'save-repository-record-corrupt' }
+      }
       if (!current) {
         tx.abort()
         try { await done } catch { /* expected missing record */ }
