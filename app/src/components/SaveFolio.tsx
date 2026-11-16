@@ -3,7 +3,7 @@
  * 只做三件事——读本档现状（只读投影）、导出底稿（只读下载）、另立新志（两段落印，复用既有 resetGame）。
  * 目录只读列出既有 WorldId；恢复必须经 restore coordinator 完整验链与重放，不直接发布索引数据。
  */
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { ChevronDown, Download, RotateCcw, ShieldAlert, Upload, X } from 'lucide-react'
 import type { PortableSaveImportResult, PortableSavePrepareResult } from '../persistence/portable-save-import'
@@ -79,7 +79,7 @@ export function SaveFolio({ summary, onExport, onReset, onPrepareImport, onCommi
   }
 
 
-  const refreshWorlds = async () => {
+  const refreshWorlds = useCallback(async () => {
     if (!onListSavedWorlds) return
     setWorldsStatus('loading')
     setWorldsError(null)
@@ -96,11 +96,11 @@ export function SaveFolio({ summary, onExport, onReset, onPrepareImport, onCommi
       setWorldsStatus('error')
       setWorldsError('读取本机档案时发生异常。')
     }
-  }
+  }, [onListSavedWorlds])
 
   useEffect(() => {
     if (open && onListSavedWorlds) void refreshWorlds()
-  }, [open, onListSavedWorlds])
+  }, [open, onListSavedWorlds, refreshWorlds])
 
   const handleChooseWorld = async (worldId: string) => {
     if (!onChooseSavedWorld || restoringWorldId) return
