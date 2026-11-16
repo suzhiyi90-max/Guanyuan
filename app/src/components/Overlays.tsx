@@ -210,7 +210,7 @@ const goalForesee: Record<string, string[]> = {
   survival: ['两版呈文有没有对勘', '会勘与具结有没有留痕', '题销能不能分说'],
 }
 
-export function GoalPrologue({ selected, onSelect, onStart, onReset, saveSummary, onExport, narrativeSlot }: { selected: string | null, onSelect: (id: string) => void, onStart: () => void, onReset?: () => void, saveSummary?: SaveSummary, onExport?: () => void, narrativeSlot?: React.ReactNode }) {
+export function GoalPrologue({ selected, onSelect, onStart, onReset, saveSummary, onExport, onPrepareImport, onCommitImport, narrativeSlot }: { selected: string | null, onSelect: (id: string) => void, onStart: () => void, onReset?: () => void, saveSummary?: SaveSummary, onExport?: () => void, onPrepareImport?: (file: File) => Promise<import('../persistence/portable-save-import').PortableSavePrepareResult>, onCommitImport?: (file: File) => Promise<import('../persistence/portable-save-import').PortableSaveImportResult>, narrativeSlot?: React.ReactNode }) {
   const icons = [<Landmark size={19} />, <Scale size={19} />, <Network size={19} />, <Shield size={19} />]
   return (
     <motion.div className="prologue" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
@@ -218,7 +218,7 @@ export function GoalPrologue({ selected, onSelect, onStart, onReset, saveSummary
       <div className="prologue-paper"><div className="prologue-paper-inner"><span className="eyebrow">书斋夜坐 · 立志</span><h2>你这一任，<br />最想留下什么？</h2><p className="goal-intro">志向不是加成，也没有标准答案。它只在章末替你照一照：当初想要的，后来还剩下多少。</p><ol className="goal-horizon" aria-label="十日内的公开日程">{fixedEvents.map(event => <li key={event.day}><span>{String(event.day).padStart(2, '0')}</span><b>{event.label}</b><small>{event.detail}</small></li>)}</ol>
           <div className="goal-grid">{goals.map((goal: Goal, i) => <button key={goal.id} className={`goal-card ${selected === goal.id ? 'selected' : ''}`} onClick={() => onSelect(goal.id)}><span className="goal-icon">{icons[i]}</span><div><h3>{goal.title}<small>{goal.seal}</small></h3><p>{goal.statement}</p><footer>{goal.hint}</footer></div><span className="goal-check">{selected === goal.id && <Check size={14} />}</span></button>)}</div>{selected && <p className="goal-foresee"><span>章末照见</span>{(goalForesee[selected] ?? []).map(item => <i key={item}>{item}</i>)}<small>不是结果预告</small></p>}
           <button className="primary-button start-button" disabled={!selected} onClick={onStart}><span>{selected ? '以此立志，进入第一日' : '先选一个志向'}</span><ArrowRight size={18} /></button><div className="prologue-note"><Sparkles size={13} /><span>志向默认私有。你可以在任何重大事件后改写它。</span></div>{onReset && (saveSummary
-            ? <SaveFolio summary={saveSummary} onExport={onExport} onReset={onReset} extra={narrativeSlot} />
+            ? <SaveFolio summary={saveSummary} onExport={onExport} onReset={onReset} onPrepareImport={onPrepareImport} onCommitImport={onCommitImport} extra={narrativeSlot} />
             : <button className="prologue-reset" onClick={onReset}>重新立志 · 清空本地存档</button>)}</div></div>
     </motion.div>
   )
