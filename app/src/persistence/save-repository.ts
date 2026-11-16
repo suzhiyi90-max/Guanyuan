@@ -26,10 +26,19 @@ export type SaveRepositoryIssue =
   | 'save-repository-head-conflict'
   | 'save-repository-package-invalid'
   | 'save-repository-base-missing'
+  | 'save-repository-world-exists'
+  | 'save-repository-storage-conflict'
 
 export type SaveRepositoryResult<T> =
   | { readonly status: 'success'; readonly value: T }
   | { readonly status: 'rejected'; readonly issue: SaveRepositoryIssue }
+
+export interface ImportWorldSaveInput {
+  readonly worldId: WorldId
+  readonly packageChain: SavePackageChain
+  readonly streamHead: StreamCursor
+  readonly savedAt: string
+}
 
 export interface CommitWorldSaveInput {
   readonly worldId: WorldId
@@ -46,6 +55,7 @@ export interface CommitWorldSaveInput {
 export interface SaveRepository {
   loadWorld(worldId: WorldId): Promise<SaveRepositoryResult<StoredWorldSave | null>>
   commitWorld(input: CommitWorldSaveInput): Promise<SaveRepositoryResult<StoredWorldSave>>
+  importWorld(input: ImportWorldSaveInput): Promise<SaveRepositoryResult<StoredWorldSave>>
   listWorlds(): Promise<SaveRepositoryResult<readonly SaveWorldSummary[]>>
   deleteWorld(worldId: WorldId, expectedHead: StreamCursor): Promise<SaveRepositoryResult<boolean>>
 }
