@@ -43,6 +43,8 @@ async function main(): Promise<void> {
   check('unsaved world is not exported', absent.status === 'rejected' && absent.issue === 'not-saved-yet')
   await savePreviewRuntimeSession(session0, repo, { now: () => '2026-11-16T08:01:00.000Z' })
   const fullBefore = repo.current
+  const initialState = session0.state
+  const initialLedger = session0.ledger
   const fullExport = await exportPortableSave(session0, repo, { now: () => '2026-11-16T08:02:00.000Z' })
   check('valid Full-only chain exports with independently verifiable envelope checksum',
     fullExport.status === 'exported' && fullExport.envelope.packageChain.packageKind === 'full'
@@ -55,7 +57,7 @@ async function main(): Promise<void> {
     check('unknown envelope fields are rejected', !(await validatePortableSaveEnvelope({ ...fullExport.envelope, unexpected: true })))
   } else check('envelope field tampering fails checksum validation', false)
   check('export is read-only for Full-only repository', repo.current === fullBefore
-    && session0.ledger.head === 0 && session0.state === session0.state)
+    && session0.ledger === initialLedger && session0.state === initialState)
 
   const session1 = appendGoal(session0, 'river-repair')
   await savePreviewRuntimeSession(session1, repo)
