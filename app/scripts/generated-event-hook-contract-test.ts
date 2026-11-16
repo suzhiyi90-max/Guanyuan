@@ -32,8 +32,8 @@ async function run(): Promise<void> {
     first.session.candidateLog.candidates.some(item => item.candidateId === `${generated.id}:jia` && item.status === 'validated'))
 
   const retry = await dispatchGeneratedEventForGame(first.session, generated, 'jia')
-  check('same option retry is accepted as idempotent duplicate without a second state mutation',
-    retry.committed && !retry.result.rejected && retry.session.ledger.head === first.session.ledger.head
+  check('same option retry is accepted as duplicate without replacing the visible projection',
+    !retry.committed && !retry.result.rejected && retry.session.ledger.head === first.session.ledger.head
       && retry.result.state === first.session.state)
 
   const stale = await dispatchGeneratedEventForGame(initial, event(2), 'jia')
