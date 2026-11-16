@@ -1,4 +1,3 @@
-import { appendLedgerEvent } from '../src/domain/event-ledger'
 import type { JsonValue, WorldId } from '../src/domain/event-ledger'
 import type { StreamCursor } from '../src/domain/event-replay'
 import type { SavePackageVerification } from '../src/domain/save-package'
