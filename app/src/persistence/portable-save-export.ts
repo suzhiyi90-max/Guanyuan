@@ -86,7 +86,7 @@ export async function exportPortableSave(
   const tail = session.ledger.events[session.ledger.events.length - 1]
   const sessionHead = tail
     ? { kind: 'event' as const, seq: tail.seq, eventId: tail.id }
-    : { kind: 'genesis' as const, seq: 0 }
+    : { kind: 'genesis' as const, seq: 0 as const }
   if (!sameCursor(stored.streamHead, stored.packageChain.snapshot.streamHead)
     || !sameCursor(stored.streamHead, sessionHead)) {
     return { status: 'rejected', issue: 'world-mismatch' }
