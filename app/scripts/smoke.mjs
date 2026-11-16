@@ -48,6 +48,11 @@ const lightState = () => page.evaluate(() => {
 
 try {
   await page.goto(BASE, { waitUntil: 'domcontentloaded' })
+  const indexedDbContracts = await page.evaluate(async () => {
+    const module = await import('/src/persistence/indexeddb-save-repository-contract-test.ts')
+    return module.runIndexedDbSaveRepositoryContractTests()
+  })
+  check('IndexedDB 世界存档仓储专项契约', indexedDbContracts.length === 8, `${indexedDbContracts.length}/8`)
   await page.evaluate(raw => { localStorage.clear(); localStorage.setItem('guanyuan.save.v1', raw) }, legacyDraft)
   await page.reload({ waitUntil: 'domcontentloaded' })
   await settle(600)
