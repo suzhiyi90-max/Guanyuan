@@ -766,6 +766,9 @@ try {
 
   // W5-D3-B：验证自动续存确实能在刷新后恢复，而不是只在内存中保留。
   const dayBeforeRestore = await page.locator('.date-block span').innerText()
+  await click('.goal-seal')
+  await page.waitForSelector('.save-folio-title small', { timeout: 8000 })
+  await page.waitForFunction(() => document.querySelector('.save-folio-title small')?.textContent?.includes('本机存档 · 可继续接续') ?? false, null, { timeout: 10000 })
   await page.waitForFunction(async () => new Promise(resolve => {
     const request = indexedDB.open('guanyuan-world-saves', 1)
     request.onerror = () => resolve(false)
