@@ -95,6 +95,15 @@ export async function runIndexedDbSaveRepositoryContractTests(): Promise<readonl
   const list = await repository.listWorlds()
   check('world index exposes head metadata without loading package payloads', list.status === 'success'
     && list.value.some(item => item.worldId === worldId && item.streamHead.seq === 1))
+  const olderWorldId = brandedId<'WorldId'>('w5-d1-browser-contract-older') as WorldId
+  const olderFull = { ...full, worldId: olderWorldId, snapshot: { ...full.snapshot, worldId: olderWorldId } } as unknown as FullSavePackage
+  const olderWorld = await repository.commitWorld({
+    worldId: olderWorldId, packageChain: olderFull, expectedHead: null, savedAt: '2026-11-15T00:00:00.000Z',
+  })
+  check('older world can coexist for deterministic index ordering', olderWorld.status === 'success')
+  const orderedList = await repository.listWorlds()
+  check('world index sorts newest savedAt first', orderedList.status === 'success'
+    && orderedList.value[0]?.worldId === worldId && orderedList.value[1]?.worldId === olderWorldId)
   const staleDelete = await repository.deleteWorld(worldId, genesis)
   check('stale delete cannot remove a world after its head advanced', staleDelete.status === 'rejected'
     && staleDelete.issue === 'save-repository-head-conflict')
@@ -117,6 +126,19 @@ export async function runIndexedDbSaveRepositoryContractTests(): Promise<readonl
   const corrupted = await repository.loadWorld(worldId)
   check('corrupt package pointer is reported, never treated as an empty world', corrupted.status === 'rejected'
     && corrupted.issue === 'save-repository-record-corrupt')
+  const corruptDelete = await repository.deleteWorld(worldId, head1)
+  check('corrupt world index cannot be deleted as if it were a valid archive', corruptDelete.status === 'rejected'
+    && corruptDelete.issue === 'save-repository-record-corrupt')
+  const repair = db.transaction('worlds', 'readwrite')
+  const repairDone = new Promise<void>((resolve, reject) => {
+    repair.oncomplete = () => resolve()
+    repair.onabort = () => reject(repair.error)
+    repair.onerror = () => reject(repair.error)
+  })
+  const repairStore = repair.objectStore('worlds')
+  const repairRequest = repairStore.get(worldId)
+  repairRequest.onsuccess = () => repairStore.put({ ...repairRequest.result, latestPackageKey: `${worldId}::${checksum2}` })
+  await repairDone
   const deleted = await repository.deleteWorld(worldId, head1)
   check('world deletion is guarded by the expected head', deleted.status === 'success' && deleted.value)
   const afterDelete = await repository.loadWorld(worldId)
