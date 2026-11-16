@@ -35,6 +35,7 @@ on:
       - work/w5-d2-runtime-save-package-orchestration
       - work/w5-d3-runtime-startup-restore
       - work/w5-d3b-app-startup-lifecycle
+      - work/w5-e1-portable-save-export
   pull_request:
     branches:
       - feat/g1-engine
@@ -84,6 +85,7 @@ on:
       - work/w5-d1-indexeddb-save-repository
       - work/w5-d2-runtime-save-package-orchestration
       - work/w5-d3-runtime-startup-restore
+      - work/w5-d3b-app-startup-lifecycle
   workflow_dispatch:
 
 permissions:
@@ -194,6 +196,8 @@ jobs:
         run: npm run test:domain:runtime-save-orchestrator
       - name: Runtime startup restore contracts
         run: npm run test:domain:runtime-restore-orchestrator
+      - name: Verified portable save export contracts
+        run: npm run test:domain:portable-save-export
       - name: Review index integrity
         run: npm run check:docs
       - name: Patch whitespace integrity

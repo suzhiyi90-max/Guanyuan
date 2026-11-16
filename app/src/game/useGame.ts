@@ -18,6 +18,7 @@ import { createInitialGameState } from './initial-state'
 import { createIndexedDbSaveRepository } from '../persistence/indexeddb-save-repository'
 import { restorePreviewRuntimeSession, restoreSingleSavedRuntimeWorld } from '../persistence/runtime-restore-orchestrator'
 import { savePreviewRuntimeSession } from '../persistence/runtime-save-orchestrator'
+import { exportPortableSave, type PortableSaveExportResult } from '../persistence/portable-save-export'
 import type { SaveRepository } from '../persistence/save-repository'
 import type { WorldId } from '../domain/event-ledger'
 import type { RuntimeStartupView } from '../persistence/runtime-startup-types'
@@ -109,6 +110,7 @@ export function useGuanyuanGame() {
   const [state, setState] = useState<GameState>(() => createInitialGameState())
   const [toast, setToast] = useState<ToastMessage | null>(null)
   const [restored, setRestored] = useState(false)
+  const [resumed, setResumed] = useState(false)
   const [startup, setStartup] = useState<StartupState>({ status: 'loading' })
   const [retryNonce, setRetryNonce] = useState(0)
 
@@ -129,6 +131,7 @@ export function useGuanyuanGame() {
       runtimeRef.current = session
       setState(session.state)
       setRestored(false)
+      setResumed(false)
       persistenceEnabledRef.current = false
       setStartup({ status: 'ready' })
     } else {
@@ -139,12 +142,14 @@ export function useGuanyuanGame() {
           runtimeRef.current = result.session
           setState(result.session.state)
           setRestored(true)
+          setResumed(true)
           setStartup({ status: 'ready' })
         } else if (result.status === 'missing') {
           const session = createInitialRuntimeSession()
           runtimeRef.current = session
           setState(session.state)
           setRestored(false)
+          setResumed(false)
           setStartup({ status: 'ready' })
         } else if (result.status === 'selection-required') {
           setStartup(result)
@@ -165,6 +170,15 @@ export function useGuanyuanGame() {
 
   const retryStartup = useCallback(() => setRetryNonce(value => value + 1), [])
 
+  const exportPortableSavePackage = useCallback(async (): Promise<PortableSaveExportResult> => {
+    const session = runtimeRef.current
+    const repository = repositoryRef.current
+    if (!session || !repository) return { status: 'rejected', issue: 'not-saved-yet' }
+    return exportPortableSave(session, repository, {
+      pending: (pendingSaveCountsRef.current.get(String(session.worldId)) ?? 0) > 0,
+    })
+  }, [])
+
   const chooseSavedWorld = useCallback(async (worldId: string) => {
     const repository = repositoryRef.current
     if (!repository) return
@@ -175,6 +189,7 @@ export function useGuanyuanGame() {
         runtimeRef.current = result.session
         setState(result.session.state)
         setRestored(true)
+        setResumed(true)
         setStartup({ status: 'ready' })
       } else {
         setStartup({
@@ -319,6 +334,7 @@ export function useGuanyuanGame() {
     runtimeRef.current = createPreviewRuntimeSession(allocatePreviewWorldId())
     setState(runtimeRef.current.state)
     setRestored(false)
+    setResumed(false)
   }, [])
 
   useEffect(() => {
@@ -333,9 +349,11 @@ export function useGuanyuanGame() {
     notify,
     dismissToast,
     restored,
+    resumed,
     startup,
     chooseSavedWorld,
     retryStartup,
+    exportPortableSavePackage,
     setGoal,
     rememberDocument,
     rememberLedger,

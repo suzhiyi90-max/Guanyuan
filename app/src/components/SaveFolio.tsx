@@ -19,7 +19,7 @@ export interface SaveSummary {
 
 const dayNames = ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十']
 
-export function SaveFolio({ summary, onExport, onReset, extra }: { summary: SaveSummary, onExport?: () => void, onReset: () => void, extra?: ReactNode }) {
+export function SaveFolio({ summary, onExport, onReset, extra }: { summary: SaveSummary, onExport?: () => void | Promise<void>, onReset: () => void, extra?: ReactNode }) {
   const [open, setOpen] = useState(false)
   const [armed, setArmed] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -55,12 +55,16 @@ export function SaveFolio({ summary, onExport, onReset, extra }: { summary: Save
     return () => document.removeEventListener('keydown', onKey)
   }, [open, armed])
 
-  const handleExport = () => {
+  const handleExport = async () => {
     if (!onExport) return
-    onExport()
-    setSaved(true)
-    window.clearTimeout(savedTimer.current)
-    savedTimer.current = window.setTimeout(() => setSaved(false), 2600)
+    try {
+      await onExport()
+      setSaved(true)
+      window.clearTimeout(savedTimer.current)
+      savedTimer.current = window.setTimeout(() => setSaved(false), 2600)
+    } catch {
+      setSaved(false)
+    }
   }
 
   const handleReset = () => {
@@ -106,7 +110,7 @@ export function SaveFolio({ summary, onExport, onReset, extra }: { summary: Save
               <div className="save-folio-acts">
                 <button type="button" className="save-folio-act" onClick={handleExport} disabled={!onExport}>
                   <Download size={13} aria-hidden="true" />
-                  <span>{saved ? '底稿已存本机' : '导出底稿'}</span>
+                  <span>{saved ? '便携包已导出' : '导出便携存档'}</span>
                 </button>
                 <button
                   type="button"
@@ -123,7 +127,7 @@ export function SaveFolio({ summary, onExport, onReset, extra }: { summary: Save
               <p className={`save-folio-note ${armed ? 'is-armed' : ''}`} id={`${panelId}-note`}>
                 {armed
                   ? '重立志会创建新世界；已有本机存档保留，不自动删除。'
-                  : '当前世界会自动保存到本机；导出底稿仅供查阅，不作为恢复来源。'}
+                  : '当前世界自动保存于本机；便携存档包含完整校验链，可供后续独立导入流程使用。'}
               </p>
               {extra}
             </div>
