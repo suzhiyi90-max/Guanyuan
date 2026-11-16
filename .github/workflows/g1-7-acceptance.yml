@@ -34,6 +34,7 @@ on:
       - work/w5-d1-indexeddb-save-repository
       - work/w5-d2-runtime-save-package-orchestration
       - work/w5-d3-runtime-startup-restore
+      - work/w5-d3b-app-startup-lifecycle
   pull_request:
     branches:
       - feat/g1-engine
