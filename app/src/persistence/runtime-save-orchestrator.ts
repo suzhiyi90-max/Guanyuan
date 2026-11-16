@@ -3,11 +3,11 @@ import { readLedgerEvents } from '../domain/event-ledger'
 import type { StreamCursor } from '../domain/event-replay'
 import {
   createFullSavePackage,
-  validateSavePackageChain,
   type SavePackageVerification,
 } from '../domain/save-package'
 import {
   createIncrementalSavePackage,
+  validateSavePackageChain,
   type SavePackageChain,
 } from '../domain/incremental-save-package'
 import { createWorldSnapshot } from '../domain/world-snapshot'
