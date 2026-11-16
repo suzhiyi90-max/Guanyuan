@@ -9,7 +9,7 @@ import {
   validatePortableSaveEnvelope,
   type PortableSaveEnvelope,
 } from './portable-save-export'
-import { parseStrictJsonBytes, StrictJsonParseError } from './strict-json'
+import { parseStrictJsonBytes, PORTABLE_SAVE_MAX_BYTES, StrictJsonParseError } from './strict-json'
 
 export type PortableSaveImportIssue =
   | 'file-too-large'
@@ -166,4 +166,18 @@ export async function importPortableSaveBytes(
     value: imported.value,
     envelope: raw as unknown as PortableSaveEnvelope,
   }
+}
+
+/** File adapter checks File.size before reading any untrusted bytes. */
+export async function importPortableSaveFile(
+  file: File,
+  repository: SaveRepository,
+  options: { readonly now?: () => string } = {},
+): Promise<PortableSaveImportResult> {
+  if (file.size > PORTABLE_SAVE_MAX_BYTES) return { status: 'rejected', issue: 'file-too-large' }
+  let bytes: ArrayBuffer
+  try { bytes = await file.arrayBuffer() } catch {
+    return { status: 'rejected', issue: 'file-read-failed' }
+  }
+  return importPortableSaveBytes(new Uint8Array(bytes), repository, options)
 }
