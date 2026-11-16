@@ -110,6 +110,7 @@ export function useGuanyuanGame() {
   const [state, setState] = useState<GameState>(() => createInitialGameState())
   const [toast, setToast] = useState<ToastMessage | null>(null)
   const [restored, setRestored] = useState(false)
+  const [resumed, setResumed] = useState(false)
   const [startup, setStartup] = useState<StartupState>({ status: 'loading' })
   const [retryNonce, setRetryNonce] = useState(0)
 
@@ -130,6 +131,7 @@ export function useGuanyuanGame() {
       runtimeRef.current = session
       setState(session.state)
       setRestored(false)
+      setResumed(false)
       persistenceEnabledRef.current = false
       setStartup({ status: 'ready' })
     } else {
@@ -140,12 +142,14 @@ export function useGuanyuanGame() {
           runtimeRef.current = result.session
           setState(result.session.state)
           setRestored(true)
+          setResumed(true)
           setStartup({ status: 'ready' })
         } else if (result.status === 'missing') {
           const session = createInitialRuntimeSession()
           runtimeRef.current = session
           setState(session.state)
           setRestored(false)
+          setResumed(false)
           setStartup({ status: 'ready' })
         } else if (result.status === 'selection-required') {
           setStartup(result)
@@ -185,6 +189,7 @@ export function useGuanyuanGame() {
         runtimeRef.current = result.session
         setState(result.session.state)
         setRestored(true)
+        setResumed(true)
         setStartup({ status: 'ready' })
       } else {
         setStartup({
@@ -329,6 +334,7 @@ export function useGuanyuanGame() {
     runtimeRef.current = createPreviewRuntimeSession(allocatePreviewWorldId())
     setState(runtimeRef.current.state)
     setRestored(false)
+    setResumed(false)
   }, [])
 
   useEffect(() => {
@@ -343,6 +349,7 @@ export function useGuanyuanGame() {
     notify,
     dismissToast,
     restored,
+    resumed,
     startup,
     chooseSavedWorld,
     retryStartup,
