@@ -104,6 +104,7 @@ export function useGuanyuanGame() {
   const runtimeRef = useRef<PreviewRuntimeSession | null>(null)
   const repositoryRef = useRef<SaveRepository | null>(null)
   const persistenceQueueRef = useRef<Promise<void>>(Promise.resolve())
+  const pendingSaveCountRef = useRef(0)
   const persistenceEnabledRef = useRef(false)
   const [state, setState] = useState<GameState>(() => createInitialGameState())
   const [toast, setToast] = useState<ToastMessage | null>(null)
@@ -191,15 +192,21 @@ export function useGuanyuanGame() {
   const scheduleSave = useCallback((session: PreviewRuntimeSession) => {
     const repository = repositoryRef.current
     if (!repository || !persistenceEnabledRef.current) return
+    pendingSaveCountRef.current += 1
+    setRestored(false)
     persistenceQueueRef.current = persistenceQueueRef.current.then(async () => {
-      const result = await savePreviewRuntimeSession(session, repository)
-      if (result.status === 'rejected') {
-        setToast({ id: Date.now(), title: '本机存档未写成', detail: `事件仍在当前会话中；存档失败：${result.issue}` })
-      } else {
-        setRestored(true)
+      let saved = false
+      try {
+        const result = await savePreviewRuntimeSession(session, repository)
+        saved = result.status === 'saved'
+        if (result.status === 'rejected') {
+          setToast({ id: Date.now(), title: '本机存档未写成', detail: `事件仍在当前会话中；存档失败：${result.issue}` })
+        }
+      } catch {
+        setToast({ id: Date.now(), title: '本机存档未写成', detail: '事件仍在当前会话中；存储服务发生异常。' })
       }
-    }).catch(() => {
-      setToast({ id: Date.now(), title: '本机存档未写成', detail: '事件仍在当前会话中；存储服务发生异常。' })
+      pendingSaveCountRef.current = Math.max(0, pendingSaveCountRef.current - 1)
+      if (pendingSaveCountRef.current === 0) setRestored(saved)
     })
   }, [])
 
