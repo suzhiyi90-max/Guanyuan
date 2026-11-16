@@ -36,6 +36,7 @@ import { placeSpecs, recordPlace, type PlaceId } from './placeTrail'
 import { lastReviewOrigin, originLabels, recordReviewOrigin, useReviewTrail, type ReviewOrigin } from './reviewTrail'
 import { readView } from './viewMemory'
 import type { FolioKey } from './folioIndex'
+import type { PortableSaveEnvelope } from './persistence/portable-save-export'
 import { useReadPrefs } from './readPrefs'
 import { installSoundHooks } from './audio'
 import { worldEvents, type WorldEvent } from './game/schedule'
@@ -167,24 +168,35 @@ function GameApp({ game }: { game: ReturnType<typeof useGuanyuanGame> }) {
     restored: game.restored,
   }), [state.day, period, currentGoal, state.privateFunds, state.clues.length, state.plan, game.restored])
 
-  const exportSave = useCallback(() => {
-    const payload = {
-      schema: 'guanyuan.preview-projection.v1',
-      exportedAt: new Date().toISOString(),
-      summary: { day: state.day, period, goalId: state.goalId, privateFunds: state.privateFunds, clues: state.clues.length },
-      state,
+  const exportSave = useCallback(async () => {
+    const result = await game.exportPortableSavePackage()
+    if (result.status !== 'exported') {
+      const messages: Record<string, string> = {
+        'not-saved-yet': '本局尚未完成首次本机自动存档，请等待存档写入后再导出。',
+        'save-pending': '本机自动存档仍在写入，请稍后再导出。',
+        'world-mismatch': '当前人生与本机存档不一致，已停止导出。',
+        'chain-corrupt': '存档链校验未通过，未生成导出文件。',
+        'schema-unsupported': '存档版本暂不支持便携导出。',
+        'checksum-failed': '校验摘要生成失败，未生成导出文件。',
+        'storage-error': '本机存档读取失败，未生成导出文件。',
+      }
+      notify('便携存档未导出', messages[result.issue] ?? `存档读取失败：${result.issue}`)
+      return
     }
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+    const envelope: PortableSaveEnvelope = result.envelope
+    const blob = new Blob([JSON.stringify(envelope, null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const anchor = document.createElement('a')
+    const date = new Date().toISOString().slice(0, 10)
+    const safeWorld = String(envelope.worldId).replace(/[^a-zA-Z0-9-]/gu, '').slice(-12) || 'world'
     anchor.href = url
-    anchor.download = `观远-会话底稿-第${state.day}日.json`
+    anchor.download = `观远-便携存档-${date}-第${state.day}日-${safeWorld}.json`
     document.body.appendChild(anchor)
     anchor.click()
     anchor.remove()
     window.setTimeout(() => URL.revokeObjectURL(url), 1200)
-    notify('底稿已存本机', `第${dayNames[state.day - 1]}日 · ${period} · 只取一份底稿，不改本档`)
-  }, [state, period, notify])
+    notify('便携存档包已导出', `第${dayNames[state.day - 1]}日 · ${period} · 完整校验链 · 仅下载到本机`)
+  }, [game, state.day, period, notify])
 
   // FE-083：案头压角三签，只在本机没有存档的新局、且还没看过时出现。
   const guideOpen = prologueDone && overlay !== 'goal' && (!readPrefs.guide || guideReplay) && !guideClosed
