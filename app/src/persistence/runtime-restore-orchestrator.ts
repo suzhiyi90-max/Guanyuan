@@ -137,3 +137,21 @@ export async function restorePreviewRuntimeSession(
   })
   return { status: 'restored', session, stored }
 }
+
+
+export type RuntimeStartupRestoreResult =
+  | RuntimeRestoreResult
+  | { readonly status: 'selection-required'; readonly worlds: readonly import('./save-repository').SaveWorldSummary[] }
+
+/** Auto-selects only when exactly one save exists; multiple lives require an explicit choice. */
+export async function restoreSingleSavedRuntimeWorld(
+  repository: SaveRepository,
+): Promise<RuntimeStartupRestoreResult> {
+  const listed = await repository.listWorlds()
+  if (listed.status === 'rejected') return { status: 'rejected', issue: listed.issue }
+  if (listed.value.length === 0) return { status: 'missing' }
+  if (listed.value.length > 1) {
+    return { status: 'selection-required', worlds: listed.value }
+  }
+  return restorePreviewRuntimeSession(listed.value[0].worldId, repository)
+}
