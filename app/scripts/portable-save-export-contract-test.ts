@@ -52,6 +52,7 @@ async function main(): Promise<void> {
   if (fullExport.status === 'exported') {
     const mutated = { ...fullExport.envelope, exportedAt: '2026-11-16T08:03:00.000Z' }
     check('envelope field tampering fails checksum validation', !(await validatePortableSaveEnvelope(mutated)))
+    check('unknown envelope fields are rejected', !(await validatePortableSaveEnvelope({ ...fullExport.envelope, unexpected: true })))
   } else check('envelope field tampering fails checksum validation', false)
   check('export is read-only for Full-only repository', repo.current === fullBefore
     && session0.ledger.head === 0 && session0.state === session0.state)
