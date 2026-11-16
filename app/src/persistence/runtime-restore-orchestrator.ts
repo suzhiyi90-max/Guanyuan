@@ -29,6 +29,11 @@ function cursorAt(chain: SavePackageChain): StreamCursor {
   return chain.snapshot.streamHead
 }
 
+function sameCursor(left: StreamCursor, right: StreamCursor): boolean {
+  return left.kind === right.kind && left.seq === right.seq
+    && (left.kind === 'genesis' || (right.kind === 'event' && left.eventId === right.eventId))
+}
+
 function collectEvents(chain: SavePackageChain): readonly LedgerEvent<PreviewRuntimeEventKind>[] {
   if (chain.packageKind === 'full') return chain.events as readonly LedgerEvent<PreviewRuntimeEventKind>[]
   return [...collectEvents(chain.basePackage), ...chain.events as readonly LedgerEvent<PreviewRuntimeEventKind>[]]
@@ -97,6 +102,11 @@ export async function restorePreviewRuntimeSession(
   }
   if (stored.packageChain.schemaVersion !== PREVIEW_RUNTIME_SCHEMA_VERSION) {
     return { status: 'rejected', issue: 'runtime-restore-schema-mismatch' }
+  }
+  // The repository's atomic metadata pointer must agree with the verified package head.
+  // Never restore from a valid chain while ignoring a divergent persisted head pointer.
+  if (!sameCursor(stored.streamHead, stored.packageChain.snapshot.streamHead)) {
+    return { status: 'rejected', issue: 'runtime-restore-package-invalid' }
   }
 
   const verification = verificationFor()
