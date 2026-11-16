@@ -1,6 +1,6 @@
 /**
  * C-92 存档案卷：立志纸左下的一枚压角折页。
- * 只做三件事——读本档现状（只读投影）、导出底稿（只读下载）、清空重立志（两段落印，复用既有 resetGame）。
+ * 只做三件事——读本档现状（只读投影）、导出底稿（只读下载）、另立新志（两段落印，复用既有 resetGame）。
  * 不改存档结构、不新增存储 key、不设多档位；骑缝与半印只作装帧，不作印信。
  */
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
@@ -115,14 +115,14 @@ export function SaveFolio({ summary, onExport, onReset, extra }: { summary: Save
                   aria-describedby={`${panelId}-note`}
                 >
                   {armed ? <ShieldAlert size={13} aria-hidden="true" /> : <RotateCcw size={13} aria-hidden="true" />}
-                  <span>{armed ? '再按一次 · 落印清档' : '清空重立志'}</span>
+                  <span>{armed ? '再按一次 · 另立新志' : '清空重立志'}</span>
                 </button>
               </div>
 
               {armed && <div className="save-folio-countdown" aria-hidden="true"><i /></div>}
               <p className={`save-folio-note ${armed ? 'is-armed' : ''}`} id={`${panelId}-note`}>
                 {armed
-                  ? '重立志会创建新世界；旧版底稿保留，不自动恢复。'
+                  ? '重立志会创建新世界；已有本机存档保留，不自动删除。'
                   : '当前世界会自动保存到本机；导出底稿仅供查阅，不作为恢复来源。'}
               </p>
               {extra}
