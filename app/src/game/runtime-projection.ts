@@ -126,6 +126,7 @@ export function reducePreviewRuntimeEvent(
         || material > state.material.arrived
         || typeof supervisor !== 'string'
         || !['县丞会勘 · 工头监作', '仅工头监作 · 暂无会勘', '请河工幕友估工 · 县丞会勘'].includes(supervisor)
+        || typeof detail !== 'string'
         || detail !== `${leaderName}主办 · 料${material}垛 · 夫${labor}人 · ${supervisor}`
         || (source.guarantee !== undefined && source.guarantee !== true)) {
         return rejectReplay('river-plan-conditions-invalid')
