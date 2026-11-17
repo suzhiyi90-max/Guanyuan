@@ -58,7 +58,7 @@ try {
     const module = await import('/src/persistence/indexeddb-save-repository-contract-test.ts')
     return module.runIndexedDbSaveRepositoryContractTests()
   })
-  check('IndexedDB 世界存档仓储专项契约', indexedDbContracts.length === 27, `${indexedDbContracts.length}/27`)
+  check('IndexedDB 世界存档仓储专项契约', indexedDbContracts.length === 29, `${indexedDbContracts.length}/29`)
   await page.evaluate(raw => { localStorage.clear(); localStorage.setItem('guanyuan.save.v1', raw) }, legacyDraft)
   await page.reload({ waitUntil: 'domcontentloaded' })
   await settle(600)
@@ -902,6 +902,8 @@ try {
     return result.status === 'success' && result.value === null
   }, deleteFixture.worldId)
   check('E3 确认删除后目录与存档仓储均无该人生', deleteResult)
+  await settle(100)
+  check('E3 删除完成后焦点归还档案目录', await page.evaluate(() => document.activeElement?.closest('.save-folio-library') !== null))
 
   // 7.85 FE-020 东堤暴雨与洪峰只读投影
   await page.goto(smokeFixtureUrl('day8'), { waitUntil: 'domcontentloaded' })
