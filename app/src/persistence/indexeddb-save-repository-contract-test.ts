@@ -201,6 +201,37 @@ export async function runIndexedDbSaveRepositoryContractTests(): Promise<readonl
       && raceDelete.status === 'rejected' && raceDelete.issue === 'save-repository-head-conflict')
   check('concurrent save and delete settle as one serialized outcome', raceIsAtomic && raceOutcome)
   await raceRepository.close()
+
+  const importDeleteRepository = new IndexedDbSaveRepository(globalThis.indexedDB, `${databaseName}-import-delete-race`)
+  const importDeleteWorldId = brandedId<'WorldId'>('w5-e3-import-delete-race') as WorldId
+  const importDeleteFull = { ...full, worldId: importDeleteWorldId, snapshot: { ...full.snapshot, worldId: importDeleteWorldId } } as unknown as FullSavePackage
+  const importDeleteSeed = await importDeleteRepository.commitWorld({
+    worldId: importDeleteWorldId, packageChain: importDeleteFull, expectedHead: null, savedAt: '2026-11-16T00:08:00.000Z',
+  })
+  const [deleteDuringImport, importDuringDelete] = await Promise.all([
+    importDeleteRepository.deleteWorld(importDeleteWorldId, genesis),
+    importDeleteRepository.importWorld({
+      worldId: importDeleteWorldId, packageChain: importDeleteFull, streamHead: genesis, savedAt: '2026-11-16T00:09:00.000Z',
+    }),
+  ])
+  const importDeleteFinal = await importDeleteRepository.loadWorld(importDeleteWorldId)
+  const importDeleteConsistent = importDeleteSeed.status === 'success'
+    && deleteDuringImport.status === 'success' && deleteDuringImport.value
+    && ((importDuringDelete.status === 'success' && importDeleteFinal.status === 'success'
+        && importDeleteFinal.value?.streamHead.kind === 'genesis')
+      || (importDuringDelete.status === 'rejected' && importDuringDelete.issue === 'save-repository-world-exists'
+        && importDeleteFinal.status === 'success' && importDeleteFinal.value === null))
+  check('concurrent import and delete preserve one transactionally valid final state', importDeleteConsistent)
+  if (importDeleteFinal.status === 'success' && importDeleteFinal.value === null) {
+    const retryImport = await importDeleteRepository.importWorld({
+      worldId: importDeleteWorldId, packageChain: importDeleteFull, streamHead: genesis, savedAt: '2026-11-16T00:10:00.000Z',
+    })
+    check('delete racing with import leaves no orphan package keys', retryImport.status === 'success')
+  } else {
+    check('delete racing with import leaves no orphan package keys', importDeleteFinal.status === 'success'
+      && importDeleteFinal.value?.packageChain.checksum === checksum1)
+  }
+  importDeleteRepository.close()
   await importRepository.deleteWorld(worldId, head1)
   await concurrentRepository.deleteWorld(worldId, head1)
   importRepository.close()
