@@ -21,6 +21,7 @@ export type ScenePlateId =
 
 export interface ScenePlateSpec {
   src: string | null
+  targetSrc?: string
   fallbackSrc?: string
   fallbackCredit?: string
   alt: string
@@ -79,6 +80,7 @@ export const scenePlates: Record<ScenePlateId, ScenePlateSpec> = {
   // FE-170：用户提供并通过画面审查；文件入库完成后只需填入 src，不改组件与交互。
   'exam-registration-yard': {
     src: null,
+    targetSrc: '/assets/exam-registration-yard.png',
     alt: '科举报名院落：北方县学院门、青砖院墙与候场空地',
     credit: '科举报名院落 · FE-170 用户提供美术 · 文件接入待完成',
     pending: true,
@@ -86,6 +88,7 @@ export const scenePlates: Record<ScenePlateId, ScenePlateSpec> = {
   },
   'exam-hall': {
     src: null,
+    targetSrc: '/assets/exam-hall.png',
     alt: '科举考场：成排号舍、木隔板、考桌与高窗天光',
     credit: '科举考场 · FE-170 用户提供美术 · 文件接入待完成',
     pending: true,
@@ -93,6 +96,7 @@ export const scenePlates: Record<ScenePlateId, ScenePlateSpec> = {
   },
   'audience-hall': {
     src: null,
+    targetSrc: '/assets/audience-hall.png',
     alt: '正式拜谒厅堂：正厅主位、屏风、宾席与行礼空间',
     credit: '正式拜谒厅堂 · FE-170 用户提供美术 · 文件接入待完成',
     pending: true,
@@ -203,6 +207,7 @@ const eventPlateMap: Record<string, ScenePlateId> = {
 export type SceneObjectAssetId = 'exam-results-board-frame' | 'exam-desk' | 'court-gavel'
 export interface SceneObjectAssetSpec {
   src: string | null
+  targetSrc: string
   alt: string
   credit: string
   role: 'document-frame' | 'foreground-prop'
@@ -216,6 +221,7 @@ export interface SceneObjectAssetSpec {
 export const sceneObjectAssets: Record<SceneObjectAssetId, SceneObjectAssetSpec> = {
   'exam-results-board-frame': {
     src: null,
+    targetSrc: '/assets/exam-results-board-frame.png',
     alt: '放榜装裱框：深色雕花木框与中央空白榜纸',
     credit: '放榜装裱框 · FE-170 用户提供美术 · 画面验收通过，文件接入待完成',
     role: 'document-frame',
@@ -226,6 +232,7 @@ export const sceneObjectAssets: Record<SceneObjectAssetId, SceneObjectAssetSpec>
   },
   'exam-desk': {
     src: null,
+    targetSrc: '/assets/exam-desk.webp',
     alt: '科举考生桌案：木桌、围屏、笔架、砚台与空白宣纸',
     credit: '科举桌案 · FE-170 用户提供美术 · 已完成透明分离 · 二进制入库待完成',
     role: 'foreground-prop',
@@ -236,6 +243,7 @@ export const sceneObjectAssets: Record<SceneObjectAssetId, SceneObjectAssetSpec>
   },
   'court-gavel': {
     src: null,
+    targetSrc: '/assets/court-gavel.webp',
     alt: '惊堂木：清代州县衙门案前使用的单件厚木拍板',
     credit: '惊堂木 · FE-170 用户提供美术 · 已完成透明分离 · 二进制入库待完成',
     role: 'foreground-prop',
