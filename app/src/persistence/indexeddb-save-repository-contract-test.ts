@@ -304,7 +304,7 @@ export async function runIndexedDbSaveRepositoryContractTests(): Promise<readonl
       const transaction = abortNextCursorDelete
       if (transaction) {
         abortNextCursorDelete = null
-        transaction.abort()
+        queueMicrotask(() => transaction.abort())
       }
       return request
     },
