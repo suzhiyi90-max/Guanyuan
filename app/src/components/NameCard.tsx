@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties } from 'react'
+import { useState, type CSSProperties } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { ArrowLeftRight } from 'lucide-react'
 import { Portrait } from './Portrait'
@@ -18,11 +18,6 @@ export function NameCard({ person, state }: { person: Person; state: GameState }
   const history = sharedHistoryOf(person.id, state)
   const frame = rankCardFrameOf(person.role, person.rank)
   const frameReady = Boolean(frame && loadedFrameSrc === frame.src && failedFrameSrc !== frame.src)
-
-  useEffect(() => {
-    setLoadedFrameSrc(null)
-    setFailedFrameSrc(null)
-  }, [frame?.src])
 
   return (
     <section
