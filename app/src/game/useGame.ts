@@ -391,10 +391,10 @@ export function useGuanyuanGame() {
     commitIntent({ kind: 'plan.previewed', payload: {} })
   }, [commitIntent])
 
-  const confirmPlan = useCallback((plan: Omit<RiverPlan, 'day' | 'period'>) => {
+  const confirmPlan = useCallback((plan: Omit<RiverPlan, 'day' | 'period'> & { readonly guarantee?: boolean }) => {
     const current = runtimeRef.current!.state
-    if (current.plan || current.completedActions.includes('plan-river')) return false
-    const result = commitIntent({ kind: 'river.plan.confirmed', payload: { plan } })
+    if (current.plan || current.completedActions.includes('plan-river') || plan.guarantee !== true) return false
+    const result = commitIntent({ kind: 'river.plan.confirmed', payload: { plan: { ...plan, guarantee: true } } })
     return result.status !== 'rejected'
   }, [commitIntent])
 
