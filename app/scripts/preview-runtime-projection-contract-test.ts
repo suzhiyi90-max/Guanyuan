@@ -62,7 +62,7 @@ function append(kind: Exclude<PreviewRuntimeEventKind, 'candidate.validated'>, p
 }
 
 append('goal.selected', { goalId: 'achievement' }, t1)
-append('document.remembered', { selectedIds: ['cause-initial', 'doc-final'] }, t1)
+append('document.remembered', { selectedIds: ['cause-initial', 'scope-final'] }, t1)
 append('ledger.remembered', { selectedIds: ['E-002', 'E-003'] }, t1)
 append('person.asked', { personId: 'liangshang' }, t1)
 append('records.audited', {}, t2)
@@ -72,7 +72,12 @@ append('day.advanced', {}, t5)
 append('world.event.resolved', { eventId: 'material-arrival', optionId: 'weigh' }, t5)
 append('plan.previewed', {}, t5)
 append('river.plan.confirmed', {
-  plan: { leader: 'county', leaderName: '县丞', material: 8, labor: 24, supervisor: '工头', detail: '分段抢护并昼夜巡守' },
+  plan: {
+    leader: 'foreman', leaderName: '赵九河', material: 8, labor: 30,
+    supervisor: '县丞会勘 · 工头监作',
+    detail: '赵九河主办 · 料8垛 · 夫30人 · 县丞会勘 · 工头监作',
+    guarantee: true,
+  },
 }, t5)
 append('official.action', { key: 'files' }, t6)
 
@@ -95,7 +100,7 @@ check('projection applies banquet and official-action facts', state.giftEntries.
   && state.privateFunds === 40 && state.officialActions.includes('files')
   && state.unlocked.includes('E-004'))
 check('projection settles world event and river plan', state.handledEvents.includes('material-arrival')
-  && state.pendingEvent === null && state.plan?.leader === 'county'
+  && state.pendingEvent === null && state.plan?.leader === 'foreman'
   && state.probeKnown && state.unlocked.includes('E-007'))
 check('projection state is deeply immutable', Object.isFrozen(projection.state)
   && Object.isFrozen(state.clues) && Object.isFrozen(state.comparisons)
@@ -131,6 +136,52 @@ const invalidProjection = rebuildPreviewRuntimeProjection({
 })
 check('semantically invalid committed action rejects replay atomically', invalidProjection.status === 'rejected'
   && invalidProjection.issue === 'replay-reducer-failed')
+
+let invalidReferenceLedger: EventLedger<PreviewRuntimeEventKind> = createEventLedger<PreviewRuntimeEventKind>(worldId)
+const invalidReferenceAppend = appendLedgerEvent(invalidReferenceLedger, {
+  source: 'player-command',
+  kind: 'ledger.remembered',
+  intentKind: 'ledger.remembered',
+  actor: 'player',
+  requestWorldTime: t1,
+  clientRequestId: 'invalid-ledger-reference',
+  payload: { selectedIds: ['E-001', 'made-up-ledger-row'] },
+}, t1)
+if (invalidReferenceAppend.status !== 'appended') throw new Error('invalid-reference-fixture-append-failed')
+invalidReferenceLedger = invalidReferenceAppend.ledger
+const invalidReferenceHead = {
+  kind: 'event' as const,
+  seq: invalidReferenceLedger.events.length,
+  eventId: invalidReferenceLedger.events[invalidReferenceLedger.events.length - 1].id,
+}
+const invalidReferenceProjection = rebuildPreviewRuntimeProjection({
+  worldId, toInclusive: invalidReferenceHead, events: invalidReferenceLedger.events, registry,
+})
+check('replay rejects schema-valid but nonexistent evidence references', invalidReferenceProjection.status === 'rejected'
+  && invalidReferenceProjection.issue === 'replay-reducer-failed')
+
+let earlyAdvanceLedger: EventLedger<PreviewRuntimeEventKind> = createEventLedger<PreviewRuntimeEventKind>(worldId)
+const earlyAdvanceAppend = appendLedgerEvent(earlyAdvanceLedger, {
+  source: 'player-command',
+  kind: 'day.advanced',
+  intentKind: 'day.advanced',
+  actor: 'player',
+  requestWorldTime: t1,
+  clientRequestId: 'early-day-advance',
+  payload: {},
+}, t1)
+if (earlyAdvanceAppend.status !== 'appended') throw new Error('early-advance-fixture-append-failed')
+earlyAdvanceLedger = earlyAdvanceAppend.ledger
+const earlyAdvanceHead = {
+  kind: 'event' as const,
+  seq: earlyAdvanceLedger.events.length,
+  eventId: earlyAdvanceLedger.events[earlyAdvanceLedger.events.length - 1].id,
+}
+const earlyAdvanceProjection = rebuildPreviewRuntimeProjection({
+  worldId, toInclusive: earlyAdvanceHead, events: earlyAdvanceLedger.events, registry,
+})
+check('replay rejects day advancement outside night even with a valid event envelope', earlyAdvanceProjection.status === 'rejected'
+  && earlyAdvanceProjection.issue === 'replay-reducer-failed')
 
 if (failed > 0) throw new Error(`preview-runtime-projection: ${failed} failed, ${passed} passed`)
 console.log(`preview-runtime-projection: ${passed}/${passed} passed`)
