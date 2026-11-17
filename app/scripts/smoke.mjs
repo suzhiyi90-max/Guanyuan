@@ -245,7 +245,7 @@ try {
     const image = card?.querySelector('.name-card-rank-frame')
     return Boolean(image && image instanceof HTMLImageElement && image.naturalWidth > 0)
   }, null, { timeout: 5000 })
-  check('C-157 官品卡框按既有品级加载，人物数据仍由界面叠加', await page.locator('.name-card').getAttribute('data-rank-frame') === 'official-7-9' && await page.locator('.name-card').getAttribute('data-rank-frame-status') === 'loaded')
+  check('C-157 官品卡框按既有品级加载，人物数据仍由界面按纸心 slotMap 叠加', await page.locator('.name-card').getAttribute('data-rank-frame') === 'official-7-9' && await page.locator('.name-card').getAttribute('data-rank-frame-status') === 'loaded' && await page.locator('.name-card').getAttribute('data-rank-card-slot-map') === 'paper-center-v1')
   await shot('91-rank-card-official-1440')
   await page.setViewportSize({ width: 1024, height: 768 })
   await settle(180)
