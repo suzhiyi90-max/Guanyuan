@@ -6966,3 +6966,122 @@ button.archive-node:hover { border-color: var(--cinnabar); color: var(--cinnabar
     animation: none !important;
   }
 }
+
+/* FE-171 / C-157：七族品秩卡框。图像负责装裱，人物字段仍由 DOM 投影。 */
+.name-card.is-rank-card {
+  position: relative;
+  width: min(100%, 260px);
+  aspect-ratio: 3 / 4;
+  min-height: 0;
+  margin: 0 auto 14px;
+  padding: 0;
+  overflow: visible;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.name-card-rank-frame {
+  display: none;
+}
+.name-card.is-rank-card .name-card-rank-frame {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  pointer-events: none;
+}
+.name-card.is-rank-card .name-card-mount {
+  display: none;
+}
+.name-card.is-rank-card .name-card-face {
+  position: absolute;
+  inset: var(--rank-card-inset-y) var(--rank-card-inset-x);
+  z-index: 1;
+  display: grid;
+  grid-template-rows: 44% 38% 18%;
+  align-items: center;
+  justify-items: center;
+  gap: 0;
+  min-height: 0;
+  padding: 0 5%;
+  text-align: center;
+}
+.name-card.is-rank-card .name-card-face > .portrait {
+  grid-row: 1;
+  justify-self: center;
+  align-self: center;
+  margin: 0;
+}
+.name-card.is-rank-card .name-card-inscription {
+  grid-row: 2;
+  align-self: center;
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  text-align: center;
+}
+.name-card.is-rank-card .name-card-inscription b {
+  font-size: 18px;
+  letter-spacing: .2em;
+}
+.name-card.is-rank-card .name-card-inscription small {
+  margin-top: 4px;
+  font-size: 9px;
+}
+.name-card.is-rank-card .name-card-inscription i {
+  margin-top: 5px;
+  font-size: 9px;
+  color: var(--ink-2);
+}
+.name-card.is-rank-card .name-card-specialty,
+.name-card.is-rank-card .name-card-origin {
+  display: none;
+}
+.name-card.is-rank-card .name-card-seals {
+  grid-row: 3;
+  align-self: start;
+  justify-content: center;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  padding-top: 2%;
+}
+.name-card.is-rank-card[data-face='back'] .name-card-face {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3% 7%;
+}
+.name-card.is-rank-card[data-face='back'] .name-card-back {
+  width: 100%;
+  max-height: 100%;
+  overflow: auto;
+  text-align: center;
+}
+.name-card.is-rank-card[data-face='back'] .name-card-back ol {
+  text-align: left;
+}
+.name-card.is-rank-card .name-card-flip,
+.name-card.is-rank-card > footer {
+  position: relative;
+  z-index: 1;
+}
+@media (max-width: 700px) {
+  .name-card.is-rank-card {
+    width: min(100%, 244px);
+  }
+  .name-card.is-rank-card .name-card-inscription b {
+    font-size: 17px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .name-card-rank-frame {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
