@@ -69,10 +69,16 @@ session = asked.session
 const earlyDayAdvance = dispatchPreviewRuntimeIntent(session, {
   kind: 'day.advanced', payload: {},
 }, 'early-day-advance')
-check('day cannot advance before the night period', earlyDayAdvance.status === 'rejected'
-  && earlyDayAdvance.reason === 'replay-rejected' && earlyDayAdvance.session.ledger.head === 2
-  && earlyDayAdvance.session.state.day === 1 && earlyDayAdvance.session.state.periodIndex === 1)
-session = earlyDayAdvance.session
+check('player may end a day early and advance from the current period', earlyDayAdvance.status === 'appended'
+  && earlyDayAdvance.session.ledger.head === 3 && earlyDayAdvance.session.state.day === 2
+  && earlyDayAdvance.session.state.pendingEvent === 'material-arrival')
+if (earlyDayAdvance.status !== 'appended') throw new Error('early-day-advance-fixture-failed')
+const skippedPendingEvent = dispatchPreviewRuntimeIntent(earlyDayAdvance.session, {
+  kind: 'day.advanced', payload: {},
+}, 'skip-pending-event')
+check('a new day cannot begin while a formal world event remains pending', skippedPendingEvent.status === 'rejected'
+  && skippedPendingEvent.reason === 'replay-rejected' && skippedPendingEvent.session.ledger.head === 3
+  && skippedPendingEvent.session.state.day === 2 && skippedPendingEvent.session.state.pendingEvent === 'material-arrival')
 
 const repeatedPerson = dispatchPreviewRuntimeIntent(session, {
   kind: 'person.asked', payload: { personId: 'liangshang' },
