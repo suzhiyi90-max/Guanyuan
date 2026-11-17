@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type CSSProperties } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { ArrowLeftRight } from 'lucide-react'
 import { Portrait } from './Portrait'
@@ -30,7 +30,7 @@ export function NameCard({ person, state }: { person: Person; state: GameState }
       style={frameReady && frame ? {
         '--rank-card-inset-x': `${frame.insetX}%`,
         '--rank-card-inset-y': `${frame.insetY}%`,
-      } as React.CSSProperties : undefined}
+      } as CSSProperties : undefined}
       data-name-card="folio"
       data-face={flipped ? 'back' : 'front'}
       data-rank-frame={frame?.id ?? 'none'}
