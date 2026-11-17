@@ -50,5 +50,6 @@
 | `34445.png` | `public/assets/exam-results-board-frame.png` | 放榜页透明装裱框 | 画面与透明通道通过；二进制文件待入库 |
 | `34446.png` | `public/assets/audience-hall.png` | 官场正式拜谒厅堂背景 | 画面通过；二进制文件待入库 |
 | `34444.png` | `public/assets/exam-desk.png` | 科举考生桌案前景道具 | 画面通过；当前无 Alpha 通道，需补透明背景 |
-| `34447.png` | `public/assets/court-gavel.png` | 惊堂木前景道具 | 透明通道通过；需统一项目工笔淡彩画风后接入 |
+| `34447.png` | — | 旧版惊堂木 | 已由 34448.png 替代，不接入 |
+| `34448.png` | `public/assets/court-gavel.webp`（运行版）；透明 PNG 母版另存 | 惊堂木独立前景道具 | 工具完成背景分离与透明输出；待二进制进入 Git |
 
