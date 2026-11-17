@@ -1,4 +1,4 @@
-import { people } from '../data'
+import { goals, ledgerRows, people } from '../data'
 import type { EventRegistry } from '../domain/event-registry'
 import { rebuildReadOnlyProjection, type ReadOnlyProjection, type ReplayFailure, type StreamCursor } from '../domain/event-replay'
 import type { JsonValue, LedgerEvent, WorldId } from '../domain/event-ledger'
@@ -25,13 +25,18 @@ export function reducePreviewRuntimeEvent(
   const payload = event.payload as Record<string, JsonValue>
 
   switch (event.kind) {
-    case 'goal.selected':
-      return { ...state, goalId: payload.goalId as string }
+    case 'goal.selected': {
+      const goalId = payload.goalId as string
+      if (!goals.some(goal => goal.id === goalId)) return rejectReplay('goal-not-found')
+      return { ...state, goalId }
+    }
 
     case 'document.remembered': {
       if (state.completedActions.includes('doc-remembered')) return rejectReplay('document-already-remembered')
       const selected = payload.selectedIds as string[]
-      if (selected.length < 2) return rejectReplay('document-comparison-needs-two-sources')
+      const allowed = new Set(['cause-initial', 'cause-final', 'scope-initial', 'scope-final', 'work-initial', 'work-final', 'material-initial', 'material-final'])
+      if (selected.length < 2 || selected.length > 3 || selected.some(id => !allowed.has(id))
+        || new Set(selected).size !== selected.length) return rejectReplay('document-comparison-source-invalid')
       const hasCause = selected.some(id => id.startsWith('cause'))
       const text = hasCause
         ? '初稿断言“堤土未实”，定稿改称“闸底未明”：渗水因由并无勘查依据，书办为何先下结论？'
@@ -51,7 +56,9 @@ export function reducePreviewRuntimeEvent(
     case 'ledger.remembered': {
       if (state.completedActions.includes('ledger-remembered')) return rejectReplay('ledger-already-remembered')
       const selected = payload.selectedIds as string[]
-      if (selected.length < 2) return rejectReplay('ledger-comparison-needs-two-sources')
+      const allowed = new Set(ledgerRows.map(row => row.id))
+      if (selected.length < 2 || selected.some(id => !allowed.has(id))
+        || new Set(selected).size !== selected.length) return rejectReplay('ledger-comparison-source-invalid')
       const ids = selected.join(' / ')
       return {
         ...state,
@@ -105,9 +112,30 @@ export function reducePreviewRuntimeEvent(
 
     case 'river.plan.confirmed': {
       if (state.plan) return rejectReplay('river-plan-already-confirmed')
+      if (state.pendingEvent !== null) return rejectReplay('river-plan-world-event-pending')
+      const source = payload.plan as unknown as Record<string, JsonValue>
+      const leader = source.leader
+      const leaderName = source.leaderName
+      const material = source.material
+      const labor = source.labor
+      const supervisor = source.supervisor
+      const detail = source.detail
+      if (leader !== 'foreman' || leaderName !== '赵九河'
+        || typeof material !== 'number' || !Number.isInteger(material) || material < 8 || material > 10
+        || typeof labor !== 'number' || !Number.isInteger(labor) || labor < 30 || labor > 50 || labor % 5 !== 0
+        || material > state.material.arrived
+        || typeof supervisor !== 'string'
+        || !['县丞会勘 · 工头监作', '仅工头监作 · 暂无会勘', '请河工幕友估工 · 县丞会勘'].includes(supervisor)
+        || typeof detail !== 'string'
+        || detail !== `${leaderName}主办 · 料${material}垛 · 夫${labor}人 · ${supervisor}`
+        || (source.guarantee !== undefined && source.guarantee !== true)) {
+        return rejectReplay('river-plan-conditions-invalid')
+      }
       const spent = spendAction(state, 'plan-river')
       if (!spent) return rejectReplay('river-plan-action-already-spent')
-      const plan = payload.plan as unknown as Omit<RiverPlan, 'day' | 'period'>
+      const plan: Omit<RiverPlan, 'day' | 'period'> = {
+        leader: 'foreman', leaderName: '赵九河', material, labor, supervisor, detail,
+      }
       return {
         ...spent,
         plan: { ...plan, day: state.day, period: periods[state.periodIndex] },
@@ -116,7 +144,7 @@ export function reducePreviewRuntimeEvent(
     }
 
     case 'banquet.choice': {
-      if (state.periodIndex !== 3) return rejectReplay('banquet-choice-outside-night')
+      if (state.periodIndex !== 3 || state.pendingEvent !== null) return rejectReplay('banquet-choice-outside-night')
       const actionKey = `banquet-choice-${state.day}`
       if (state.handledEvents.includes(actionKey)) return rejectReplay('banquet-already-decided')
       const choice = payload.choice
@@ -200,6 +228,8 @@ export function reducePreviewRuntimeEvent(
     }
 
     case 'day.advanced':
+      if (state.pendingEvent !== null) return rejectReplay('day-advance-world-event-pending')
+      if (state.day >= 10) return rejectReplay('day-advance-after-final-day')
       return advanceDay(state)
 
     default: {

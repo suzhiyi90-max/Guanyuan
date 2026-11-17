@@ -112,9 +112,9 @@ async function main(): Promise<void> {
     check('portable import refuses an existing WorldId', false)
   }
 
-  const session1 = appendGoal(session0, 'river-repair')
+  const session1 = appendGoal(session0, 'achievement')
   await savePreviewRuntimeSession(session1, repo)
-  const session2 = appendGoal(session1, 'canal-inspection')
+  const session2 = appendGoal(session1, 'integrity')
   await savePreviewRuntimeSession(session2, repo)
   const incrementalBefore = repo.current
   const incrementalExport = await exportPortableSave(session2, repo, { now: () => '2026-11-16T08:04:00.000Z' })

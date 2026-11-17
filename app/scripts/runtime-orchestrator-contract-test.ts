@@ -36,6 +36,27 @@ check('same idempotency key with changed payload is rejected as conflict', confl
   && conflict.reason === 'idempotency-conflict' && conflict.session.ledger.head === 1)
 session = conflict.session
 
+const unknownGoal = dispatchPreviewRuntimeIntent(session, {
+  kind: 'goal.selected', payload: { goalId: 'not-a-real-goal' },
+}, 'unknown-goal')
+check('schema-valid but unknown goal is rejected by replay without appending', unknownGoal.status === 'rejected'
+  && unknownGoal.reason === 'replay-rejected' && unknownGoal.session.ledger.head === 1)
+session = unknownGoal.session
+
+const unknownDocumentSource = dispatchPreviewRuntimeIntent(session, {
+  kind: 'document.remembered', payload: { selectedIds: ['cause-initial', 'not-a-document-source'] },
+}, 'unknown-document-source')
+check('schema-valid but unknown document references cannot become evidence', unknownDocumentSource.status === 'rejected'
+  && unknownDocumentSource.reason === 'replay-rejected' && unknownDocumentSource.session.ledger.head === 1)
+session = unknownDocumentSource.session
+
+const unknownLedgerSource = dispatchPreviewRuntimeIntent(session, {
+  kind: 'ledger.remembered', payload: { selectedIds: ['E-001', 'not-a-ledger-source'] },
+}, 'unknown-ledger-source')
+check('schema-valid but unknown ledger references cannot become evidence', unknownLedgerSource.status === 'rejected'
+  && unknownLedgerSource.reason === 'replay-rejected' && unknownLedgerSource.session.ledger.head === 1)
+session = unknownLedgerSource.session
+
 const asked = dispatchPreviewRuntimeIntent(session, {
   kind: 'person.asked', payload: { personId: 'liangshang' },
 }, 'ask-liangshang')
@@ -44,6 +65,20 @@ check('person contact is a ledger fact and action cost is projected once', asked
   && asked.session.state.periodIndex === 1)
 if (asked.status !== 'appended') throw new Error('person-ask-fixture-failed')
 session = asked.session
+
+const earlyDayAdvance = dispatchPreviewRuntimeIntent(session, {
+  kind: 'day.advanced', payload: {},
+}, 'early-day-advance')
+check('player may end a day early and advance from the current period', earlyDayAdvance.status === 'appended'
+  && earlyDayAdvance.session.ledger.head === 3 && earlyDayAdvance.session.state.day === 2
+  && earlyDayAdvance.session.state.pendingEvent === 'material-arrival')
+if (earlyDayAdvance.status !== 'appended') throw new Error('early-day-advance-fixture-failed')
+const skippedPendingEvent = dispatchPreviewRuntimeIntent(earlyDayAdvance.session, {
+  kind: 'day.advanced', payload: {},
+}, 'skip-pending-event')
+check('a new day cannot begin while a formal world event remains pending', skippedPendingEvent.status === 'rejected'
+  && skippedPendingEvent.reason === 'replay-rejected' && skippedPendingEvent.session.ledger.head === 3
+  && skippedPendingEvent.session.state.day === 2 && skippedPendingEvent.session.state.pendingEvent === 'material-arrival')
 
 const repeatedPerson = dispatchPreviewRuntimeIntent(session, {
   kind: 'person.asked', payload: { personId: 'liangshang' },
@@ -92,6 +127,19 @@ check('new WorldId starts an independent empty fact stream', resetWorld.worldId 
 
 check('candidate.validated remains outside the business preview registry',
   !session.registry.schemas.some(schema => schema.kind === 'candidate.validated'))
+
+const invalidPlanSession = createPreviewRuntimeSession('w5-c1-invalid-plan-world')
+const missingGuarantee = dispatchPreviewRuntimeIntent(invalidPlanSession, {
+  kind: 'river.plan.confirmed',
+  payload: { plan: {
+    leader: 'foreman', leaderName: '赵九河', material: 8, labor: 30,
+    supervisor: '县丞会勘 · 工头监作',
+    detail: '赵九河主办 · 料8垛 · 夫30人 · 县丞会勘 · 工头监作',
+    guarantee: false,
+  } },
+}, 'plan-without-guarantee')
+check('new plan commands cannot omit the required guarantee attestation', missingGuarantee.status === 'rejected'
+  && missingGuarantee.reason === 'schema-payload-invalid' && missingGuarantee.session.ledger.head === 0)
 
 let banquetSession = createPreviewRuntimeSession('w5-c1-banquet-world')
 for (const [intent, id] of [

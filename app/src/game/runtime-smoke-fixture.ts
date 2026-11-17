@@ -35,6 +35,7 @@ export function createRuntimeSmokeFixture(target: RuntimeSmokeFixture): PreviewR
         labor: 30,
         supervisor: '县丞会勘 · 工头监作',
         detail: '赵九河主办 · 料8垛 · 夫30人 · 县丞会勘 · 工头监作',
+        guarantee: true,
       },
     },
   })

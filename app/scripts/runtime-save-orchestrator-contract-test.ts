@@ -127,7 +127,7 @@ async function main(): Promise<void> {
   check('save does not mutate the supplied runtime session', initial.state === untouchedState
     && initial.ledger.head === 0)
 
-  const oneEvent = appendGoal(initial, 'river-repair')
+  const oneEvent = appendGoal(initial, 'achievement')
   const second = await savePreviewRuntimeSession(oneEvent, repository, { now: () => '2026-11-16T08:01:00.000Z' })
   check('subsequent save creates an incremental package', second.status === 'saved'
     && second.packageKind === 'incremental' && second.streamHead.seq === 1)
@@ -150,7 +150,7 @@ async function main(): Promise<void> {
     : null
   check('persisted package chain revalidates checksum, replay and snapshot', validated?.status === 'valid')
 
-  const twoEvents = appendGoal(oneEvent, 'canal-inspection')
+  const twoEvents = appendGoal(oneEvent, 'integrity')
   const third = await savePreviewRuntimeSession(twoEvents, repository)
   check('second incremental save extends the same immutable package chain', third.status === 'saved'
     && third.packageKind === 'incremental'
@@ -161,7 +161,7 @@ async function main(): Promise<void> {
   check('stale runtime cannot overwrite a newer persisted head', stale.status === 'rejected'
     && stale.issue === 'runtime-save-base-ahead')
 
-  const threeEvents = appendGoal(twoEvents, 'flood-control-review')
+  const threeEvents = appendGoal(twoEvents, 'network')
   repository.failNextCommit = 'save-repository-head-conflict'
   const concurrent = await savePreviewRuntimeSession(threeEvents, repository)
   check('repository CAS conflict is surfaced without mutating runtime state', concurrent.status === 'rejected'
