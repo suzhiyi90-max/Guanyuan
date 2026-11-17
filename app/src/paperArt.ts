@@ -293,6 +293,19 @@ export const rankCardFrames: Record<RankCardFrameId, RankCardFrameSpec> = {
   },
 }
 
+/**
+ * C-157 slotMap：相对逐族 inset 后的纸心定位。
+ * 爵封与荣誉槽先保留位置，不渲染空标签；有权威人物事实后再接入。
+ */
+export const rankCardSlotMap = {
+  portrait: { top: 2, height: 44 },
+  identity: { top: 47, height: 17 },
+  rank: { top: 66, height: 10 },
+  nobility: { top: 77, height: 6 },
+  honor: { top: 84, height: 6 },
+  marks: { top: 92, height: 8 },
+} as const
+
 const officialGradeDigits: Record<string, number> = {
   一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9,
 }
