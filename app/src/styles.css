@@ -6970,6 +6970,8 @@ button.archive-node:hover { border-color: var(--cinnabar); color: var(--cinnabar
 /* FE-171 / C-157：七族品秩卡框。图像负责装裱，人物字段仍由 DOM 投影。 */
 .name-card.is-rank-card {
   position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
   width: min(100%, 260px);
   min-height: 0;
   margin: 0 auto 14px;
@@ -6990,6 +6992,7 @@ button.archive-node:hover { border-color: var(--cinnabar); color: var(--cinnabar
 }
 .name-card.is-rank-card .name-card-rank-frame {
   position: relative;
+  grid-area: 1 / 1;
   inset: auto;
   z-index: 0;
   display: block;
@@ -7004,11 +7007,14 @@ button.archive-node:hover { border-color: var(--cinnabar); color: var(--cinnabar
   display: none;
 }
 .name-card.is-rank-card .name-card-face {
-  position: absolute;
-  inset: var(--rank-card-inset-y) var(--rank-card-inset-x);
+  position: relative;
+  grid-area: 1 / 1;
+  inset: auto;
   z-index: 1;
   display: block;
+  min-width: 0;
   min-height: 0;
+  margin: var(--rank-card-inset-y-width) var(--rank-card-inset-x);
   padding: 0;
   text-align: center;
 }
