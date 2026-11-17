@@ -54,12 +54,22 @@ async function main(): Promise<void> {
   const missing = await restorePreviewRuntimeSession(original.worldId, repository)
   check('missing save returns missing without manufacturing a session', missing.status === 'missing' && original.ledger.head === 0)
 
-  const first = dispatchPreviewRuntimeIntent(original, { kind: 'goal.selected', payload: { goalId: 'river-repair' } })
+  const first = dispatchPreviewRuntimeIntent(original, { kind: 'goal.selected', payload: { goalId: 'achievement' } })
   if (first.status !== 'appended') throw new Error('restore-test-first-append-failed')
   const saved = await savePreviewRuntimeSession(first.session, repository)
   check('fixture saved as a genesis-based full package', saved.status === 'saved' && saved.packageKind === 'full')
 
-  const second = dispatchPreviewRuntimeIntent(first.session, { kind: 'day.advanced', payload: {} })
+  let beforeAdvance = first.session
+  for (const [intent, id] of [
+    [{ kind: 'person.asked', payload: { personId: 'xiancheng' } }, 'restore-ask-xiancheng'],
+    [{ kind: 'records.audited', payload: {} }, 'restore-audit'],
+    [{ kind: 'river.probed', payload: {} }, 'restore-probe'],
+  ] as const) {
+    const result = dispatchPreviewRuntimeIntent(beforeAdvance, intent as never, id)
+    if (result.status !== 'appended') throw new Error(`restore-test-pre-advance-failed:${id}`)
+    beforeAdvance = result.session
+  }
+  const second = dispatchPreviewRuntimeIntent(beforeAdvance, { kind: 'day.advanced', payload: {} })
   if (second.status !== 'appended') throw new Error('restore-test-second-append-failed')
   const incremented = await savePreviewRuntimeSession(second.session, repository)
   check('fixture extended by an incremental package', incremented.status === 'saved' && incremented.packageKind === 'incremental')
@@ -125,20 +135,22 @@ async function main(): Promise<void> {
   const singleRestore = await restoreSingleSavedRuntimeWorld(singleRepository)
   check('exactly one saved life is restored without requiring a manual choice',
     singleRestore.status === 'restored' && singleRestore.session.worldId === original.worldId
-      && singleRestore.session.ledger.head === 2)
+      && singleRestore.session.ledger.head === 5)
 
   const restored = await restorePreviewRuntimeSession(original.worldId, repository)
   check('full plus incremental chain restores the exact world and stream head', restored.status === 'restored'
-    && restored.session.worldId === original.worldId && restored.session.ledger.head === 2
-    && restored.session.ledger.events.length === 2 && restored.session.state.day === second.session.state.day
+    && restored.session.worldId === original.worldId && restored.session.ledger.head === 5
+    && restored.session.ledger.events.length === 5 && restored.session.state.day === second.session.state.day
     && restored.session.state.goalId === second.session.state.goalId)
   check('restore reconstructs request sequence for collision-free next command ids', restored.status === 'restored'
-    && restored.session.requestSequence === 2)
+    && restored.session.requestSequence === 5)
 
   if (restored.status === 'restored') {
-    const continued = dispatchPreviewRuntimeIntent(restored.session, { kind: 'day.advanced', payload: {} })
+    const continued = dispatchPreviewRuntimeIntent(restored.session, {
+      kind: 'world.event.resolved', payload: { eventId: 'material-arrival', optionId: 'weigh' },
+    })
     check('restored ledger remains writable and appends the next sequence', continued.status === 'appended'
-      && continued.session.ledger.head === 3 && continued.event.clientRequestId === 'player-command-3')
+      && continued.session.ledger.head === 6 && continued.event.clientRequestId === 'player-command-6')
   } else check('restored ledger remains writable and appends the next sequence', false)
 
   const activeBefore = second.session
@@ -149,7 +161,7 @@ async function main(): Promise<void> {
   })
   const corrupt = await restorePreviewRuntimeSession(original.worldId, repository)
   check('corrupt checksum rejects restore', corrupt.status === 'rejected' && corrupt.issue === 'runtime-restore-package-invalid')
-  check('failed restore cannot mutate the previously active session', activeBefore.ledger.head === 2
+  check('failed restore cannot mutate the previously active session', activeBefore.ledger.head === 5
     && activeBefore.state === second.session.state)
 
   repository.current = null
