@@ -238,7 +238,7 @@ export const sceneObjectAssets: Record<SceneObjectAssetId, SceneObjectAssetSpec>
   'court-gavel': {
     src: null,
     alt: '惊堂木：清代州县衙门案前使用的单件厚木拍板',
-    credit: '惊堂木 · FE-170 用户提供美术 · 需统一画风后接入',
+    credit: '惊堂木 · FE-170 用户提供美术 · 已完成透明分离 · 二进制入库待完成',
     role: 'foreground-prop',
     fit: 'contain',
     aspectRatio: '3 / 2',
