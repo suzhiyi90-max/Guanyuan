@@ -21,7 +21,7 @@ import { rebuildPreviewRuntimeProjection } from './runtime-projection'
 import { createPreviewRuntimeRegistry, type PreviewRuntimeEventKind } from './runtime-registry'
 
 type BusinessEventKind = Exclude<PreviewRuntimeEventKind, 'candidate.validated'>
-type RiverPlanInput = Omit<RiverPlan, 'day' | 'period'>
+type RiverPlanInput = Omit<RiverPlan, 'day' | 'period'> & { readonly guarantee?: boolean }
 
 export type PreviewRuntimeIntent =
   | { readonly kind: 'goal.selected'; readonly payload: { readonly goalId: string } }
