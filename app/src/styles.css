@@ -6971,7 +6971,6 @@ button.archive-node:hover { border-color: var(--cinnabar); color: var(--cinnabar
 .name-card.is-rank-card {
   position: relative;
   width: min(100%, 260px);
-  aspect-ratio: 3 / 4;
   min-height: 0;
   margin: 0 auto 14px;
   padding: 0;
@@ -6984,12 +6983,12 @@ button.archive-node:hover { border-color: var(--cinnabar); color: var(--cinnabar
   display: none;
 }
 .name-card.is-rank-card .name-card-rank-frame {
-  position: absolute;
-  inset: 0;
+  position: relative;
   z-index: 0;
   display: block;
   width: 100%;
-  height: 100%;
+  height: auto;
+  aspect-ratio: 3 / 4;
   object-fit: fill;
   pointer-events: none;
 }
@@ -7084,4 +7083,3 @@ button.archive-node:hover { border-color: var(--cinnabar); color: var(--cinnabar
     animation: none !important;
   }
 }
-
