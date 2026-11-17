@@ -903,7 +903,7 @@ try {
   }, deleteFixture.worldId)
   check('E3 确认删除后目录与存档仓储均无该人生', deleteResult)
   await settle(100)
-  check('E3 删除完成后焦点归还档案目录', await page.evaluate(() => document.activeElement?.closest('.save-folio-library') !== null))
+  check('E3 删除完成后焦点归还档案目录', await page.evaluate(() => document.activeElement?.matches('.save-folio-library-head button') === true))
 
   // 7.85 FE-020 东堤暴雨与洪峰只读投影
   await page.goto(smokeFixtureUrl('day8'), { waitUntil: 'domcontentloaded' })
