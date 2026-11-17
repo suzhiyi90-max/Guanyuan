@@ -1,4 +1,4 @@
-import { rankCardFrameOf, rankCardFrames } from '../src/paperArt'
+import { rankCardFrameOf, rankCardFrames, rankCardSlotMap } from '../src/paperArt'
 
 const cases = [
   { role: '县丞', rank: '正八品 · 管河佐贰', expected: 'official-7-9' },
@@ -24,4 +24,11 @@ if (Object.keys(rankCardFrames).length !== 7) {
   throw new Error(`expected 7 rank-card frame families, got ${Object.keys(rankCardFrames).length}`)
 }
 
-console.log(`rank-card mapping ${cases.length + 2}/${cases.length + 2} passed`)
+for (const slot of ['portrait', 'identity', 'rank', 'nobility', 'honor', 'marks'] as const) {
+  const value = rankCardSlotMap[slot]
+  if (value.top < 0 || value.height <= 0 || value.top + value.height > 100) {
+    throw new Error(`rank-card slot out of paper-center bounds: ${slot}`)
+  }
+}
+
+console.log(`rank-card mapping ${cases.length + 8}/${cases.length + 8} passed`)
