@@ -183,5 +183,32 @@ const earlyAdvanceProjection = rebuildPreviewRuntimeProjection({
 check('replay rejects day advancement outside night even with a valid event envelope', earlyAdvanceProjection.status === 'rejected'
   && earlyAdvanceProjection.issue === 'replay-reducer-failed')
 
+let legacyPlanLedger: EventLedger<PreviewRuntimeEventKind> = createEventLedger<PreviewRuntimeEventKind>(worldId)
+const legacyPlanAppend = appendLedgerEvent(legacyPlanLedger, {
+  source: 'player-command',
+  kind: 'river.plan.confirmed',
+  intentKind: 'river.plan.confirmed',
+  actor: 'player',
+  requestWorldTime: t1,
+  clientRequestId: 'legacy-plan-without-guarantee-field',
+  payload: { plan: {
+    leader: 'foreman', leaderName: '赵九河', material: 8, labor: 30,
+    supervisor: '县丞会勘 · 工头监作',
+    detail: '赵九河主办 · 料8垛 · 夫30人 · 县丞会勘 · 工头监作',
+  } },
+}, t1)
+if (legacyPlanAppend.status !== 'appended') throw new Error('legacy-plan-fixture-append-failed')
+legacyPlanLedger = legacyPlanAppend.ledger
+const legacyPlanHead = {
+  kind: 'event' as const,
+  seq: legacyPlanLedger.events.length,
+  eventId: legacyPlanLedger.events[legacyPlanLedger.events.length - 1].id,
+}
+const legacyPlanProjection = rebuildPreviewRuntimeProjection({
+  worldId, toInclusive: legacyPlanHead, events: legacyPlanLedger.events, registry,
+})
+check('legacy plan events without guarantee field remain replay-compatible', legacyPlanProjection.status === 'rebuilt'
+  && (legacyPlanProjection.state as unknown as GameState).plan?.leader === 'foreman')
+
 if (failed > 0) throw new Error(`preview-runtime-projection: ${failed} failed, ${passed} passed`)
 console.log(`preview-runtime-projection: ${passed}/${passed} passed`)
