@@ -122,6 +122,19 @@ check('new WorldId starts an independent empty fact stream', resetWorld.worldId 
 check('candidate.validated remains outside the business preview registry',
   !session.registry.schemas.some(schema => schema.kind === 'candidate.validated'))
 
+const invalidPlanSession = createPreviewRuntimeSession('w5-c1-invalid-plan-world')
+const missingGuarantee = dispatchPreviewRuntimeIntent(invalidPlanSession, {
+  kind: 'river.plan.confirmed',
+  payload: { plan: {
+    leader: 'foreman', leaderName: '赵九河', material: 8, labor: 30,
+    supervisor: '县丞会勘 · 工头监作',
+    detail: '赵九河主办 · 料8垛 · 夫30人 · 县丞会勘 · 工头监作',
+    guarantee: false,
+  } },
+}, 'plan-without-guarantee')
+check('new plan commands cannot omit the required guarantee attestation', missingGuarantee.status === 'rejected'
+  && missingGuarantee.reason === 'schema-payload-invalid' && missingGuarantee.session.ledger.head === 0)
+
 let banquetSession = createPreviewRuntimeSession('w5-c1-banquet-world')
 for (const [intent, id] of [
   [{ kind: 'person.asked', payload: { personId: 'xiancheng' } }, 'banquet-ask-1'],
