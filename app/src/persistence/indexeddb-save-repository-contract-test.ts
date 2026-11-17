@@ -260,6 +260,89 @@ export async function runIndexedDbSaveRepositoryContractTests(): Promise<readonl
       && importDeleteFinal.value?.packageChain.checksum === checksum1)
   }
   importDeleteRepository.close()
+
+  const abortDatabaseName = `${databaseName}-abort-delete`
+  const abortRepository = new IndexedDbSaveRepository(globalThis.indexedDB, abortDatabaseName)
+  const abortWorldId = brandedId<'WorldId'>('w5-e3-delete-abort-rollback') as WorldId
+  const abortFull = { ...full, worldId: abortWorldId, snapshot: { ...full.snapshot, worldId: abortWorldId } } as unknown as FullSavePackage
+  const abortIncremental = {
+    ...incremental,
+    worldId: abortWorldId,
+    snapshot: { ...incremental.snapshot, worldId: abortWorldId },
+    basePackage: abortFull,
+  } as unknown as IncrementalSavePackage
+  const abortSeedFull = await abortRepository.commitWorld({
+    worldId: abortWorldId, packageChain: abortFull, expectedHead: null, savedAt: '2026-11-16T00:11:00.000Z',
+  })
+  const abortSeedIncremental = await abortRepository.commitWorld({
+    worldId: abortWorldId, packageChain: abortIncremental, expectedHead: genesis, savedAt: '2026-11-16T00:12:00.000Z',
+  })
+  check('mid-cascade abort fixture stores a two-node package chain', abortSeedFull.status === 'success'
+    && abortSeedIncremental.status === 'success')
+
+  let abortNextCursorDelete: IDBTransaction | null = null
+  const originalTransaction = IDBDatabase.prototype.transaction
+  const originalCursorDelete = IDBCursor.prototype.delete
+  Object.defineProperty(IDBDatabase.prototype, 'transaction', {
+    configurable: true,
+    writable: true,
+    value: function (this: IDBDatabase, ...args: Parameters<typeof originalTransaction>): IDBTransaction {
+      const transaction = Reflect.apply(originalTransaction, this, args) as IDBTransaction
+      const stores = typeof args[0] === 'string' ? [args[0]] : Array.from(args[0])
+      if (this.name === abortDatabaseName && args[1] === 'readwrite'
+        && stores.includes('worlds') && stores.includes('packages')) {
+        abortNextCursorDelete = transaction
+      }
+      return transaction
+    },
+  })
+  Object.defineProperty(IDBCursor.prototype, 'delete', {
+    configurable: true,
+    writable: true,
+    value: function (this: IDBCursor): IDBRequest<undefined> {
+      const request = Reflect.apply(originalCursorDelete, this, []) as IDBRequest<undefined>
+      const transaction = abortNextCursorDelete
+      if (transaction) {
+        abortNextCursorDelete = null
+        transaction.abort()
+      }
+      return request
+    },
+  })
+  let abortedDelete: Awaited<ReturnType<typeof abortRepository.deleteWorld>>
+  try {
+    abortedDelete = await abortRepository.deleteWorld(abortWorldId, head1)
+  } finally {
+    Object.defineProperty(IDBDatabase.prototype, 'transaction', { configurable: true, writable: true, value: originalTransaction })
+    Object.defineProperty(IDBCursor.prototype, 'delete', { configurable: true, writable: true, value: originalCursorDelete })
+  }
+  check('mid-cascade transaction abort is reported as a rejected deletion', abortedDelete.status === 'rejected')
+  const afterAbort = await abortRepository.loadWorld(abortWorldId)
+  const abortVerifyDb = await new Promise<IDBDatabase>((resolve, reject) => {
+    const request = globalThis.indexedDB.open(abortDatabaseName, 1)
+    request.onsuccess = () => resolve(request.result)
+    request.onerror = () => reject(request.error)
+  })
+  const abortVerifyTx = abortVerifyDb.transaction('packages', 'readonly')
+  const abortVerifyDone = new Promise<void>((resolve, reject) => {
+    abortVerifyTx.oncomplete = () => resolve()
+    abortVerifyTx.onabort = () => reject(abortVerifyTx.error)
+    abortVerifyTx.onerror = () => reject(abortVerifyTx.error)
+  })
+  const abortRows = await new Promise<unknown[]>((resolve, reject) => {
+    const request = abortVerifyTx.objectStore('packages').index('worldId').getAll(abortWorldId)
+    request.onsuccess = () => resolve(request.result)
+    request.onerror = () => reject(request.error)
+  })
+  await abortVerifyDone
+  check('mid-cascade abort rolls back the world pointer and every package row', afterAbort.status === 'success'
+    && afterAbort.value?.worldId === abortWorldId
+    && afterAbort.value.packageChain.packageKind === 'incremental'
+    && afterAbort.value.packageChain.basePackage.packageKind === 'full'
+    && afterAbort.value.streamHead.seq === 1 && abortRows.length === 2)
+  abortVerifyDb.close()
+  abortRepository.close()
+
   await importRepository.deleteWorld(worldId, head1)
   await concurrentRepository.deleteWorld(worldId, head1)
   importRepository.close()
