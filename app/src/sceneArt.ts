@@ -227,13 +227,12 @@ export const sceneObjectAssets: Record<SceneObjectAssetId, SceneObjectAssetSpec>
   'exam-desk': {
     src: null,
     alt: '科举考生桌案：木桌、围屏、笔架、砚台与空白宣纸',
-    credit: '科举桌案 · FE-170 用户提供美术 · 需补透明背景',
+    credit: '科举桌案 · FE-170 用户提供美术 · 已完成透明分离 · 二进制入库待完成',
     role: 'foreground-prop',
     fit: 'contain',
     aspectRatio: '4 / 3',
     transparentRequired: true,
     pending: true,
-    prompt: '以用户提供的桌案图为唯一造型参考，保持木桌、围屏、笔架、砚台、墨锭与空白宣纸的造型、比例、位置、色彩和材质完全一致。只将外围白色摄影背景及白色地面干净分离为真正的透明背景；主体边缘、细木纹、纸张、砚台和自然接触阴影完整保留，不重绘、不新增、不删除、不改色。四周保留约4%安全边距，主体完整不裁切。输出带真实 Alpha 通道的 RGBA PNG，4:3，建议 1600×1200。禁止白底、灰格假透明、黑底、文字、水印和UI。',
   },
   'court-gavel': {
     src: null,
