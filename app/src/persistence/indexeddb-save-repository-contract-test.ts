@@ -143,6 +143,34 @@ export async function runIndexedDbSaveRepositoryContractTests(): Promise<readonl
   check('world deletion is guarded by the expected head', deleted.status === 'success' && deleted.value)
   const afterDelete = await repository.loadWorld(worldId)
   check('deletion removes the world and its package chain', afterDelete.status === 'success' && afterDelete.value === null)
+  const verifyDb = await new Promise<IDBDatabase>((resolve, reject) => {
+    const request = globalThis.indexedDB.open(databaseName, 1)
+    request.onsuccess = () => resolve(request.result)
+    request.onerror = () => reject(request.error)
+  })
+  const verifyTx = verifyDb.transaction('packages', 'readonly')
+  const verifyDone = new Promise<void>((resolve, reject) => {
+    verifyTx.oncomplete = () => resolve()
+    verifyTx.onabort = () => reject(verifyTx.error)
+    verifyTx.onerror = () => reject(verifyTx.error)
+  })
+  const deletedRows = await new Promise<unknown[]>((resolve, reject) => {
+    const request = verifyTx.objectStore('packages').index('worldId').getAll(worldId)
+    request.onsuccess = () => resolve(request.result)
+    request.onerror = () => reject(request.error)
+  })
+  const survivingRows = await new Promise<unknown[]>((resolve, reject) => {
+    const request = verifyTx.objectStore('packages').index('worldId').getAll(olderWorldId)
+    request.onsuccess = () => resolve(request.result)
+    request.onerror = () => reject(request.error)
+  })
+  await verifyDone
+  const survivingWorld = await repository.loadWorld(olderWorldId)
+  check('deletion removes every package row for the target WorldId', deletedRows.length === 0)
+  check('deletion preserves another WorldId and its package chain', survivingRows.length === 1
+    && survivingWorld.status === 'success' && survivingWorld.value?.worldId === olderWorldId
+    && survivingWorld.value.packageChain.packageKind === 'full')
+  verifyDb.close()
 
   const importRepository = new IndexedDbSaveRepository(globalThis.indexedDB, `${databaseName}-import`)
   const imported = await importRepository.importWorld({
