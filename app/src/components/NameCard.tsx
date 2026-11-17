@@ -11,17 +11,17 @@ import type { Person } from '../types'
 export function NameCard({ person, state }: { person: Person; state: GameState }) {
   const [flipped, setFlipped] = useState(false)
   const [expanded, setExpanded] = useState(false)
-  const [frameLoaded, setFrameLoaded] = useState(false)
-  const [frameFailed, setFrameFailed] = useState(false)
+  const [loadedFrameSrc, setLoadedFrameSrc] = useState<string | null>(null)
+  const [failedFrameSrc, setFailedFrameSrc] = useState<string | null>(null)
   const reduceMotion = useReducedMotion()
   const depth = revealDepthOf(person.id, state)
   const history = sharedHistoryOf(person.id, state)
   const frame = rankCardFrameOf(person.role, person.rank)
-  const frameReady = Boolean(frame && frameLoaded && !frameFailed)
+  const frameReady = Boolean(frame && loadedFrameSrc === frame.src && failedFrameSrc !== frame.src)
 
   useEffect(() => {
-    setFrameLoaded(false)
-    setFrameFailed(false)
+    setLoadedFrameSrc(null)
+    setFailedFrameSrc(null)
   }, [frame?.src])
 
   return (
@@ -34,18 +34,18 @@ export function NameCard({ person, state }: { person: Person; state: GameState }
       data-name-card="folio"
       data-face={flipped ? 'back' : 'front'}
       data-rank-frame={frame?.id ?? 'none'}
-      data-rank-frame-status={frameReady ? 'loaded' : frameFailed ? 'fallback' : frame ? 'loading' : 'unmapped'}
+      data-rank-frame-status={frameReady ? 'loaded' : frame && failedFrameSrc === frame.src ? 'fallback' : frame ? 'loading' : 'unmapped'}
       aria-label={`${person.name} 人物名帖`}
     >
-      {frame && !frameFailed && (
+      {frame && failedFrameSrc !== frame.src && (
         <img
           className="name-card-rank-frame"
           key={frame.src}
           src={frame.src}
           alt=""
           aria-hidden="true"
-          onLoad={() => setFrameLoaded(true)}
-          onError={() => setFrameFailed(true)}
+          onLoad={() => setLoadedFrameSrc(frame.src)}
+          onError={() => setFailedFrameSrc(frame.src)}
         />
       )}
       <div className="name-card-mount" aria-hidden="true" />
