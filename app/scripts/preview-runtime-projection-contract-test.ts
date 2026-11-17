@@ -160,28 +160,30 @@ const invalidReferenceProjection = rebuildPreviewRuntimeProjection({
 check('replay rejects schema-valid but nonexistent evidence references', invalidReferenceProjection.status === 'rejected'
   && invalidReferenceProjection.issue === 'replay-reducer-failed')
 
-let earlyAdvanceLedger: EventLedger<PreviewRuntimeEventKind> = createEventLedger<PreviewRuntimeEventKind>(worldId)
-const earlyAdvanceAppend = appendLedgerEvent(earlyAdvanceLedger, {
-  source: 'player-command',
-  kind: 'day.advanced',
-  intentKind: 'day.advanced',
-  actor: 'player',
-  requestWorldTime: t1,
-  clientRequestId: 'early-day-advance',
-  payload: {},
-}, t1)
-if (earlyAdvanceAppend.status !== 'appended') throw new Error('early-advance-fixture-append-failed')
-earlyAdvanceLedger = earlyAdvanceAppend.ledger
-const earlyAdvanceHead = {
-  kind: 'event' as const,
-  seq: earlyAdvanceLedger.events.length,
-  eventId: earlyAdvanceLedger.events[earlyAdvanceLedger.events.length - 1].id,
+let pendingEventSkipLedger: EventLedger<PreviewRuntimeEventKind> = createEventLedger<PreviewRuntimeEventKind>(worldId)
+for (const [time, requestId] of [[t1, 'early-sleep'], [t5, 'skip-pending-event']] as const) {
+  const appended = appendLedgerEvent(pendingEventSkipLedger, {
+    source: 'player-command',
+    kind: 'day.advanced',
+    intentKind: 'day.advanced',
+    actor: 'player',
+    requestWorldTime: time,
+    clientRequestId: requestId,
+    payload: {},
+  }, time)
+  if (appended.status !== 'appended') throw new Error(`pending-event-skip-fixture-append-failed:${requestId}`)
+  pendingEventSkipLedger = appended.ledger
 }
-const earlyAdvanceProjection = rebuildPreviewRuntimeProjection({
-  worldId, toInclusive: earlyAdvanceHead, events: earlyAdvanceLedger.events, registry,
+const pendingEventSkipHead = {
+  kind: 'event' as const,
+  seq: pendingEventSkipLedger.events.length,
+  eventId: pendingEventSkipLedger.events[pendingEventSkipLedger.events.length - 1].id,
+}
+const pendingEventSkipProjection = rebuildPreviewRuntimeProjection({
+  worldId, toInclusive: pendingEventSkipHead, events: pendingEventSkipLedger.events, registry,
 })
-check('replay rejects day advancement outside night even with a valid event envelope', earlyAdvanceProjection.status === 'rejected'
-  && earlyAdvanceProjection.issue === 'replay-reducer-failed')
+check('replay rejects skipping a pending world event while preserving early-sleep semantics', pendingEventSkipProjection.status === 'rejected'
+  && pendingEventSkipProjection.issue === 'replay-reducer-failed')
 
 let legacyPlanLedger: EventLedger<PreviewRuntimeEventKind> = createEventLedger<PreviewRuntimeEventKind>(worldId)
 const legacyPlanAppend = appendLedgerEvent(legacyPlanLedger, {
