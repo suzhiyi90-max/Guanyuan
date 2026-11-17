@@ -240,6 +240,16 @@ try {
   // FE-065：节点点选改为「先查验」，人物卷由右栏「展开人物卷」按钮进入（smoke 同步现行语义）。
   await page.locator('.network-open-person').click()
   await settle(350)
+  await page.waitForFunction(() => {
+    const card = document.querySelector('.name-card[data-rank-frame-status="loaded"]')
+    const image = card?.querySelector('.name-card-rank-frame')
+    return Boolean(image && image instanceof HTMLImageElement && image.naturalWidth > 0)
+  }, { timeout: 5000 })
+  check('C-157 官品卡框按既有品级加载，人物数据仍由界面叠加', await page.locator('.name-card').getAttribute('data-rank-frame') === 'official-7-9' && await page.locator('.name-card').getAttribute('data-rank-frame-status') === 'loaded')
+  await shot('91-rank-card-official-1440')
+  await click('.name-card-flip')
+  check('C-157 卡框翻面保留原接触路径语义', await page.locator('.name-card-back').isVisible() && (await page.locator('.name-card-back').innerText()).includes('接触路径'))
+  await click('.name-card-flip')
   check('关系谱沿用原人物卷并回显问话路径', await page.locator('.side-drawer').isVisible() && (await page.locator('.contact-route').innerText()).includes('正式问了他一回'))
   await click('.drawer-header .icon-button')
   await settle(250)
