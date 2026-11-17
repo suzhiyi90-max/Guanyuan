@@ -36,6 +36,27 @@ check('same idempotency key with changed payload is rejected as conflict', confl
   && conflict.reason === 'idempotency-conflict' && conflict.session.ledger.head === 1)
 session = conflict.session
 
+const unknownGoal = dispatchPreviewRuntimeIntent(session, {
+  kind: 'goal.selected', payload: { goalId: 'not-a-real-goal' },
+}, 'unknown-goal')
+check('schema-valid but unknown goal is rejected by replay without appending', unknownGoal.status === 'rejected'
+  && unknownGoal.reason === 'replay-rejected' && unknownGoal.session.ledger.head === 1)
+session = unknownGoal.session
+
+const unknownDocumentSource = dispatchPreviewRuntimeIntent(session, {
+  kind: 'document.remembered', payload: { selectedIds: ['cause-initial', 'not-a-document-source'] },
+}, 'unknown-document-source')
+check('schema-valid but unknown document references cannot become evidence', unknownDocumentSource.status === 'rejected'
+  && unknownDocumentSource.reason === 'replay-rejected' && unknownDocumentSource.session.ledger.head === 1)
+session = unknownDocumentSource.session
+
+const unknownLedgerSource = dispatchPreviewRuntimeIntent(session, {
+  kind: 'ledger.remembered', payload: { selectedIds: ['E-001', 'not-a-ledger-source'] },
+}, 'unknown-ledger-source')
+check('schema-valid but unknown ledger references cannot become evidence', unknownLedgerSource.status === 'rejected'
+  && unknownLedgerSource.reason === 'replay-rejected' && unknownLedgerSource.session.ledger.head === 1)
+session = unknownLedgerSource.session
+
 const asked = dispatchPreviewRuntimeIntent(session, {
   kind: 'person.asked', payload: { personId: 'liangshang' },
 }, 'ask-liangshang')
@@ -44,6 +65,14 @@ check('person contact is a ledger fact and action cost is projected once', asked
   && asked.session.state.periodIndex === 1)
 if (asked.status !== 'appended') throw new Error('person-ask-fixture-failed')
 session = asked.session
+
+const earlyDayAdvance = dispatchPreviewRuntimeIntent(session, {
+  kind: 'day.advanced', payload: {},
+}, 'early-day-advance')
+check('day cannot advance before the night period', earlyDayAdvance.status === 'rejected'
+  && earlyDayAdvance.reason === 'replay-rejected' && earlyDayAdvance.session.ledger.head === 2
+  && earlyDayAdvance.session.state.day === 1 && earlyDayAdvance.session.state.periodIndex === 1)
+session = earlyDayAdvance.session
 
 const repeatedPerson = dispatchPreviewRuntimeIntent(session, {
   kind: 'person.asked', payload: { personId: 'liangshang' },
