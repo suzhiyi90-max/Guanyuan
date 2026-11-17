@@ -1,24 +1,63 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { ArrowLeftRight } from 'lucide-react'
 import { Portrait } from './Portrait'
 import { revealDepthOf, sharedHistoryOf, specialtyOf } from '../game/people'
+import { rankCardFrameOf } from '../paperArt'
 import type { GameState } from '../game/useGame'
 import type { Person } from '../types'
 
-/** C-65 名帖装裱：正面是公开身份，背面是真实接触；翻面为本地状态，不写存档。 */
+/** C-65 名帖装裱；C-157 在既有名帖正面接入品秩卡框，不改人物数据与互动行为。 */
 export function NameCard({ person, state }: { person: Person; state: GameState }) {
   const [flipped, setFlipped] = useState(false)
   const [expanded, setExpanded] = useState(false)
+  const [frameLoaded, setFrameLoaded] = useState(false)
+  const [frameFailed, setFrameFailed] = useState(false)
   const reduceMotion = useReducedMotion()
   const depth = revealDepthOf(person.id, state)
   const history = sharedHistoryOf(person.id, state)
+  const frame = rankCardFrameOf(person.role, person.rank)
+  const frameReady = Boolean(frame && frameLoaded && !frameFailed)
+
+  useEffect(() => {
+    setFrameLoaded(false)
+    setFrameFailed(false)
+  }, [frame?.src])
+
   return (
-    <section className="name-card" data-name-card="folio" data-face={flipped ? 'back' : 'front'} aria-label={`${person.name} 名帖`}>
+    <section
+      className={`name-card${frameReady ? ' is-rank-card' : ''}`}
+      style={frameReady && frame ? {
+        '--rank-card-inset-x': `${frame.insetX}%`,
+        '--rank-card-inset-y': `${frame.insetY}%`,
+      } as React.CSSProperties : undefined}
+      data-name-card="folio"
+      data-face={flipped ? 'back' : 'front'}
+      data-rank-frame={frame?.id ?? 'none'}
+      data-rank-frame-status={frameReady ? 'loaded' : frameFailed ? 'fallback' : frame ? 'loading' : 'unmapped'}
+      aria-label={`${person.name} 人物名帖`}
+    >
+      {frame && !frameFailed && (
+        <img
+          className="name-card-rank-frame"
+          key={frame.src}
+          src={frame.src}
+          alt=""
+          aria-hidden="true"
+          onLoad={() => setFrameLoaded(true)}
+          onError={() => setFrameFailed(true)}
+        />
+      )}
       <div className="name-card-mount" aria-hidden="true" />
-      <motion.div className="name-card-face" key={flipped ? 'back' : 'front'} initial={{ opacity: 0, rotateY: reduceMotion ? 0 : -8 }} animate={{ opacity: 1, rotateY: 0 }} transition={{ duration: reduceMotion ? 0 : .22 }}>
+      <motion.div
+        className="name-card-face"
+        key={flipped ? 'back' : 'front'}
+        initial={{ opacity: 0, rotateY: reduceMotion ? 0 : -8 }}
+        animate={{ opacity: 1, rotateY: 0 }}
+        transition={{ duration: reduceMotion ? 0 : .22 }}
+      >
         {!flipped ? <>
-          <Portrait person={person} silhouette={depth === '闻名'} size={72} />
+          <Portrait person={person} silhouette={depth === '闻名'} size={frameReady ? 78 : 72} />
           <div className="name-card-inscription">
             <b>{person.name}</b>
             <small>{person.style} · {person.role}</small>
