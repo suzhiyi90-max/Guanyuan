@@ -122,7 +122,6 @@ export async function runIndexedDbSaveRepositoryContractTests(): Promise<readonl
   const worldRequest = worlds.get(worldId)
   worldRequest.onsuccess = () => worlds.put({ ...worldRequest.result, latestPackageKey: 'missing-package-node' })
   await tamperDone
-  db.close()
   const corrupted = await repository.loadWorld(worldId)
   check('corrupt package pointer is reported, never treated as an empty world', corrupted.status === 'rejected'
     && corrupted.issue === 'save-repository-record-corrupt')
@@ -139,6 +138,7 @@ export async function runIndexedDbSaveRepositoryContractTests(): Promise<readonl
   const repairRequest = repairStore.get(worldId)
   repairRequest.onsuccess = () => repairStore.put({ ...repairRequest.result, latestPackageKey: `${worldId}::${checksum2}` })
   await repairDone
+  db.close()
   const deleted = await repository.deleteWorld(worldId, head1)
   check('world deletion is guarded by the expected head', deleted.status === 'success' && deleted.value)
   const afterDelete = await repository.loadWorld(worldId)
