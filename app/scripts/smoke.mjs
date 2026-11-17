@@ -264,6 +264,18 @@ try {
   await click('.drawer-header .icon-button')
   await settle(250)
 
+  // C-157：故意阻断另一族卡框资源，验证降级到原名帖，不阻断人物卷。
+  await page.route('**/assets/card-frame-merchant.png', route => route.abort())
+  await page.locator('.network-node[aria-label*="阮裕丰"]').click()
+  await settle(180)
+  await click('.network-open-person')
+  await settle(250)
+  await page.waitForFunction(() => document.querySelector('.name-card[data-rank-frame-status="fallback"]'), null, { timeout: 5000 })
+  check('C-157 卡框图片失败退回旧名帖，人物卷仍可用', await page.locator('.side-drawer').isVisible() && await page.locator('.name-card').getAttribute('data-rank-frame') === 'merchant' && await page.locator('.name-card').getAttribute('data-rank-frame-status') === 'fallback' && !(await page.locator('.name-card').evaluate(el => el.classList.contains('is-rank-card'))) && await page.locator('.name-card-mount').isVisible())
+  await click('.drawer-header .icon-button')
+  await settle(180)
+  await page.unroute('**/assets/card-frame-merchant.png')
+
   // 3.5 S-18 收藏绢册 真实接触 两册边界
   await click('#people-tab-collection')
   await page.waitForSelector('#people-panel-collection', { state: 'visible' })
