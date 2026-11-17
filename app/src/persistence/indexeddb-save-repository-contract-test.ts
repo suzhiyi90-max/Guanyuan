@@ -172,6 +172,33 @@ export async function runIndexedDbSaveRepositoryContractTests(): Promise<readonl
   })))
   check('concurrent same-WorldId imports allow exactly one winner', concurrent.filter(result => result.status === 'success').length === 1
     && concurrent.filter(result => result.status === 'rejected' && result.issue === 'save-repository-world-exists').length === 1)
+  const raceRepository = new IndexedDbSaveRepository(globalThis.indexedDB, `${databaseName}-delete-races`)
+  const raceWorldId = brandedId<'WorldId'>('w5-e3-delete-race') as WorldId
+  const raceFull = { ...full, worldId: raceWorldId, snapshot: { ...full.snapshot, worldId: raceWorldId } } as unknown as FullSavePackage
+  const raceIncremental = {
+    ...incremental,
+    worldId: raceWorldId,
+    snapshot: { ...incremental.snapshot, worldId: raceWorldId },
+    basePackage: raceFull,
+  } as unknown as IncrementalSavePackage
+  const raceSeed = await raceRepository.commitWorld({
+    worldId: raceWorldId, packageChain: raceFull, expectedHead: null, savedAt: '2026-11-16T00:06:00.000Z',
+  })
+  check('delete race fixture commits a genesis world', raceSeed.status === 'success')
+  const [raceDelete, raceSave] = await Promise.all([
+    raceRepository.deleteWorld(raceWorldId, genesis),
+    raceRepository.commitWorld({ worldId: raceWorldId, packageChain: raceIncremental, expectedHead: genesis, savedAt: '2026-11-16T00:07:00.000Z' }),
+  ])
+  const raceFinal = await raceRepository.loadWorld(raceWorldId)
+  const raceIsAtomic = raceFinal.status === 'success' && (
+    raceFinal.value === null
+    || (raceFinal.value.streamHead.kind === 'event' && raceFinal.value.streamHead.seq === 1
+      && raceFinal.value.packageChain.packageKind === 'incremental')
+  )
+  check('concurrent save and delete settle as one serialized outcome', raceIsAtomic
+    && (raceDelete.status === 'success' || raceDelete.status === 'rejected')
+    && (raceSave.status === 'success' || raceSave.status === 'rejected'))
+  await raceRepository.close()
   await importRepository.deleteWorld(worldId, head1)
   await concurrentRepository.deleteWorld(worldId, head1)
   importRepository.close()
