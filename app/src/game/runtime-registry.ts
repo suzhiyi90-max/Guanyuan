@@ -55,19 +55,25 @@ function oneString(key: string): EventSchemaValidator {
 }
 
 function selectedIdsPayload(payload: unknown): boolean {
-  return isRecord(payload) && hasExactKeys(payload, ['selectedIds']) && stringList(payload.selectedIds, 2)
+  if (!isRecord(payload) || !hasExactKeys(payload, ['selectedIds']) || !stringList(payload.selectedIds, 2)) return false
+  return payload.selectedIds.length <= 8 && new Set(payload.selectedIds).size === payload.selectedIds.length
 }
 
 function riverPlanPayload(payload: unknown): boolean {
   if (!isRecord(payload) || !hasExactKeys(payload, ['plan']) || !isRecord(payload.plan)) return false
   const plan = payload.plan
-  return hasExactKeys(plan, ['leader', 'leaderName', 'material', 'labor', 'supervisor', 'detail'])
-    && nonEmptyString(plan.leader)
-    && nonEmptyString(plan.leaderName)
-    && typeof plan.material === 'number' && Number.isFinite(plan.material) && plan.material >= 0
-    && typeof plan.labor === 'number' && Number.isFinite(plan.labor) && plan.labor >= 0
-    && nonEmptyString(plan.supervisor)
-    && nonEmptyString(plan.detail)
+  const legacyKeys = ['leader', 'leaderName', 'material', 'labor', 'supervisor', 'detail']
+  const currentKeys = [...legacyKeys, 'guarantee']
+  const legacyPayload = hasExactKeys(plan, legacyKeys)
+  const currentPayload = hasExactKeys(plan, currentKeys) && plan.guarantee === true
+  if (!legacyPayload && !currentPayload) return false
+  return plan.leader === 'foreman'
+    && plan.leaderName === '赵九河'
+    && typeof plan.material === 'number' && Number.isInteger(plan.material) && plan.material >= 8 && plan.material <= 10
+    && typeof plan.labor === 'number' && Number.isInteger(plan.labor) && plan.labor >= 30 && plan.labor <= 50
+    && plan.labor % 5 === 0
+    && ['县丞会勘 · 工头监作', '仅工头监作 · 暂无会勘', '请河工幕友估工 · 县丞会勘'].includes(String(plan.supervisor))
+    && plan.detail === `${plan.leaderName}主办 · 料${plan.material}垛 · 夫${plan.labor}人 · ${plan.supervisor}`
 }
 
 function banquetChoicePayload(payload: unknown): boolean {
