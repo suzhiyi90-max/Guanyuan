@@ -128,6 +128,8 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Engine regression
         run: npm run test:engine
+      - name: Rank card family mapping
+        run: npm run test:rank-card
       - name: Domain contract tests
         run: npm run test:domain
       - name: Identity and authorization contract tests
