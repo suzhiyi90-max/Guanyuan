@@ -195,9 +195,11 @@ export async function runIndexedDbSaveRepositoryContractTests(): Promise<readonl
     || (raceFinal.value.streamHead.kind === 'event' && raceFinal.value.streamHead.seq === 1
       && raceFinal.value.packageChain.packageKind === 'incremental')
   )
-  check('concurrent save and delete settle as one serialized outcome', raceIsAtomic
-    && (raceDelete.status === 'success' || raceDelete.status === 'rejected')
-    && (raceSave.status === 'success' || raceSave.status === 'rejected'))
+  const raceOutcome = (raceDelete.status === 'success' && raceDelete.value === true
+    && raceSave.status === 'rejected' && raceSave.issue === 'save-repository-head-conflict')
+    || (raceSave.status === 'success'
+      && raceDelete.status === 'rejected' && raceDelete.issue === 'save-repository-head-conflict')
+  check('concurrent save and delete settle as one serialized outcome', raceIsAtomic && raceOutcome)
   await raceRepository.close()
   await importRepository.deleteWorld(worldId, head1)
   await concurrentRepository.deleteWorld(worldId, head1)
