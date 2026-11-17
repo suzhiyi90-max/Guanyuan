@@ -837,6 +837,72 @@ try {
   await settle(450)
   check('刷新恢复后事件投影仍在且可继续查阅', (await page.locator('.task-outcome').count()) === 1)
 
+  // W5-E3：本机档案删除交互。构造一个非活动人生，验证禁删、取消/Esc 零写入及确认删除。
+  const deleteFixture = await page.evaluate(async () => {
+    const { IndexedDbSaveRepository } = await import('/src/persistence/indexeddb-save-repository.ts')
+    const repository = new IndexedDbSaveRepository()
+    const worldId = `w5-e3-ui-delete-${Date.now()}`
+    const genesis = { kind: 'genesis', seq: 0 }
+    const packageChain = {
+      packageKind: 'full', worldId, schemaVersion: 1,
+      streamRange: { fromExclusive: genesis, toInclusive: genesis },
+      events: [],
+      snapshot: { schemaVersion: 1, worldId, streamHead: genesis, checkpointAt: { day: 1, period: '晨' }, materialized: {} },
+      checksum: `sha256:${'a'.repeat(64)}`,
+    }
+    const result = await repository.importWorld({ worldId, packageChain, streamHead: genesis, savedAt: new Date().toISOString() })
+    repository.close()
+    return { worldId, imported: result.status === 'success' }
+  })
+  check('E3 删除测试档案独立导入成功', deleteFixture.imported, deleteFixture.worldId)
+  await click('.goal-seal')
+  await page.waitForSelector('.save-folio-head', { timeout: 8000 })
+  await click('.save-folio-head')
+  await page.waitForSelector('.save-folio-library', { state: 'visible', timeout: 8000 })
+  await page.waitForFunction(id => [...document.querySelectorAll('.save-folio-world')].some(row => row.innerText.includes(id.slice(-8))), deleteFixture.worldId, { timeout: 10000 })
+  const activeArchiveRow = page.locator('.save-folio-world').filter({ hasText: '当前人生' })
+  check('E3 当前人生删除入口被禁用', await activeArchiveRow.locator('button:has-text("当前人生")').isDisabled())
+  const deleteRow = page.locator('.save-folio-world').filter({ hasText: deleteFixture.worldId.slice(-8) })
+  const deleteButton = deleteRow.locator('button:has-text("删除档案")')
+  await deleteButton.click()
+  await page.waitForSelector('.save-folio-delete-dialog[role="dialog"][aria-modal="true"]', { state: 'visible' })
+  check('E3 删除确认显示目标短 WorldId', (await page.locator('.save-folio-delete-dialog').innerText()).includes(deleteFixture.worldId.slice(-8)))
+  await click('.save-folio-delete-actions button:has-text("取消")')
+  await page.waitForSelector('.save-folio-delete-dialog', { state: 'detached' })
+  let deleteStillExists = await page.evaluate(async id => {
+    const { IndexedDbSaveRepository } = await import('/src/persistence/indexeddb-save-repository.ts')
+    const repository = new IndexedDbSaveRepository()
+    const result = await repository.loadWorld(id)
+    repository.close()
+    return result.status === 'success' && result.value !== null
+  }, deleteFixture.worldId)
+  check('E3 取消删除不写入且档案仍存在', deleteStillExists)
+  await deleteRow.locator('button:has-text("删除档案")').click()
+  await page.waitForSelector('.save-folio-delete-dialog', { state: 'visible' })
+  await page.keyboard.press('Escape')
+  await page.waitForSelector('.save-folio-delete-dialog', { state: 'detached' })
+  deleteStillExists = await page.evaluate(async id => {
+    const { IndexedDbSaveRepository } = await import('/src/persistence/indexeddb-save-repository.ts')
+    const repository = new IndexedDbSaveRepository()
+    const result = await repository.loadWorld(id)
+    repository.close()
+    return result.status === 'success' && result.value !== null
+  }, deleteFixture.worldId)
+  check('E3 Escape 取消删除不写入且档案仍存在', deleteStillExists)
+  await deleteRow.locator('button:has-text("删除档案")').click()
+  await page.waitForSelector('.save-folio-delete-dialog', { state: 'visible' })
+  await click('.save-folio-delete-actions button:has-text("确认删除此档案")')
+  await page.waitForSelector('.save-folio-delete-dialog', { state: 'detached', timeout: 10000 })
+  await page.waitForFunction(id => ![...document.querySelectorAll('.save-folio-world')].some(row => row.innerText.includes(id.slice(-8))), deleteFixture.worldId, { timeout: 10000 })
+  const deleteResult = await page.evaluate(async id => {
+    const { IndexedDbSaveRepository } = await import('/src/persistence/indexeddb-save-repository.ts')
+    const repository = new IndexedDbSaveRepository()
+    const result = await repository.loadWorld(id)
+    repository.close()
+    return result.status === 'success' && result.value === null
+  }, deleteFixture.worldId)
+  check('E3 确认删除后目录与存档仓储均无该人生', deleteResult)
+
   // 7.85 FE-020 东堤暴雨与洪峰只读投影
   await page.goto(smokeFixtureUrl('day8'), { waitUntil: 'domcontentloaded' })
   await settle(500)
