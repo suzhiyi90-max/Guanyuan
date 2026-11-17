@@ -49,7 +49,9 @@ async function run(): Promise<void> {
     kind: 'river.plan.confirmed',
     payload: { plan: {
       leader: 'foreman', leaderName: '赵九河', material: 8, labor: 30,
-      supervisor: '县丞会勘 · 工头监作', detail: '先行抢护计划',
+      supervisor: '县丞会勘 · 工头监作',
+      detail: '赵九河主办 · 料8垛 · 夫30人 · 县丞会勘 · 工头监作',
+      guarantee: true,
     } },
   }, 'create-plan-for-ai-effect')
   if (planned.status === 'rejected') throw new Error('costed-effect-plan-fixture-failed')
@@ -83,6 +85,15 @@ async function run(): Promise<void> {
       && invalidRefs.session.ledger.head === 0)
 
   let dayTwo = createPreviewRuntimeSession('w5-c2a-pending-world-event')
+  for (const [intent, id] of [
+    [{ kind: 'person.asked', payload: { personId: 'xiancheng' } }, 'pending-ask-xiancheng'],
+    [{ kind: 'records.audited', payload: {} }, 'pending-audit'],
+    [{ kind: 'river.probed', payload: {} }, 'pending-probe'],
+  ] as const) {
+    const result = dispatchPreviewRuntimeIntent(dayTwo, intent as never, id)
+    if (result.status === 'rejected') throw new Error(`day-advance-fixture-precondition-failed:${id}`)
+    dayTwo = result.session
+  }
   const advanced = dispatchPreviewRuntimeIntent(dayTwo, { kind: 'day.advanced', payload: {} }, 'advance-to-day-two')
   if (advanced.status === 'rejected') throw new Error('day-advance-fixture-failed')
   dayTwo = advanced.session
