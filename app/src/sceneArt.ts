@@ -243,7 +243,6 @@ export const sceneObjectAssets: Record<SceneObjectAssetId, SceneObjectAssetSpec>
     aspectRatio: '3 / 2',
     transparentRequired: true,
     pending: true,
-    prompt: '清代州县衙门案前使用的单件惊堂木，扁厚、方正的硬木拍板，略带长期使用后圆润的棱角与细微磨损，清楚表现顶部平面和正面厚度；三分之四侧前方视角，主体完整居中。画风必须与项目中的古代县学、县衙场景一致：工笔淡彩、绢本旧画、细腻手绘木纹、低饱和赭石与深木褐、柔和自然光，禁止写实3D渲染、塑料高光、黑色摄影棚背景。背景必须是真透明 Alpha 通道，保留极轻微自然接触阴影但不带底座或桌面。不要锤柄、不要第二件物体、不要人物、文字、印章、UI、边框或水印。透明 RGBA PNG，3:2，建议 1500×1000。',
   },
 }
 
