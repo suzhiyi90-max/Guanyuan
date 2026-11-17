@@ -31,7 +31,7 @@ export function DrawerFrame({ children, title, eyebrow, onClose, className = '' 
   )
 }
 
-export function PlanDrawer({ onClose, onConfirm, canPlan, state }: { onClose: () => void, onConfirm: (plan: { leader: string, leaderName: string, material: number, labor: number, supervisor: string, detail: string }) => void, canPlan: boolean, state: GameState }) {
+export function PlanDrawer({ onClose, onConfirm, canPlan, state }: { onClose: () => void, onConfirm: (plan: { leader: string, leaderName: string, material: number, labor: number, supervisor: string, detail: string, guarantee: boolean }) => void, canPlan: boolean, state: GameState }) {
   const [leader, setLeader] = useState('foreman')
   const [material, setMaterial] = useState(8)
   const [labor, setLabor] = useState(30)
@@ -109,7 +109,7 @@ export function PlanDrawer({ onClose, onConfirm, canPlan, state }: { onClose: ()
       </div>
       <footer className="drawer-footer plan-summary">
         <div><span><Clock3 size={14} />执行 3–4 日</span><span><Coins size={14} />夫食 25 两</span></div>
-        <button className="primary-button" disabled={!valid || !canPlan} onClick={() => onConfirm({ leader, leaderName, material, labor, supervisor, detail: `${leaderName}主办 · 料${material}垛 · 夫${labor}人 · ${supervisor}` })}>{canPlan ? '签押，发起抢护' : '抢护已在执行'}<ArrowRight size={17} /></button>
+        <button className="primary-button" disabled={!valid || !canPlan} onClick={() => onConfirm({ leader, leaderName, material, labor, supervisor, detail: `${leaderName}主办 · 料${material}垛 · 夫${labor}人 · ${supervisor}`, guarantee })}>{canPlan ? '签押，发起抢护' : '抢护已在执行'}<ArrowRight size={17} /></button>
         <small>发起占本时段；任务异步执行，不会立即显示“已完成”。</small>
       </footer>
     </DrawerFrame>
