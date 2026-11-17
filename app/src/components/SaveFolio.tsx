@@ -125,13 +125,14 @@ export function SaveFolio({ summary, onExport, onReset, onPrepareImport, onCommi
     setDeleteError(null)
     try {
       const result = await onDeleteSavedWorld(target.worldId)
-      if (result.status === 'success' && result.deleted) {
+      if (result.status === 'success') {
         setDeleteTarget(null)
+        if (!result.deleted) setDeleteError('档案已不存在，目录已重新核对。')
         await refreshWorlds()
-      } else if (result.status === 'success') {
-        setDeleteTarget(null)
-        setDeleteError('档案已不存在，目录已重新核对。')
-        await refreshWorlds()
+        window.requestAnimationFrame(() => {
+          const refreshButton = rootRef.current?.querySelector<HTMLButtonElement>('.save-folio-library-head button')
+          ;(refreshButton ?? headRef.current)?.focus()
+        })
       } else {
         const messages: Record<string, string> = {
           'active-world': '当前正在接续的人生不能删除。',
