@@ -42,17 +42,17 @@
 
 ## FE-170：正式人生开局美术资源接收
 
-> 以下资源由用户于 2026-11-17 提交。此处记录的是本轮视觉验收与目标图位；源文件进入仓库前，不得把对应资源状态标记为已接入。图位与完整生成/返修说明见 `app/docs/FE-170-ART-INTAKE.md`。
+> 以下资源由用户于 2026-11-17 提交。二进制已入库（commit `3641a02`），`sceneArt.ts` 六处图位已接正式路径、`pending` 已清除。运行页面视觉回归尚未执行，状态列不写「已验收」。图位与完整说明见 `app/docs/FE-170-ART-INTAKE.md`。
 
 | 上传文件 | 目标资源 | 用途 | 验收/接入状态 |
 |---|---|---|---|
-| `34442.png` | `public/assets/exam-registration-yard.png` | 科举报名、候场院落背景 | 画面通过；二进制文件待入库 |
-| `34443.png` | `public/assets/exam-hall.png` | 科举考试号舍背景 | 画面通过；二进制文件待入库 |
-| `34445.png` | `public/assets/exam-results-board-frame.png` | 放榜页透明装裱框 | 画面与透明通道通过；二进制文件待入库 |
-| `34446.png` | `public/assets/audience-hall.png` | 官场正式拜谒厅堂背景 | 画面通过；二进制文件待入库 |
-| `34444.png` | `public/assets/exam-desk.webp`（运行版）；透明 PNG 母版另存 | 科举考生桌案前景道具 | 工具完成背景分离和透明输出；待二进制进入 Git |
+| `34442.png` | `public/assets/exam-registration-yard.png` | 科举报名、候场院落背景 | 画面通过；已入库 `3641a02` |
+| `34443.png` | `public/assets/exam-hall.png` | 科举考试号舍背景 | 画面通过；已入库 `3641a02` |
+| `34445.png` | `public/assets/exam-results-board-frame.png` | 放榜页透明装裱框 | 画面与透明通道通过；已入库 `3641a02` |
+| `34446.png` | `public/assets/audience-hall.png` | 官场正式拜谒厅堂背景 | 画面通过；已入库 `3641a02` |
+| `34444.png` | `public/assets/exam-desk.webp`（运行版）；透明 PNG 母版另存 | 科举考生桌案前景道具 | 透明分离通过；已入库 `3641a02` |
 | `34447.png` | — | 旧版惊堂木 | 已由 34448.png 替代，不接入 |
-| `34448.png` | `public/assets/court-gavel.webp`（运行版）；透明 PNG 母版另存 | 惊堂木独立前景道具 | 工具完成背景分离与透明输出；待二进制进入 Git |
+| `34448.png` | `public/assets/court-gavel.webp`（运行版）；透明 PNG 母版另存 | 惊堂木独立前景道具 | 透明分离通过；已入库 `3641a02` |
 
 ## 美术资源施工铁律（FE-170）
 
