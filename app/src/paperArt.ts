@@ -312,4 +312,3 @@ export function rankCardFrameOf(role: string, rank: string): RankCardFrameSpec |
   if (rank.includes('工头') || role.includes('堡夫') || role.includes('差役')) return rankCardFrames.runner
   return null
 }
-
