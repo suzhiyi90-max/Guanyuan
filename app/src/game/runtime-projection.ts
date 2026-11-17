@@ -144,7 +144,7 @@ export function reducePreviewRuntimeEvent(
     }
 
     case 'banquet.choice': {
-      if (state.periodIndex !== 3 || state.day !== 1 || state.pendingEvent !== null) return rejectReplay('banquet-choice-outside-event')
+      if (state.periodIndex !== 3 || state.pendingEvent !== null) return rejectReplay('banquet-choice-outside-night')
       const actionKey = `banquet-choice-${state.day}`
       if (state.handledEvents.includes(actionKey)) return rejectReplay('banquet-already-decided')
       const choice = payload.choice
@@ -228,7 +228,6 @@ export function reducePreviewRuntimeEvent(
     }
 
     case 'day.advanced':
-      if (state.periodIndex !== 3) return rejectReplay('day-advance-outside-night')
       if (state.pendingEvent !== null) return rejectReplay('day-advance-world-event-pending')
       if (state.day >= 10) return rejectReplay('day-advance-after-final-day')
       return advanceDay(state)
