@@ -17,9 +17,11 @@ export type ScenePlateId =
   | 'market' | 'arrival'
   | 'prologue-night' | 'chapter-close' | 'inner-court' | 'banquet'
   | 'summary-night'
+  | 'exam-registration-yard' | 'exam-hall' | 'audience-hall'
 
 export interface ScenePlateSpec {
   src: string | null
+  targetSrc?: string
   fallbackSrc?: string
   fallbackCredit?: string
   alt: string
@@ -75,6 +77,28 @@ export const scenePlates: Record<ScenePlateId, ScenePlateSpec> = {
     position: '48% 62%',
   },
   // FE-135：夜结算画境（PS-24）待用户生成；图未到暂借立志夜实景并标待补。
+  // FE-170：用户提供并通过画面审查；二进制已入库（commit 3641a02），图位改接正式路径。
+  'exam-registration-yard': {
+    src: '/assets/exam-registration-yard.png',
+    targetSrc: '/assets/exam-registration-yard.png',
+    alt: '科举报名院落：北方县学院门、青砖院墙与候场空地',
+    credit: '科举报名院落 · FE-170 用户提供专图',
+    position: '50% 54%',
+  },
+  'exam-hall': {
+    src: '/assets/exam-hall.png',
+    targetSrc: '/assets/exam-hall.png',
+    alt: '科举考场：成排号舍、木隔板、考桌与高窗天光',
+    credit: '科举考场 · FE-170 用户提供专图',
+    position: '50% 50%',
+  },
+  'audience-hall': {
+    src: '/assets/audience-hall.png',
+    targetSrc: '/assets/audience-hall.png',
+    alt: '正式拜谒厅堂：正厅主位、屏风、宾席与行礼空间',
+    credit: '正式拜谒厅堂 · FE-170 用户提供专图',
+    position: '50% 52%',
+  },
   'summary-night': {
     src: '/assets/summary-night.png',
     fallbackSrc: '/assets/prologue-night.png',
@@ -171,6 +195,60 @@ const eventPlateMap: Record<string, ScenePlateId> = {
   'commissioner-arrival': 'event-commissioner',
   storm: 'event-storm',
   'gate-gift': 'inner-court',
+}
+
+/**
+ * FE-170：非整幅场景背景的独立美术资源位。
+ * 这些图以 contain 方式叠加到后续对应场景/文书组件；不参与 ScenePlate 的 cover 裁切。
+ */
+export type SceneObjectAssetId = 'exam-results-board-frame' | 'exam-desk' | 'court-gavel'
+export interface SceneObjectAssetSpec {
+  src: string | null
+  targetSrc: string
+  alt: string
+  credit: string
+  role: 'document-frame' | 'foreground-prop'
+  fit: 'contain'
+  aspectRatio: string
+  transparentRequired: boolean
+  pending: boolean
+  prompt?: string
+}
+
+export const sceneObjectAssets: Record<SceneObjectAssetId, SceneObjectAssetSpec> = {
+  'exam-results-board-frame': {
+    src: '/assets/exam-results-board-frame.png',
+    targetSrc: '/assets/exam-results-board-frame.png',
+    alt: '放榜装裱框：深色雕花木框与中央空白榜纸',
+    credit: '放榜装裱框 · FE-170 用户提供专图',
+    role: 'document-frame',
+    fit: 'contain',
+    aspectRatio: '2 / 3',
+    transparentRequired: true,
+    pending: false,
+  },
+  'exam-desk': {
+    src: '/assets/exam-desk.webp',
+    targetSrc: '/assets/exam-desk.webp',
+    alt: '科举考生桌案：木桌、围屏、笔架、砚台与空白宣纸',
+    credit: '科举桌案 · FE-170 用户提供专图 · 工具完成透明分离',
+    role: 'foreground-prop',
+    fit: 'contain',
+    aspectRatio: '4 / 3',
+    transparentRequired: true,
+    pending: false,
+  },
+  'court-gavel': {
+    src: '/assets/court-gavel.webp',
+    targetSrc: '/assets/court-gavel.webp',
+    alt: '惊堂木：清代州县衙门案前使用的单件厚木拍板',
+    credit: '惊堂木 · FE-170 用户提供专图 · 工具完成透明分离',
+    role: 'foreground-prop',
+    fit: 'contain',
+    aspectRatio: '3 / 2',
+    transparentRequired: true,
+    pending: false,
+  },
 }
 
 export function worldEventPlateOf(eventId: string): ScenePlateId {

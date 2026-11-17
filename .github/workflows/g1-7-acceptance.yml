@@ -43,6 +43,7 @@ on:
       - work/w5-e2-portable-save-import-contract
       - work/w5-e2a-portable-import-core
       - work/w5-e3-local-save-management
+      - integration/w5-e3-fe170-scene-art
   pull_request:
     branches:
       - work/w5-e2a-portable-import-core
