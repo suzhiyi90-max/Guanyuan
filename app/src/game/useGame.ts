@@ -107,6 +107,7 @@ export function useGuanyuanGame() {
   const repositoryRef = useRef<SaveRepository | null>(null)
   const persistenceQueueRef = useRef<Promise<void>>(Promise.resolve())
   const pendingSaveCountsRef = useRef(new Map<string, number>())
+  const archiveOperationRef = useRef<'restore' | 'import' | 'delete' | null>(null)
   const persistenceEnabledRef = useRef(false)
   const [state, setState] = useState<GameState>(() => createInitialGameState())
   const [toast, setToast] = useState<ToastMessage | null>(null)
@@ -200,13 +201,23 @@ export function useGuanyuanGame() {
 
   const commitPortableImport = useCallback(async (file: File): Promise<PortableSaveImportResult> => {
     const repository = repositoryRef.current
-    if (!repository) return { status: 'rejected', issue: 'storage-error' }
-    return commitPortableSaveFile(file, repository)
+    if (!repository || archiveOperationRef.current !== null) return { status: 'rejected', issue: 'storage-error' }
+    archiveOperationRef.current = 'import'
+    try {
+      return await commitPortableSaveFile(file, repository)
+    } finally {
+      if (archiveOperationRef.current === 'import') archiveOperationRef.current = null
+    }
   }, [])
 
   const chooseSavedWorld = useCallback(async (worldId: string) => {
     const repository = repositoryRef.current
     if (!repository) return
+    if (archiveOperationRef.current !== null) {
+      setToast({ id: Date.now(), title: '档案操作暂不可用', detail: '另一项恢复、导入或删除操作正在进行，请稍后重试。' })
+      return
+    }
+    archiveOperationRef.current = 'restore'
     const requestedSession = runtimeRef.current
     const preserveActiveSession = requestedSession !== null
     if (!preserveActiveSession) setStartup({ status: 'loading' })
@@ -250,6 +261,44 @@ export function useGuanyuanGame() {
       } else {
         setStartup({ status: 'error', issue: 'save-repository-storage-error' })
       }
+    } finally {
+      if (archiveOperationRef.current === 'restore') archiveOperationRef.current = null
+    }
+  }, [])
+
+  const deleteSavedWorld = useCallback(async (worldId: string): Promise<{ readonly status: 'success'; readonly deleted: boolean } | { readonly status: 'rejected'; readonly issue: string }> => {
+    const repository = repositoryRef.current
+    if (!repository) return { status: 'rejected', issue: 'save-repository-unavailable' }
+    if (runtimeRef.current?.worldId === worldId) return { status: 'rejected', issue: 'active-world' }
+    if (archiveOperationRef.current !== null) return { status: 'rejected', issue: 'archive-operation-busy' }
+    archiveOperationRef.current = 'delete'
+    const requestedSession = runtimeRef.current
+    try {
+      // Drain until the queue identity is stable; a queued save may enqueue another save.
+      let queued = persistenceQueueRef.current
+      while (true) {
+        await queued
+        if (queued === persistenceQueueRef.current) break
+        queued = persistenceQueueRef.current
+      }
+      if (runtimeRef.current !== requestedSession) return { status: 'rejected', issue: 'active-session-changed' }
+      if (runtimeRef.current?.worldId === worldId) return { status: 'rejected', issue: 'active-world' }
+
+      // Re-read the authoritative index after the queue fence; never trust the UI's old head.
+      const listed = await repository.listWorlds()
+      if (listed.status === 'rejected') return { status: 'rejected', issue: listed.issue }
+      const target = listed.value.find(item => item.worldId === worldId)
+      if (!target) return { status: 'success', deleted: false }
+      if (runtimeRef.current !== requestedSession || runtimeRef.current?.worldId === worldId) {
+        return { status: 'rejected', issue: 'active-session-changed' }
+      }
+      const deleted = await repository.deleteWorld(worldId as WorldId, target.streamHead)
+      if (deleted.status === 'rejected') return { status: 'rejected', issue: deleted.issue }
+      return { status: 'success', deleted: deleted.value }
+    } catch {
+      return { status: 'rejected', issue: 'save-repository-storage-error' }
+    } finally {
+      if (archiveOperationRef.current === 'delete') archiveOperationRef.current = null
     }
   }, [])
 
@@ -382,6 +431,10 @@ export function useGuanyuanGame() {
 
   // 重立志是创建新世界，不删除或覆盖 legacy v1 key，也不伪造旧世界的事件历史。
   const resetGame = useCallback(() => {
+    if (archiveOperationRef.current !== null) {
+      setToast({ id: Date.now(), title: '暂不能另立新志', detail: '档案恢复、导入或删除正在进行，请稍后重试。' })
+      return
+    }
     runtimeRef.current = createPreviewRuntimeSession(allocatePreviewWorldId())
     setState(runtimeRef.current.state)
     setRestored(false)
@@ -403,6 +456,8 @@ export function useGuanyuanGame() {
     resumed,
     startup,
     chooseSavedWorld,
+    deleteSavedWorld,
+    activeWorldId: runtimeRef.current?.worldId ?? null,
     retryStartup,
     listSavedWorlds,
     exportPortableSavePackage,

@@ -5,7 +5,7 @@
  */
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import { ChevronDown, Download, RotateCcw, ShieldAlert, Upload, X } from 'lucide-react'
+import { ChevronDown, Download, RotateCcw, ShieldAlert, Trash2, Upload, X } from 'lucide-react'
 import type { PortableSaveImportResult, PortableSavePrepareResult } from '../persistence/portable-save-import'
 import { PORTABLE_SAVE_MAX_BYTES } from '../persistence/strict-json'
 import type { SaveRepositoryResult, SaveWorldSummary } from '../persistence/save-repository'
@@ -22,7 +22,7 @@ export interface SaveSummary {
 
 const dayNames = ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十']
 
-export function SaveFolio({ summary, onExport, onReset, onPrepareImport, onCommitImport, onListSavedWorlds, onChooseSavedWorld, extra }: { summary: SaveSummary, onExport?: () => void | Promise<void>, onReset: () => void, onPrepareImport?: (file: File) => Promise<PortableSavePrepareResult>, onCommitImport?: (file: File) => Promise<PortableSaveImportResult>, onListSavedWorlds?: () => Promise<SaveRepositoryResult<readonly SaveWorldSummary[]>>, onChooseSavedWorld?: (worldId: string) => Promise<void>, extra?: ReactNode }) {
+export function SaveFolio({ summary, onExport, onReset, onPrepareImport, onCommitImport, onListSavedWorlds, onChooseSavedWorld, onDeleteSavedWorld, activeWorldId, extra }: { summary: SaveSummary, onExport?: () => void | Promise<void>, onReset: () => void, onPrepareImport?: (file: File) => Promise<PortableSavePrepareResult>, onCommitImport?: (file: File) => Promise<PortableSaveImportResult>, onListSavedWorlds?: () => Promise<SaveRepositoryResult<readonly SaveWorldSummary[]>>, onChooseSavedWorld?: (worldId: string) => Promise<void>, onDeleteSavedWorld?: (worldId: string) => Promise<{ readonly status: 'success'; readonly deleted: boolean } | { readonly status: 'rejected'; readonly issue: string }>, activeWorldId?: string | null, extra?: ReactNode }) {
   const [open, setOpen] = useState(false)
   const [armed, setArmed] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -34,10 +34,16 @@ export function SaveFolio({ summary, onExport, onReset, onPrepareImport, onCommi
   const [worldsStatus, setWorldsStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
   const [worldsError, setWorldsError] = useState<string | null>(null)
   const [restoringWorldId, setRestoringWorldId] = useState<string | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<SaveWorldSummary | null>(null)
+  const [deletingWorldId, setDeletingWorldId] = useState<string | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
   const reduceMotion = useReducedMotion()
   const panelId = useId()
   const rootRef = useRef<HTMLDivElement | null>(null)
   const headRef = useRef<HTMLButtonElement | null>(null)
+  const deleteConfirmRef = useRef<HTMLButtonElement | null>(null)
+  const deleteCancelRef = useRef<HTMLButtonElement | null>(null)
+  const deleteTriggerRef = useRef<HTMLButtonElement | null>(null)
   const armTimer = useRef(0)
   const savedTimer = useRef(0)
 
@@ -103,7 +109,7 @@ export function SaveFolio({ summary, onExport, onReset, onPrepareImport, onCommi
   }, [open, onListSavedWorlds, refreshWorlds])
 
   const handleChooseWorld = async (worldId: string) => {
-    if (!onChooseSavedWorld || restoringWorldId) return
+    if (!onChooseSavedWorld || restoringWorldId || deletingWorldId) return
     setRestoringWorldId(worldId)
     try {
       await onChooseSavedWorld(worldId)
@@ -111,6 +117,69 @@ export function SaveFolio({ summary, onExport, onReset, onPrepareImport, onCommi
       setRestoringWorldId(null)
     }
   }
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget || !onDeleteSavedWorld || deletingWorldId || worldsStatus !== 'ready') return
+    const target = deleteTarget
+    setDeletingWorldId(target.worldId)
+    setDeleteError(null)
+    try {
+      const result = await onDeleteSavedWorld(target.worldId)
+      if (result.status === 'success') {
+        setDeleteTarget(null)
+        if (!result.deleted) setDeleteError('档案已不存在，目录已重新核对。')
+        await refreshWorlds()
+        window.requestAnimationFrame(() => {
+          const refreshButton = rootRef.current?.querySelector<HTMLButtonElement>('.save-folio-library-head button')
+          ;(refreshButton ?? headRef.current)?.focus()
+        })
+      } else {
+        const messages: Record<string, string> = {
+          'active-world': '当前正在接续的人生不能删除。',
+          'archive-operation-busy': '另一项档案操作正在进行，请稍后重试。',
+          'active-session-changed': '等待期间当前人生发生变化，删除已取消。',
+          'save-repository-head-conflict': '档案在确认期间发生新保存，请刷新目录后重试。',
+          'save-repository-record-corrupt': '档案索引结构异常，已阻止普通删除。',
+          'save-repository-unavailable': '本机存储不可用，未删除档案。',
+          'save-repository-storage-error': '本机存储事务失败，未删除档案。',
+        }
+        setDeleteError(messages[result.issue] ?? `删除未完成：${result.issue}`)
+      }
+    } catch {
+      setDeleteError('删除过程发生异常；档案状态未被确认，请刷新目录。')
+    } finally {
+      setDeletingWorldId(null)
+    }
+  }
+
+  useEffect(() => {
+    if (!deleteTarget) return
+    deleteConfirmRef.current?.focus()
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !deletingWorldId) {
+        event.preventDefault()
+        event.stopPropagation()
+        setDeleteTarget(null)
+        setDeleteError(null)
+        window.requestAnimationFrame(() => deleteTriggerRef.current?.focus())
+        return
+      }
+      if (event.key === 'Tab') {
+        const first = deleteCancelRef.current
+        const last = deleteConfirmRef.current
+        if (!first || !last) return
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault()
+          last.focus()
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault()
+          first.focus()
+        }
+      }
+    }
+    document.addEventListener('keydown', onKeyDown, true)
+    return () => document.removeEventListener('keydown', onKeyDown, true)
+  }, [deleteTarget, deletingWorldId])
 
   const clearImport = () => {
     setImportFile(null)
@@ -259,10 +328,39 @@ export function SaveFolio({ summary, onExport, onReset, onPrepareImport, onCommi
                   {worldsStatus === 'ready' && worlds.length > 0 && <ul className="save-folio-world-list">{worlds.map(world => (
                     <li key={world.worldId} className="save-folio-world">
                       <div><b>人生档案 · {world.worldId.slice(-8)}</b><small>{new Date(world.savedAt).toLocaleString()} · {world.packageKind === 'full' ? '完整卷' : '续记卷'} · {world.streamHead.seq} 条事件</small><small>校验摘要：{world.checksum.slice(0, 19)}…</small></div>
-                      <button type="button" className="save-folio-act" onClick={() => void handleChooseWorld(world.worldId)} disabled={restoringWorldId !== null}>{restoringWorldId === world.worldId ? '正在验卷…' : '选择并恢复'}</button>
+                      <div className="save-folio-world-actions">
+                        <button type="button" className="save-folio-act" onClick={() => void handleChooseWorld(world.worldId)} disabled={restoringWorldId !== null || deletingWorldId !== null}>{restoringWorldId === world.worldId ? '正在验卷…' : '选择并恢复'}</button>
+                        {onDeleteSavedWorld && <button
+                          type="button"
+                          className="save-folio-act is-danger"
+                          ref={element => { if (deleteTarget?.worldId === world.worldId || (!deleteTarget && element)) deleteTriggerRef.current = element }}
+                          onClick={() => { setDeleteError(null); setDeleteTarget(world) }}
+                          disabled={worldsStatus !== 'ready' || restoringWorldId !== null || deletingWorldId !== null || activeWorldId === world.worldId}
+                          title={activeWorldId === world.worldId ? '当前正在接续的人生不能删除' : worldsStatus !== 'ready' ? '请先成功刷新档案目录' : '删除此本机档案'}
+                        >{activeWorldId === world.worldId ? '当前人生' : <><Trash2 size={12} />删除档案</>}</button>}
+                      </div>
                     </li>
                   ))}</ul>}
                   <p>列表仅展示索引摘要。选择恢复时会重新读取存档，并执行完整校验链与事件重放；未成功验证前不会替换当前人生。</p>
+                  {worldsStatus === 'error' && worlds.length > 0 && <p role="status">当前显示的是上次成功读取的旧目录；刷新成功前禁止删除。</p>}
+                  {deleteError && <p role="alert">{deleteError}</p>}
+                  {deleteTarget && (
+                    <div className="save-folio-delete-backdrop">
+                      <section className="save-folio-delete-dialog" role="dialog" aria-modal="true" aria-labelledby={`${panelId}-delete-title`} aria-describedby={`${panelId}-delete-description`}>
+                        <span className="eyebrow">本机档案管理 · 删除确认</span>
+                        <h3 id={`${panelId}-delete-title`}>确认删除此人生档案？</h3>
+                        <p id={`${panelId}-delete-description`}>人生档案 · {deleteTarget.worldId.slice(-8)}</p>
+                        <p>此操作不可撤销，只删除本机该人生及其完整存档链，不影响当前正在接续的人生。</p>
+                        {deleteError && <p role="alert">{deleteError}</p>}
+                        <div className="save-folio-delete-actions">
+                          <button ref={deleteCancelRef} type="button" className="save-folio-act" onClick={() => { if (deletingWorldId) return; setDeleteTarget(null); setDeleteError(null); window.requestAnimationFrame(() => deleteTriggerRef.current?.focus()) }} disabled={deletingWorldId !== null}>取消</button>
+                          <button ref={deleteConfirmRef} type="button" className="save-folio-act is-danger" onClick={() => void handleDeleteConfirm()} disabled={deletingWorldId !== null || worldsStatus !== 'ready' || activeWorldId === deleteTarget.worldId}>
+                            {deletingWorldId === deleteTarget.worldId ? '正在删除…' : '确认删除此档案'}
+                          </button>
+                        </div>
+                      </section>
+                    </div>
+                  )}
                 </section>
               )}
 

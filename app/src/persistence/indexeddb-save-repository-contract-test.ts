@@ -95,6 +95,15 @@ export async function runIndexedDbSaveRepositoryContractTests(): Promise<readonl
   const list = await repository.listWorlds()
   check('world index exposes head metadata without loading package payloads', list.status === 'success'
     && list.value.some(item => item.worldId === worldId && item.streamHead.seq === 1))
+  const olderWorldId = brandedId<'WorldId'>('w5-d1-browser-contract-older') as WorldId
+  const olderFull = { ...full, worldId: olderWorldId, snapshot: { ...full.snapshot, worldId: olderWorldId } } as unknown as FullSavePackage
+  const olderWorld = await repository.commitWorld({
+    worldId: olderWorldId, packageChain: olderFull, expectedHead: null, savedAt: '2026-11-15T00:00:00.000Z',
+  })
+  check('older world can coexist for deterministic index ordering', olderWorld.status === 'success')
+  const orderedList = await repository.listWorlds()
+  check('world index sorts newest savedAt first', orderedList.status === 'success'
+    && orderedList.value[0]?.worldId === worldId && orderedList.value[1]?.worldId === olderWorldId)
   const staleDelete = await repository.deleteWorld(worldId, genesis)
   check('stale delete cannot remove a world after its head advanced', staleDelete.status === 'rejected'
     && staleDelete.issue === 'save-repository-head-conflict')
@@ -113,14 +122,55 @@ export async function runIndexedDbSaveRepositoryContractTests(): Promise<readonl
   const worldRequest = worlds.get(worldId)
   worldRequest.onsuccess = () => worlds.put({ ...worldRequest.result, latestPackageKey: 'missing-package-node' })
   await tamperDone
-  db.close()
   const corrupted = await repository.loadWorld(worldId)
   check('corrupt package pointer is reported, never treated as an empty world', corrupted.status === 'rejected'
     && corrupted.issue === 'save-repository-record-corrupt')
+  const corruptDelete = await repository.deleteWorld(worldId, head1)
+  check('corrupt world index cannot be deleted as if it were a valid archive', corruptDelete.status === 'rejected'
+    && corruptDelete.issue === 'save-repository-record-corrupt')
+  const repair = db.transaction('worlds', 'readwrite')
+  const repairDone = new Promise<void>((resolve, reject) => {
+    repair.oncomplete = () => resolve()
+    repair.onabort = () => reject(repair.error)
+    repair.onerror = () => reject(repair.error)
+  })
+  const repairStore = repair.objectStore('worlds')
+  const repairRequest = repairStore.get(worldId)
+  repairRequest.onsuccess = () => repairStore.put({ ...repairRequest.result, latestPackageKey: `${worldId}::${checksum2}` })
+  await repairDone
+  db.close()
   const deleted = await repository.deleteWorld(worldId, head1)
   check('world deletion is guarded by the expected head', deleted.status === 'success' && deleted.value)
   const afterDelete = await repository.loadWorld(worldId)
   check('deletion removes the world and its package chain', afterDelete.status === 'success' && afterDelete.value === null)
+  const verifyDb = await new Promise<IDBDatabase>((resolve, reject) => {
+    const request = globalThis.indexedDB.open(databaseName, 1)
+    request.onsuccess = () => resolve(request.result)
+    request.onerror = () => reject(request.error)
+  })
+  const verifyTx = verifyDb.transaction('packages', 'readonly')
+  const verifyDone = new Promise<void>((resolve, reject) => {
+    verifyTx.oncomplete = () => resolve()
+    verifyTx.onabort = () => reject(verifyTx.error)
+    verifyTx.onerror = () => reject(verifyTx.error)
+  })
+  const deletedRows = await new Promise<unknown[]>((resolve, reject) => {
+    const request = verifyTx.objectStore('packages').index('worldId').getAll(worldId)
+    request.onsuccess = () => resolve(request.result)
+    request.onerror = () => reject(request.error)
+  })
+  const survivingRows = await new Promise<unknown[]>((resolve, reject) => {
+    const request = verifyTx.objectStore('packages').index('worldId').getAll(olderWorldId)
+    request.onsuccess = () => resolve(request.result)
+    request.onerror = () => reject(request.error)
+  })
+  await verifyDone
+  const survivingWorld = await repository.loadWorld(olderWorldId)
+  check('deletion removes every package row for the target WorldId', deletedRows.length === 0)
+  check('deletion preserves another WorldId and its package chain', survivingRows.length === 1
+    && survivingWorld.status === 'success' && survivingWorld.value?.worldId === olderWorldId
+    && survivingWorld.value.packageChain.packageKind === 'full')
+  verifyDb.close()
 
   const importRepository = new IndexedDbSaveRepository(globalThis.indexedDB, `${databaseName}-import`)
   const imported = await importRepository.importWorld({
@@ -150,6 +200,149 @@ export async function runIndexedDbSaveRepositoryContractTests(): Promise<readonl
   })))
   check('concurrent same-WorldId imports allow exactly one winner', concurrent.filter(result => result.status === 'success').length === 1
     && concurrent.filter(result => result.status === 'rejected' && result.issue === 'save-repository-world-exists').length === 1)
+  const raceRepository = new IndexedDbSaveRepository(globalThis.indexedDB, `${databaseName}-delete-races`)
+  const raceWorldId = brandedId<'WorldId'>('w5-e3-delete-race') as WorldId
+  const raceFull = { ...full, worldId: raceWorldId, snapshot: { ...full.snapshot, worldId: raceWorldId } } as unknown as FullSavePackage
+  const raceIncremental = {
+    ...incremental,
+    worldId: raceWorldId,
+    snapshot: { ...incremental.snapshot, worldId: raceWorldId },
+    basePackage: raceFull,
+  } as unknown as IncrementalSavePackage
+  const raceSeed = await raceRepository.commitWorld({
+    worldId: raceWorldId, packageChain: raceFull, expectedHead: null, savedAt: '2026-11-16T00:06:00.000Z',
+  })
+  check('delete race fixture commits a genesis world', raceSeed.status === 'success')
+  const [raceDelete, raceSave] = await Promise.all([
+    raceRepository.deleteWorld(raceWorldId, genesis),
+    raceRepository.commitWorld({ worldId: raceWorldId, packageChain: raceIncremental, expectedHead: genesis, savedAt: '2026-11-16T00:07:00.000Z' }),
+  ])
+  const raceFinal = await raceRepository.loadWorld(raceWorldId)
+  const raceIsAtomic = raceFinal.status === 'success' && (
+    raceFinal.value === null
+    || (raceFinal.value.streamHead.kind === 'event' && raceFinal.value.streamHead.seq === 1
+      && raceFinal.value.packageChain.packageKind === 'incremental')
+  )
+  const raceOutcome = (raceDelete.status === 'success' && raceDelete.value === true
+    && raceSave.status === 'rejected' && raceSave.issue === 'save-repository-head-conflict')
+    || (raceSave.status === 'success'
+      && raceDelete.status === 'rejected' && raceDelete.issue === 'save-repository-head-conflict')
+  check('concurrent save and delete settle as one serialized outcome', raceIsAtomic && raceOutcome)
+  await raceRepository.close()
+
+  const importDeleteRepository = new IndexedDbSaveRepository(globalThis.indexedDB, `${databaseName}-import-delete-race`)
+  const importDeleteWorldId = brandedId<'WorldId'>('w5-e3-import-delete-race') as WorldId
+  const importDeleteFull = { ...full, worldId: importDeleteWorldId, snapshot: { ...full.snapshot, worldId: importDeleteWorldId } } as unknown as FullSavePackage
+  const importDeleteSeed = await importDeleteRepository.commitWorld({
+    worldId: importDeleteWorldId, packageChain: importDeleteFull, expectedHead: null, savedAt: '2026-11-16T00:08:00.000Z',
+  })
+  const [deleteDuringImport, importDuringDelete] = await Promise.all([
+    importDeleteRepository.deleteWorld(importDeleteWorldId, genesis),
+    importDeleteRepository.importWorld({
+      worldId: importDeleteWorldId, packageChain: importDeleteFull, streamHead: genesis, savedAt: '2026-11-16T00:09:00.000Z',
+    }),
+  ])
+  const importDeleteFinal = await importDeleteRepository.loadWorld(importDeleteWorldId)
+  const importDeleteConsistent = importDeleteSeed.status === 'success'
+    && deleteDuringImport.status === 'success' && deleteDuringImport.value
+    && ((importDuringDelete.status === 'success' && importDeleteFinal.status === 'success'
+        && importDeleteFinal.value?.streamHead.kind === 'genesis')
+      || (importDuringDelete.status === 'rejected' && importDuringDelete.issue === 'save-repository-world-exists'
+        && importDeleteFinal.status === 'success' && importDeleteFinal.value === null))
+  check('concurrent import and delete preserve one transactionally valid final state', importDeleteConsistent)
+  if (importDeleteFinal.status === 'success' && importDeleteFinal.value === null) {
+    const retryImport = await importDeleteRepository.importWorld({
+      worldId: importDeleteWorldId, packageChain: importDeleteFull, streamHead: genesis, savedAt: '2026-11-16T00:10:00.000Z',
+    })
+    check('delete racing with import leaves no orphan package keys', retryImport.status === 'success')
+  } else {
+    check('delete racing with import leaves no orphan package keys', importDeleteFinal.status === 'success'
+      && importDeleteFinal.value?.packageChain.checksum === checksum1)
+  }
+  importDeleteRepository.close()
+
+  const abortDatabaseName = `${databaseName}-abort-delete`
+  const abortRepository = new IndexedDbSaveRepository(globalThis.indexedDB, abortDatabaseName)
+  const abortWorldId = brandedId<'WorldId'>('w5-e3-delete-abort-rollback') as WorldId
+  const abortFull = { ...full, worldId: abortWorldId, snapshot: { ...full.snapshot, worldId: abortWorldId } } as unknown as FullSavePackage
+  const abortIncremental = {
+    ...incremental,
+    worldId: abortWorldId,
+    snapshot: { ...incremental.snapshot, worldId: abortWorldId },
+    basePackage: abortFull,
+  } as unknown as IncrementalSavePackage
+  const abortSeedFull = await abortRepository.commitWorld({
+    worldId: abortWorldId, packageChain: abortFull, expectedHead: null, savedAt: '2026-11-16T00:11:00.000Z',
+  })
+  const abortSeedIncremental = await abortRepository.commitWorld({
+    worldId: abortWorldId, packageChain: abortIncremental, expectedHead: genesis, savedAt: '2026-11-16T00:12:00.000Z',
+  })
+  check('mid-cascade abort fixture stores a two-node package chain', abortSeedFull.status === 'success'
+    && abortSeedIncremental.status === 'success')
+
+  let abortNextCursorDelete: IDBTransaction | null = null
+  const originalTransaction = IDBDatabase.prototype.transaction
+  const originalCursorDelete = IDBCursor.prototype.delete
+  Object.defineProperty(IDBDatabase.prototype, 'transaction', {
+    configurable: true,
+    writable: true,
+    value: function (this: IDBDatabase, ...args: Parameters<typeof originalTransaction>): IDBTransaction {
+      const transaction = Reflect.apply(originalTransaction, this, args) as IDBTransaction
+      const stores = typeof args[0] === 'string' ? [args[0]] : Array.from(args[0])
+      if (this.name === abortDatabaseName && args[1] === 'readwrite'
+        && stores.includes('worlds') && stores.includes('packages')) {
+        abortNextCursorDelete = transaction
+      }
+      return transaction
+    },
+  })
+  Object.defineProperty(IDBCursor.prototype, 'delete', {
+    configurable: true,
+    writable: true,
+    value: function (this: IDBCursor): IDBRequest<undefined> {
+      const request = Reflect.apply(originalCursorDelete, this, []) as IDBRequest<undefined>
+      const transaction = abortNextCursorDelete
+      if (transaction) {
+        abortNextCursorDelete = null
+        queueMicrotask(() => transaction.abort())
+      }
+      return request
+    },
+  })
+  let abortedDelete: Awaited<ReturnType<typeof abortRepository.deleteWorld>>
+  try {
+    abortedDelete = await abortRepository.deleteWorld(abortWorldId, head1)
+  } finally {
+    Object.defineProperty(IDBDatabase.prototype, 'transaction', { configurable: true, writable: true, value: originalTransaction })
+    Object.defineProperty(IDBCursor.prototype, 'delete', { configurable: true, writable: true, value: originalCursorDelete })
+  }
+  check('mid-cascade transaction abort is reported as a rejected deletion', abortedDelete.status === 'rejected')
+  const afterAbort = await abortRepository.loadWorld(abortWorldId)
+  const abortVerifyDb = await new Promise<IDBDatabase>((resolve, reject) => {
+    const request = globalThis.indexedDB.open(abortDatabaseName, 1)
+    request.onsuccess = () => resolve(request.result)
+    request.onerror = () => reject(request.error)
+  })
+  const abortVerifyTx = abortVerifyDb.transaction('packages', 'readonly')
+  const abortVerifyDone = new Promise<void>((resolve, reject) => {
+    abortVerifyTx.oncomplete = () => resolve()
+    abortVerifyTx.onabort = () => reject(abortVerifyTx.error)
+    abortVerifyTx.onerror = () => reject(abortVerifyTx.error)
+  })
+  const abortRows = await new Promise<unknown[]>((resolve, reject) => {
+    const request = abortVerifyTx.objectStore('packages').index('worldId').getAll(abortWorldId)
+    request.onsuccess = () => resolve(request.result)
+    request.onerror = () => reject(request.error)
+  })
+  await abortVerifyDone
+  check('mid-cascade abort rolls back the world pointer and every package row', afterAbort.status === 'success'
+    && afterAbort.value?.worldId === abortWorldId
+    && afterAbort.value.packageChain.packageKind === 'incremental'
+    && afterAbort.value.packageChain.basePackage.packageKind === 'full'
+    && afterAbort.value.streamHead.seq === 1 && abortRows.length === 2)
+  abortVerifyDb.close()
+  abortRepository.close()
+
   await importRepository.deleteWorld(worldId, head1)
   await concurrentRepository.deleteWorld(worldId, head1)
   importRepository.close()

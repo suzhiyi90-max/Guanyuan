@@ -6896,3 +6896,73 @@ button.archive-node:hover { border-color: var(--cinnabar); color: var(--cinnabar
 .save-folio-library > p { margin: 7px 0 0; font: 8px/1.65 var(--serif); color: var(--ink-3); }
 .save-folio-world .save-folio-act { flex: 0 0 auto; }
 @media (max-width: 520px) { .save-folio-world { align-items: flex-start; flex-direction: column; } }
+
+
+/* W5-E3: local archive deletion confirmation */
+.save-folio-world-actions,
+.save-folio-delete-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.save-folio-delete-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgb(24 19 14 / 58%);
+  backdrop-filter: blur(3px);
+}
+.save-folio-delete-dialog {
+  width: min(100%, 420px);
+  padding: 24px;
+  border: 1px solid rgb(119 91 57 / 34%);
+  border-radius: 3px;
+  background: #f3ead8;
+  color: #382d20;
+  box-shadow: 0 22px 70px rgb(0 0 0 / 32%);
+}
+.save-folio-delete-dialog h3 {
+  margin: 10px 0;
+  font-family: var(--font-display, Georgia, serif);
+  font-size: 1.2rem;
+}
+.save-folio-delete-dialog p {
+  margin: 8px 0;
+  line-height: 1.65;
+}
+.save-folio-delete-dialog p[role="alert"] {
+  color: #9a3528;
+}
+.save-folio-delete-actions {
+  margin-top: 20px;
+}
+.save-folio-world-actions .is-danger,
+.save-folio-delete-actions .is-danger {
+  border-color: rgb(139 57 43 / 42%);
+}
+.save-folio-delete-dialog button:focus-visible,
+.save-folio-world-actions button:focus-visible {
+  outline: 2px solid #8b392b;
+  outline-offset: 3px;
+}
+@media (max-width: 520px) {
+  .save-folio-world-actions {
+    justify-content: flex-start;
+  }
+  .save-folio-delete-dialog {
+    padding: 18px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .save-folio-delete-backdrop,
+  .save-folio-delete-dialog {
+    scroll-behavior: auto;
+    transition: none !important;
+    animation: none !important;
+  }
+}

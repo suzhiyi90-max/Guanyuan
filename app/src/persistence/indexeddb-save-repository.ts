@@ -94,7 +94,7 @@ function isCursor(value: unknown): value is StreamCursor {
   if (!isRecord(value)) return false
   if (value.kind === 'genesis') return value.seq === 0 && Object.keys(value).every(key => key === 'kind' || key === 'seq')
   return value.kind === 'event' && Number.isSafeInteger(value.seq) && (value.seq as number) > 0
-    && typeof value.eventId === 'string' && Object.keys(value).every(key => key === 'kind' || key === 'seq' || key === 'eventId')
+    && typeof value.eventId === 'string' && value.eventId.trim().length > 0 && Object.keys(value).every(key => key === 'kind' || key === 'seq' || key === 'eventId')
 }
 
 function packageEnvelope(value: unknown, depth = 0): value is SavePackageChain {
@@ -159,11 +159,20 @@ function issueFrom(error: unknown): SaveRepositoryIssue {
   return 'save-repository-storage-error'
 }
 
+function isCanonicalIsoTimestamp(value: unknown): value is string {
+  if (typeof value !== 'string' || !Number.isFinite(Date.parse(value))) return false
+  try { return new Date(value).toISOString() === value } catch { return false }
+}
+
 function normalizeWorldRow(value: unknown): WorldRow | null {
-  if (!isRecord(value) || typeof value.worldId !== 'string' || typeof value.latestPackageKey !== 'string'
-    || typeof value.savedAt !== 'string' || typeof value.checksum !== 'string'
+  if (!isRecord(value)
+    || typeof value.worldId !== 'string' || !value.worldId.trim() || value.worldId !== value.worldId.trim()
+    || typeof value.latestPackageKey !== 'string'
+    || typeof value.checksum !== 'string' || !/^sha256:[0-9a-f]{64}$/u.test(value.checksum)
+    || value.latestPackageKey !== packageKey(value.worldId, value.checksum)
+    || !isCanonicalIsoTimestamp(value.savedAt)
     || (value.packageKind !== 'full' && value.packageKind !== 'incremental')
-    || !isRecord(value.streamHead)) return null
+    || !isCursor(value.streamHead)) return null
   return value as unknown as WorldRow
 }
 
@@ -252,7 +261,7 @@ export class IndexedDbSaveRepository implements SaveRepository {
   async commitWorld(input: CommitWorldSaveInput): Promise<SaveRepositoryResult<StoredWorldSave>> {
     if (!packageEnvelope(input.packageChain) || input.packageChain.worldId !== input.worldId
       || !sameCursor(input.packageChain.snapshot.streamHead, input.packageChain.streamRange.toInclusive)
-      || !Number.isFinite(Date.parse(input.savedAt))) {
+      || !isCanonicalIsoTimestamp(input.savedAt)) {
       return { status: 'rejected', issue: 'save-repository-package-invalid' }
     }
     if (input.packageChain.packageKind === 'incremental'
@@ -317,7 +326,7 @@ export class IndexedDbSaveRepository implements SaveRepository {
    * is the concurrency authority and any failure rolls the complete write back.
    */
   async importWorld(input: ImportWorldSaveInput): Promise<SaveRepositoryResult<StoredWorldSave>> {
-    if (!isJsonSafe(input.packageChain) || !Number.isFinite(Date.parse(input.savedAt))) {
+    if (!isJsonSafe(input.packageChain) || !isCanonicalIsoTimestamp(input.savedAt)) {
       return { status: 'rejected', issue: 'save-repository-package-invalid' }
     }
 
@@ -412,7 +421,12 @@ export class IndexedDbSaveRepository implements SaveRepository {
       await done
       const normalized = rows.map(normalizeWorldRow)
       if (normalized.some(row => row === null)) return { status: 'rejected', issue: 'save-repository-record-corrupt' }
-      return { status: 'success', value: Object.freeze(normalized.map(row => Object.freeze({
+      const ordered = [...normalized].sort((left, right) => {
+        if (left!.savedAt !== right!.savedAt) return left!.savedAt < right!.savedAt ? 1 : -1
+        if (left!.worldId === right!.worldId) return 0
+        return left!.worldId < right!.worldId ? -1 : 1
+      })
+      return { status: 'success', value: Object.freeze(ordered.map(row => Object.freeze({
         worldId: row!.worldId as WorldId,
         streamHead: row!.streamHead,
         savedAt: row!.savedAt,
