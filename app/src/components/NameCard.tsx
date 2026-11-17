@@ -21,7 +21,7 @@ export function NameCard({ person, state }: { person: Person; state: GameState }
 
   const frameStyle = frameReady && frame ? {
     '--rank-card-inset-x': `${frame.insetX}%`,
-    '--rank-card-inset-y': `${frame.insetY}%`,
+    '--rank-card-inset-y-width': `${frame.insetY * 4 / 3}%`,
     '--rank-card-portrait-top': `${rankCardSlotMap.portrait.top}%`,
     '--rank-card-portrait-height': `${rankCardSlotMap.portrait.height}%`,
     '--rank-card-identity-top': `${rankCardSlotMap.identity.top}%`,
