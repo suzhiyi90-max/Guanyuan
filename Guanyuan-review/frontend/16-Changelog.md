@@ -962,3 +962,11 @@
 - 融合修订 00/01/02/03/08/11/13/17/_指令：权威 v0.16、08 增五/六节并修重号、空白开局与全生命周期关系澄清、七人夹具定位、预览非权威（17 红线 35）。
 - 保留 G1 全部施工记录/代码/CI/测试；FE-168/v1.68 留待本地未推送结项备案之裁定。
 - 验收：check:docs 21 项、engine 166/166、smoke 268/268（临时目录独立端口）、build、diff --check、app 零变化；Draft PR base feat/g1-engine 关联 Issue #11。
+
+### v1.70（2026-11-17 · Minor · FE-171 C-157 品秩卡面接入）
+
+- 七档 PS-30～PS-36 登记到 `rankCardFrames`，按既有 `person.role/rank` 静态映射；逐族 inset 将肖像与身份信息叠加在卡框纸心。
+- 既有 `NameCard` 正面升级为 3:4 竖卡，原接触路径翻面保留；未知身份或图片加载失败退回旧名帖。
+- 当前 Person 没有爵封 / 正式荣誉字段，空槽留白；不新增人物字段、存档键、OverlayId 或数值判定。
+- smoke 增加图片解码、官品映射与翻面回归；GitHub Actions 最新 SHA 尚待完成，不预报通过。
+- 仅前端 UI / 美术资源映射与测试，W5 内核、EventLedger、Reducer、Schema、结算、重放、存档与恢复链未改。
