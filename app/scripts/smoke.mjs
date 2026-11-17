@@ -58,7 +58,7 @@ try {
     const module = await import('/src/persistence/indexeddb-save-repository-contract-test.ts')
     return module.runIndexedDbSaveRepositoryContractTests()
   })
-  check('IndexedDB 世界存档仓储专项契约', indexedDbContracts.length === 23, `${indexedDbContracts.length}/23`)
+  check('IndexedDB 世界存档仓储专项契约', indexedDbContracts.length === 25, `${indexedDbContracts.length}/25`)
   await page.evaluate(raw => { localStorage.clear(); localStorage.setItem('guanyuan.save.v1', raw) }, legacyDraft)
   await page.reload({ waitUntil: 'domcontentloaded' })
   await settle(600)
