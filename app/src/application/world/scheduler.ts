@@ -157,8 +157,10 @@ export function createDeterministicWorldScheduler(
         return rejected(request, initial.streamHead, 'world-simulation-task-invalid')
       }
       const ordered = [...tasks].sort(compareTasks)
+      const scheduledIds = ordered.flatMap(task => task.scheduleId === undefined ? [] : [task.scheduleId])
       if (new Set(ordered.map(task => task.taskId)).size !== ordered.length
-        || new Set(ordered.map(task => task.requestId)).size !== ordered.length) {
+        || new Set(ordered.map(task => task.requestId)).size !== ordered.length
+        || new Set(scheduledIds).size !== scheduledIds.length) {
         return rejected(request, initial.streamHead, 'world-simulation-task-identity-duplicate')
       }
       if (ordered.some(task => compareWorldTime(task.dueAt, request.from) < 0
