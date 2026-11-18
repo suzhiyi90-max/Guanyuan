@@ -4,11 +4,12 @@
  * This is a new domain-event registry. It does not mutate the frozen preview
  * registry or alter W3 registry semantics.
  */
-import type { JsonValue, LedgerEventInput } from '../../domain/event-ledger'
+import type { JsonValue, LedgerEventInput, LedgerSource } from '../../domain/event-ledger'
 import type { Person } from '../../domain/person/model'
 import type { IdentityAssignment, Authorization } from '../../domain/identity/model'
 import type { Organization } from '../../domain/relations/model'
 import type { WorldBootstrapMetadata } from '../../domain/world/metadata'
+import type { WorldBootstrapDescriptor } from './bootstrap'
 import {
   createEventRegistry,
   freezeEventRegistry,
@@ -189,4 +190,46 @@ export function validateWorldDomainEventPayload<Kind extends WorldDomainEventKin
   payload: JsonValue,
 ): EventSchemaValidationResult<WorldDomainEventKind> {
   return validateEventPayload(registry, kind, payload)
+}
+
+export function createWorldInitializationEventInput(
+  descriptor: WorldBootstrapDescriptor,
+  clientRequestId: string,
+): WorldDomainEventInput<'world.initialized'> {
+  return {
+    source: 'rule',
+    kind: 'world.initialized',
+    intentKind: 'world.initialize',
+    actor: 'system',
+    requestWorldTime: descriptor.startedAt,
+    clientRequestId,
+    payload: {
+      scenarioPackId: descriptor.scenarioPackId,
+      rulesetVersion: descriptor.rulesetVersion,
+      contentPackVersion: descriptor.contentPackVersion,
+      seedFingerprint: descriptor.seedFingerprint,
+      locationCode: descriptor.locationCode,
+      populationPolicyVersion: descriptor.populationPolicyVersion,
+    },
+  }
+}
+
+export function createPersonCreatedEventInput(
+  person: PersonCreationData,
+  options: {
+    readonly actor: string
+    readonly source: Extract<LedgerSource, 'player-command' | 'rule'>
+    readonly requestWorldTime: WorldTime
+    readonly clientRequestId: string
+  },
+): WorldDomainEventInput<'person.created'> {
+  return {
+    source: options.source,
+    kind: 'person.created',
+    intentKind: 'person.create',
+    actor: options.actor,
+    requestWorldTime: options.requestWorldTime,
+    clientRequestId: options.clientRequestId,
+    payload: { person },
+  }
 }
