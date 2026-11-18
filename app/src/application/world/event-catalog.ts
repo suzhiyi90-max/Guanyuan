@@ -87,16 +87,36 @@ function isWorldTimeValue(value: JsonValue): value is JsonValue {
   return isValidWorldTime(value as unknown as WorldTime)
 }
 
+function isHistoricalMinisterAllowListEntry(value: JsonValue): boolean {
+  if (!isRecord(value) || !hasExactKeys(value, [
+    'personId', 'displayName', 'category', 'evidenceRefs', 'validFrom', 'validThrough', 'scope',
+  ])) return false
+  if (![value.personId, value.displayName].every(isNonEmptyString)
+    || value.category !== 'famous-minister'
+    || !isStringArray(value.evidenceRefs)
+    || value.evidenceRefs.length === 0
+    || !isWorldTimeValue(value.validFrom)
+    || (value.validThrough !== null && !isWorldTimeValue(value.validThrough))
+    || !isRecord(value.scope)
+    || typeof value.scope.kind !== 'string') return false
+  if (value.scope.kind === 'world') return hasExactKeys(value.scope, ['kind'])
+  return value.scope.kind === 'location'
+    && hasExactKeys(value.scope, ['kind', 'locationCode'])
+    && isNonEmptyString(value.scope.locationCode)
+}
+
 function isBootstrapMetadata(value: JsonValue): value is JsonValue {
-  return isRecord(value)
-    && hasExactKeys(value, [
-      'scenarioPackId', 'rulesetVersion', 'contentPackVersion',
-      'seedFingerprint', 'locationCode', 'populationPolicyVersion',
-    ])
-    && [
-      value.scenarioPackId, value.rulesetVersion, value.contentPackVersion,
-      value.seedFingerprint, value.locationCode, value.populationPolicyVersion,
-    ].every(isNonEmptyString)
+  if (!isRecord(value) || !hasExactKeys(value, [
+    'scenarioPackId', 'rulesetVersion', 'contentPackVersion',
+    'seedFingerprint', 'locationCode', 'populationPolicyVersion', 'historicalNameAllowList',
+  ])) return false
+  if (![value.scenarioPackId, value.rulesetVersion, value.contentPackVersion,
+    value.seedFingerprint, value.locationCode, value.populationPolicyVersion].every(isNonEmptyString)
+    || !Array.isArray(value.historicalNameAllowList)
+    || !value.historicalNameAllowList.every(isHistoricalMinisterAllowListEntry)) return false
+  const ids = value.historicalNameAllowList.map(entry => (entry as JsonRecord).personId)
+  const names = value.historicalNameAllowList.map(entry => (entry as JsonRecord).displayName)
+  return new Set(ids).size === ids.length && new Set(names).size === names.length
 }
 
 function isPersonOrigin(value: JsonValue | undefined): boolean {
