@@ -5,7 +5,7 @@
  * call AI, mutate the ledger or repair invalid records.
  */
 import { field } from '../../domain/shared/field'
-import { brandedId, type EventId, type ScheduleId } from '../../domain/shared/ids'
+import { brandedId, type EventId } from '../../domain/shared/ids'
 import { compareWorldTime, isValidWorldTime } from '../../domain/shared/world-time'
 import type { LedgerEvent } from '../../domain/event-ledger'
 import type { WorldTime } from '../../domain/shared/world-time'
@@ -814,8 +814,12 @@ function applyScheduleEntryExecutionRecorded(
   if (data.resultEventId === event.id) throw new Error('world-reducer-schedule-result-event-self-reference')
   const refs = eventReferences(event, context)
   const resultTime = refs.eventTimes.get(data.resultEventId)
-  if (!refs.events.includes(data.resultEventId) || !resultTime) {
-    throw new Error('world-reducer-schedule-result-event-missing')
+  const orderedEventIds = context?.eventIds ?? []
+  const resultIndex = orderedEventIds.indexOf(data.resultEventId)
+  const settlementIndex = orderedEventIds.indexOf(event.id)
+  if (!refs.events.includes(data.resultEventId) || !resultTime
+    || resultIndex < 0 || settlementIndex < 0 || resultIndex >= settlementIndex) {
+    throw new Error('world-reducer-schedule-result-event-missing-or-not-prior')
   }
   const plannedAt: WorldTime = { day: current.day, period: current.period }
   if (compareWorldTime(resultTime, plannedAt) < 0) {
