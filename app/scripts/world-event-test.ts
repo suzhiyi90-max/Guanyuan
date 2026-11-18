@@ -115,6 +115,11 @@ function apply<K extends WorldDomainEventKind>(input: WorldDomainEventInput<K>):
   applyAt(input, now)
 }
 
+function currentEventId() {
+  if (aggregate.streamHead.kind !== 'event') throw new Error('test-stream-head-is-genesis')
+  return aggregate.streamHead.eventId
+}
+
 const initInput = createWorldInitializationEventInput(descriptor, 'world-init-001')
 apply(initInput)
 check('world initialization event stores scenario provenance', aggregate.bootstrap?.scenarioPackId === descriptor.scenarioPackId
@@ -226,7 +231,7 @@ apply(authorizationInput)
 check('authorization grant receives immutable event provenance',
   aggregate.identity.authorizations.length === 1
   && aggregate.streamHead.kind === 'event'
-  && aggregate.identity.authorizations[0]?.grantedBy === aggregate.streamHead.eventId)
+  && aggregate.identity.authorizations[0]?.grantedBy === currentEventId())
 
 const historicalPerson: PersonCreationData = {
   id: historicalMinisterId,
@@ -301,7 +306,7 @@ apply(createMembershipEndedEventInput(membershipId, {
 }))
 check('membership exit closes the existing interval without deleting membership history',
   aggregate.streamHead.kind === 'event'
-  && aggregate.society.memberships[0]?.validTo === aggregate.streamHead.eventId)
+  && aggregate.society.memberships[0]?.validTo === currentEventId())
 
 apply(createRelationLifecycleChangedEventInput(relationId, 'dormant', {
   actor: 'system', source: 'rule', requestWorldTime: now, clientRequestId: 'relation-dormant-001',
@@ -315,7 +320,7 @@ apply(createRelationLifecycleChangedEventInput(relationId, 'severed', {
 check('relation may become dormant, resume, and finally sever while preserving its history',
   aggregate.streamHead.kind === 'event'
   && aggregate.society.relations[0]?.lifecycle.status === 'severed'
-  && aggregate.society.relations[0]?.lifecycle.validTo === aggregate.streamHead.eventId)
+  && aggregate.society.relations[0]?.lifecycle.validTo === currentEventId())
 const relationReopenAppend = appendLedgerEvent(ledger, toLedgerEventInput(
   createRelationLifecycleChangedEventInput(relationId, 'active', {
     actor: 'system', source: 'rule', requestWorldTime: now, clientRequestId: 'relation-reopen-after-severed',
@@ -382,7 +387,7 @@ check('knowledge is holder-scoped and records its own source event and acquisiti
   && aggregate.cognition.knowledge[0]?.holder === person.id
   && aggregate.cognition.knowledge[0]?.subject.kind === 'relation'
   && aggregate.streamHead.kind === 'event'
-  && aggregate.cognition.knowledge[0]?.sourceEvent === aggregate.streamHead.eventId
+  && aggregate.cognition.knowledge[0]?.sourceEvent === currentEventId()
   && aggregate.cognition.knowledge[0]?.stance === 'suspected')
 
 const messageId = brandedId<'MessageId'>('message:letter-to-minister')
@@ -577,7 +582,7 @@ applyAt(createGoalStatusChangedEventInput(goalId, 'achieved', {
 check('goal terminal status change records a separate event-backed transition',
   aggregate.planning.goals[0]?.status === 'achieved'
   && aggregate.planning.goalStatusTransitions.length === 1
-  && aggregate.planning.goalStatusTransitions[0]?.event === aggregate.streamHead.eventId)
+  && aggregate.planning.goalStatusTransitions[0]?.event === currentEventId())
 
 applyAt(createScheduleEntryPlannedEventInput({
   id: brandedId<'ScheduleId'>('schedule:person:next-noon'),
@@ -608,7 +613,7 @@ applyAt(createDebtRecordedEventInput({
 }), nextNoon)
 check('debt creation records creditor, debtor, principal and source event',
   aggregate.economy.debts[0]?.status === 'open'
-  && aggregate.economy.debts[0]?.sourceEvent === aggregate.streamHead.eventId)
+  && aggregate.economy.debts[0]?.sourceEvent === currentEventId())
 
 applyAt(createDebtSettledEventInput(debtId, {
   actor: 'player', source: 'player-command', requestWorldTime: nextEvening, clientRequestId: 'debt-settle-001',
@@ -616,7 +621,7 @@ applyAt(createDebtSettledEventInput(debtId, {
 check('debt settlement is an explicit event reference and terminal status',
   aggregate.economy.debts[0]?.status === 'settled'
   && aggregate.economy.debts[0]?.settlements.length === 1
-  && aggregate.economy.debts[0]?.settlements[0] === aggregate.streamHead.eventId)
+  && aggregate.economy.debts[0]?.settlements[0] === currentEventId())
 
 const assetId = brandedId<'AssetId'>('asset:person:small-field')
 applyAt(createAssetRegisteredEventInput({
