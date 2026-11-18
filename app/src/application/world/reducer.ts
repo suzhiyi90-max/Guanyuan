@@ -387,14 +387,13 @@ function cognitionReferences(aggregate: WorldAggregate, event: LedgerEvent<World
     organizations: aggregate.society.organizations.map(item => item.id),
     assets: aggregate.economy.assets.map(item => item.id),
     debts: aggregate.economy.debts.map(item => item.id),
-    events: [event.id],
+    // Cognition references may point to any prior committed event, not
+    // only the event currently being reduced. Reconstruct the canonical
+    // contiguous event-ID prefix from the already-validated sequence.
+    events: Array.from({ length: event.seq }, (_, index) =>
+      brandedId<'EventId'>(`evt:${aggregate.worldId}:${index + 1}`)),
     knowledge: aggregate.cognition.knowledge.map(item => item.id),
     messages: aggregate.cognition.messages.map(item => item.id),
-    eventExists: (id: EventId) => {
-      if (!id.startsWith(prefix)) return false
-      const sequence = Number(id.slice(prefix.length))
-      return Number.isSafeInteger(sequence) && sequence > 0 && sequence <= event.seq
-    },
   }
 }
 
