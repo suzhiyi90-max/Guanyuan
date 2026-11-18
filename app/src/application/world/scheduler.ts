@@ -9,7 +9,8 @@ import type { JsonValue, WorldId } from '../../domain/event-ledger'
 import type { EventId, ScheduleId } from '../../domain/shared/ids'
 import { compareWorldTime, isValidWorldTime, type WorldTime } from '../../domain/shared/world-time'
 import type { WorldAggregate } from '../../domain/world/aggregate'
-import { createScheduleEntryExecutionRecordedEventInput, createWorldTimeAdvancedEventInput, toLedgerEventInput } from './event-catalog'
+import type { LifeStateFact } from '../../domain/life/state'
+import { createLifeStateFactRecordedEventInput, createScheduleEntryExecutionRecordedEventInput, createWorldTimeAdvancedEventInput, toLedgerEventInput, type LifeStateFactCreationData } from './event-catalog'
 import type {
   WorldCommandPort,
   WorldCommandReceipt,
@@ -88,6 +89,73 @@ export function createScheduleTaskSource(
           scheduleId: entry.id,
         })]
       })
+    },
+  })
+}
+
+/**
+ * A deterministic maintenance rule proposes the next immutable fact for one
+ * already-established life-state dimension. It supplies policy, not storage.
+ */
+export interface LifeStateMaintenanceResolverPort {
+  resolve(input: {
+    readonly request: WorldSimulationRequest
+    readonly aggregate: WorldAggregate
+    readonly person: WorldAggregate['persons'][number]
+    readonly previousFact: LifeStateFact
+  }): { readonly fact: LifeStateFactCreationData; readonly priority: number } | null
+}
+
+/**
+ * Builds event-backed body/mind maintenance tasks from the latest fact in each
+ * dimension. No numeric decay, rate or outcome is assumed by this adapter.
+ */
+export function createLifeStateMaintenanceTaskSource(
+  resolver: LifeStateMaintenanceResolverPort,
+): WorldSimulationTaskSourcePort {
+  return Object.freeze({
+    listDueTasks(request: WorldSimulationRequest, aggregate: WorldAggregate) {
+      const replaced = new Set(aggregate.life.stateFacts.flatMap(fact =>
+        fact.supersedes.kind === 'value' ? [fact.supersedes.value] : []))
+      const latestFacts = aggregate.life.stateFacts.filter(fact => !replaced.has(fact.id))
+      const tasks: WorldSimulationTask[] = []
+      for (const previousFact of latestFacts) {
+        const person = aggregate.persons.find(item => item.id === previousFact.person)
+        if (!person || person.lifeState !== 'alive'
+          || compareWorldTime(previousFact.at, request.to) >= 0) continue
+        const expectedScope = previousFact.domain === 'body'
+          ? person.stateDomains.body
+          : person.stateDomains.mind
+        if (previousFact.scope !== expectedScope) continue
+        const decision = resolver.resolve({ request, aggregate, person, previousFact })
+        if (!decision || !Number.isInteger(decision.priority)
+          || !Number.isFinite(decision.priority)) continue
+        const fact = decision.fact
+        if (!fact || aggregate.life.stateFacts.some(item => item.id === fact.id)
+          || fact.person !== person.id
+          || fact.domain !== previousFact.domain
+          || fact.scope !== previousFact.scope
+          || fact.dimension !== previousFact.dimension
+          || fact.supersedes.kind !== 'value'
+          || fact.supersedes.value !== previousFact.id) continue
+        const input = toLedgerEventInput(createLifeStateFactRecordedEventInput(fact, {
+          actor: 'system',
+          source: 'rule',
+          requestWorldTime: request.to,
+          clientRequestId: `w6-simulation:${request.worldId}:life-state:${fact.id}`,
+        }))
+        tasks.push(Object.freeze({
+          taskId: `life-state:${fact.id}`,
+          requestId: input.clientRequestId,
+          dueAt: request.to,
+          priority: decision.priority,
+          actor: 'system',
+          source: 'rule',
+          intentKind: input.intentKind,
+          payload: input.payload as unknown as JsonValue,
+        }))
+      }
+      return Object.freeze(tasks.sort(compareTasks))
     },
   })
 }
