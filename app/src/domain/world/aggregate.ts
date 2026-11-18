@@ -232,6 +232,8 @@ export function validateWorldAggregate(
         || !isValidWorldTime(origin.validFrom)
         || (origin.validThrough !== null && !isValidWorldTime(origin.validThrough))) {
         addIssue(issues, 'person', 'person-historical-origin-invalid', person.id)
+      } else if (origin.validThrough && compareWorldTime(origin.validThrough, origin.validFrom) < 0) {
+        addIssue(issues, 'person', 'person-historical-origin-validity-range-invalid', person.id)
       } else if (isValidWorldTime(aggregate.worldTime)) {
         if (compareWorldTime(origin.validFrom, aggregate.worldTime) > 0
           || (origin.validThrough && compareWorldTime(origin.validThrough, aggregate.worldTime) < 0)) {
@@ -245,6 +247,8 @@ export function validateWorldAggregate(
     } else if (origin.kind === 'player-character') {
       playerOriginCount += 1
       if (aggregate.playerPersonId !== person.id) addIssue(issues, 'person', 'player-origin-reference-mismatch', person.id)
+    } else {
+      addIssue(issues, 'person', 'person-origin-kind-invalid', person.id)
     }
   }
   for (const origin of aggregate.personOrigins) {
