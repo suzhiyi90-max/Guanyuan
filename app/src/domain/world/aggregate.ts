@@ -428,17 +428,46 @@ export function validateWorldAggregate(
   addCodes(issues, 'planning', validateScheduleSet(
     aggregate.planning.scheduleScopes, aggregate.planning.scheduleEntries, aggregate.persons, eventIds,
   ))
+  const ledgerEventIndex = new Map(ledger.events.map((item, index) => [item.id, index] as const))
   for (const entry of aggregate.planning.scheduleEntries) {
     if (entry.execution.kind === 'value' && entry.deviation.kind === 'value') {
       addIssue(issues, 'planning', 'schedule-execution-and-deviation-both-set', entry.id)
     }
     if (entry.execution.kind === 'value') {
       const resultTime = eventTimes.get(entry.execution.value)
+      const resultIndex = ledgerEventIndex.get(entry.execution.value)
       const plannedAt: WorldTime = { day: entry.day, period: entry.period }
       if (resultTime && isValidWorldTime(resultTime)
         && compareWorldTime(resultTime, plannedAt) < 0) {
         addIssue(issues, 'planning', 'schedule-execution-before-planned-time', entry.id)
       }
+      const settlementEvents = ledger.events.filter(item => {
+        if (item.kind !== 'schedule.entry.execution.recorded'
+          || item.payload === null || typeof item.payload !== 'object' || Array.isArray(item.payload)) return false
+        const payload = item.payload as { readonly [key: string]: import('../event-ledger').JsonValue }
+        return payload.scheduleId === entry.id && payload.resultEventId === entry.execution.value
+      })
+      if (settlementEvents.length === 0) {
+        addIssue(issues, 'planning', 'schedule-execution-settlement-event-missing', entry.id)
+      } else if (settlementEvents.length > 1) {
+        addIssue(issues, 'planning', 'schedule-execution-settlement-event-duplicate', entry.id)
+      } else {
+        const settlementIndex = ledgerEventIndex.get(settlementEvents[0]!.id)
+        const settlementTime = settlementEvents[0]!.committedAt
+        if (resultIndex === undefined || settlementIndex === undefined
+          || resultIndex >= settlementIndex || !isValidWorldTime(resultTime!)
+          || compareWorldTime(resultTime!, settlementTime) > 0) {
+          addIssue(issues, 'planning', 'schedule-execution-settlement-order-invalid', entry.id)
+        }
+      }
+    }
+    if (entry.deviation.kind === 'value') {
+      const deviationEvent = ledger.events.find(item => item.id === entry.deviation.value)
+      const payload = deviationEvent?.payload
+      const matches = deviationEvent?.kind === 'schedule.entry.deviation.recorded'
+        && payload !== null && typeof payload === 'object' && !Array.isArray(payload)
+        && (payload as { readonly [key: string]: import('../event-ledger').JsonValue }).scheduleId === entry.id
+      if (!matches) addIssue(issues, 'planning', 'schedule-deviation-source-event-invalid', entry.id)
     }
   }
   addCodes(issues, 'planning', validateGoalStatusHistory(
