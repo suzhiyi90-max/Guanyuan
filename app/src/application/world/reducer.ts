@@ -1024,6 +1024,33 @@ function applyAssetRegistered(
   })
 }
 
+function applyAssetCustodyTransferred(
+  aggregate: WorldAggregate,
+  event: LedgerEvent<WorldDomainEventKind>,
+): WorldAggregate {
+  requireBootstrap(aggregate)
+  const payload = event.payload as unknown as WorldDomainEventPayloadMap['asset.custody.transferred']
+  const assetIndex = aggregate.economy.assets.findIndex(item => item.id === payload.assetId)
+  if (assetIndex < 0) throw new Error('world-reducer-asset-custody-asset-missing')
+  if (!aggregate.persons.some(person => person.id === payload.toPersonId)) {
+    throw new Error('world-reducer-asset-custody-recipient-missing')
+  }
+  const current = aggregate.economy.assets[assetIndex]!
+  if (current.custody.kind !== 'value' || current.custody.value !== payload.fromPersonId) {
+    throw new Error('world-reducer-asset-custody-source-mismatch')
+  }
+  const updated: Asset = Object.freeze({
+    ...current,
+    custody: field.value(payload.toPersonId),
+  })
+  const assets = aggregate.economy.assets.map((item, index) => index === assetIndex ? updated : item)
+  return Object.freeze({
+    ...aggregate,
+    ...withEventCursor(aggregate, event),
+    economy: Object.freeze({ ...aggregate.economy, assets: Object.freeze(assets) }),
+  })
+}
+
 function applyAssetRightGranted(
   aggregate: WorldAggregate,
   event: LedgerEvent<WorldDomainEventKind>,
@@ -1215,6 +1242,8 @@ export function reduceWorldDomainEvent(
       return applyDebtSettled(aggregate, event, context)
     case 'asset.registered':
       return applyAssetRegistered(aggregate, event, context)
+    case 'asset.custody.transferred':
+      return applyAssetCustodyTransferred(aggregate, event)
     case 'asset.right.granted':
       return applyAssetRightGranted(aggregate, event, context)
     case 'asset.right.revoked':
