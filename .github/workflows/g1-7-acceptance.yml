@@ -134,6 +134,8 @@ jobs:
         run: npm run test:domain
       - name: World bootstrap and randomized population contracts
         run: npm run test:world-bootstrap
+      - name: World event registry and aggregate reducer contracts
+        run: npm run test:world-event
       - name: Identity and authorization contract tests
         run: npm run test:domain:identity
       - name: Authorization principal death gate contracts
