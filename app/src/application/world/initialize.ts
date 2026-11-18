@@ -139,6 +139,7 @@ export async function initializeWorldThroughPorts(
   let alreadyCommittedCount = 0
   const allCandidates = [...built.generatedPeople, ...built.historicalPeople]
   const existingIds = new Set<PersonId>()
+  const completedIds = new Set<PersonId>()
 
   for (const candidate of allCandidates) {
     const existingPerson = existing?.persons.some(person => person.id === candidate.id) ?? false
@@ -151,6 +152,7 @@ export async function initializeWorldThroughPorts(
         }
       }
       existingIds.add(candidate.id)
+      completedIds.add(candidate.id)
     }
   }
 
@@ -192,7 +194,7 @@ export async function initializeWorldThroughPorts(
         worldId: request.worldId,
         descriptor,
         createdPersonIds,
-        remainingPersonIds: allCandidates.map(item => item.id),
+        remainingPersonIds: allCandidates.filter(item => !completedIds.has(item.id)).map(item => item.id),
         streamHead,
         reason: result.reason,
       }
@@ -221,11 +223,12 @@ export async function initializeWorldThroughPorts(
         worldId: request.worldId,
         descriptor,
         createdPersonIds,
-        remainingPersonIds: allCandidates.slice(index).map(item => item.id),
+        remainingPersonIds: allCandidates.slice(index).filter(item => !completedIds.has(item.id)).map(item => item.id),
         streamHead,
         reason: result.reason,
       }
     }
+    completedIds.add(candidate.id)
     if (result.duplicate) alreadyCommittedCount += 1
     else createdPersonIds.push(candidate.id)
   }
