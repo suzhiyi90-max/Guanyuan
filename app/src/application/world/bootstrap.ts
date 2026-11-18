@@ -282,6 +282,7 @@ export function bootstrapWorld(request: WorldBootstrapRequest): WorldBootstrapRe
     status: 'ready',
     descriptor: Object.freeze({
       worldId: request.worldId,
+      seed: request.seed,
       seedFingerprint,
       scenarioPackId: request.scenarioPackId,
       rulesetVersion: request.rulesetVersion,
