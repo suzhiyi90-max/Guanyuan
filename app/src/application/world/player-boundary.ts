@@ -94,7 +94,7 @@ export function createWorldPlayerBoundary(
             if (!active || view.worldId !== worldId || view.observerPersonId !== principal) return
             // Revalidate on every emission so an existing subscription cannot
             // continue delivering a prior account's view after session change.
-            void Promise.resolve(options.principals.resolve()).then(current => {
+            void Promise.resolve().then(() => options.principals.resolve()).then(current => {
               if (active && current === principal) listener(view)
             }).catch(() => undefined)
           })
