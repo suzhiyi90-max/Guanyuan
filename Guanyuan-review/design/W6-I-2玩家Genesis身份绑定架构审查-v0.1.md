@@ -48,7 +48,7 @@ W6-H 的 `WorldCommandPrincipalPort` 解析的是游戏内 `PersonId`。但玩�
 
 `authenticated account/session → world ownership → player Genesis → player PersonId → W6-H principal`
 
-当前仓库已实现最后一段（PersonId 作为玩家命令 principal），但没有可核实的账号认证适配器、世界所有权绑定存储或首次 Genesis 的恢复协议。
+当前仓库已实现最后一段（PersonId 作为玩家命令 principal），但没有可核实的账号认证适配器、世界所有权绑定存储或首次 Genesis 的恢复协议。进一步核对 W5 持久化后发现，`IndexedDbSaveRepository` 的 world row 仅以 `worldId` 为主键，保存 latest package/checksum/time/head 等信息，不含 owner/account/session 字段；`runtime-save-orchestrator.ts` 服务的是 W5 PreviewRuntime。它们不能被视为 W6 的账号身份或世界所有权适配器，也不应为了填补缺口而改写 W5 Save/Restore。W6 当前 in-memory adapter 也不提供持久 owner binding。
 
 **不得**通过以下方式绕过：
 
@@ -134,7 +134,7 @@ Ledger 提交与账号所有权存储可能不是同一事务，不能假定二�
 
 ## 7. 阻断项与下一步
 
-当前尚未确认实际账号认证与世界所有权存储提供方。因此本轮只锁定边界与恢复语义，不写一个假定本地账号体系的实现，也不接 App。
+当前尚未确认实际账号认证与世界所有权存储提供方，且现有 W5 IndexedDB 存档不具备 owner binding。因此本轮只锁定边界与恢复语义，不写一个假定本地账号体系的实现，不把 worldId 当作身份凭据，不改造 W5 Save/Restore，也不接 App。
 
 下一项施工应先核实项目当前存档/账号身份模型与运行环境，确定 owner key 的可信来源及持久化适配器；随后实现 Genesis reservation、人物事件提交、绑定恢复和端到端重放测试。只有该流程通过，才开放人物创建 UI 的窄 Genesis capability。
 
