@@ -12,6 +12,7 @@ export * from './identity/death-handoff'
 export * from './identity/death-inventory'
 
 export * from './relations/model'
+export * from './relations/exposure'
 export * from './relations/validation'
 export * from './relations/death-handoff'
 export * from './relations/death-inventory'
