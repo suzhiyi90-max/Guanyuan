@@ -124,7 +124,10 @@ check('person-created event creates active person and life-history projection',
   && aggregate.persons[0].lifeState === 'alive'
   && aggregate.persons[0].archiveState === 'active'
   && aggregate.life.histories.length === 1
-  && aggregate.life.histories[0].person === person.id)
+  && aggregate.life.histories[0].person === person.id
+  && aggregate.planning.scheduleScopes.length === 1
+  && aggregate.planning.scheduleScopes[0]?.id === person.stateDomains.scheduleScope
+  && aggregate.planning.scheduleScopes[0]?.person === person.id)
 
 const organizationId = brandedId<'OrgId'>('org:county-office')
 const organizationInput: WorldDomainEventInput<'organization.registered'> = {
