@@ -128,9 +128,9 @@ export interface WorldCandidateProviderPort {
   propose(context: WorldCandidateContext): Promise<readonly WorldCandidateProposal[]>
 }
 
-export interface WorldApplicationPorts {
+export interface WorldApplicationPorts<Kind extends string = string> {
   readonly commands: WorldCommandPort
-  readonly projector: WorldProjectionPort
+  readonly projector: WorldProjectionPort<Kind>
   readonly queries: WorldQueryPort
   readonly snapshots: WorldSnapshotPort
   readonly simulation: WorldSimulationPort
