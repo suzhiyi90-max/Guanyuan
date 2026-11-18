@@ -82,6 +82,12 @@ export function createWorldPlayerBoundary(
     subscribe(worldId: WorldId, listener: (view: WorldObserverSocialView) => void): () => void {
       let active = true
       let unsubscribe: (() => void) | null = null
+      const deactivate = () => {
+        if (!active) return
+        active = false
+        unsubscribe?.()
+        unsubscribe = null
+      }
       void Promise.resolve()
         .then(() => options.principals.resolve())
         .then(async principal => {
@@ -95,8 +101,13 @@ export function createWorldPlayerBoundary(
             // Revalidate on every emission so an existing subscription cannot
             // continue delivering a prior account's view after session change.
             void Promise.resolve().then(() => options.principals.resolve()).then(current => {
-              if (active && current === principal) listener(view)
-            }).catch(() => undefined)
+              if (!active) return
+              if (current !== principal) {
+                deactivate()
+                return
+              }
+              listener(view)
+            }).catch(() => deactivate())
           })
           if (!active) {
             unsubscribe()
@@ -106,11 +117,7 @@ export function createWorldPlayerBoundary(
         .catch(() => {
           // Missing/failed authentication produces no subscription.
         })
-      return () => {
-        active = false
-        unsubscribe?.()
-        unsubscribe = null
-      }
+      return deactivate
     },
   })
 
