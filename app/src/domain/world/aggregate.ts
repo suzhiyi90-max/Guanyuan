@@ -204,7 +204,7 @@ export function validateWorldAggregate(
     }
     for (const item of allowList ?? []) {
       if (!item.displayName.trim() || item.category !== 'famous-minister'
-        || item.evidenceRefs.length === 0 || item.evidenceRefs.some(ref => !ref.trim())
+        || item.evidenceRefs.length === 0 || item.evidenceRefs.some((ref: string) => !ref.trim())
         || !isValidWorldTime(item.validFrom)
         || (item.validThrough !== null && !isValidWorldTime(item.validThrough))
         || (item.scope.kind === 'location' && !item.scope.locationCode.trim())) {
