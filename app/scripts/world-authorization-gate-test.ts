@@ -173,7 +173,7 @@ async function main(): Promise<void> {
     }],
   }
   const policyRequirements = createWorldCommandAuthorizationRequirementResolver(authorizationPolicy)
-  const exactRequirement = await policyRequirements.resolve()
+  const exactRequirement = await policyRequirements.resolve(request)
   check('versioned policy maps an exact command intent to its declared permission and scope',
     exactRequirement?.permission === 'county.order.issue'
     && JSON.stringify(exactRequirement.scope) === JSON.stringify(grant.scope))
