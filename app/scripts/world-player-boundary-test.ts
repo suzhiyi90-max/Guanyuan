@@ -1,4 +1,4 @@
-import { brandedId } from '../src/domain'
+import { brandedId, createEmptyWorldAggregate } from '../src/domain'
 import {
   createWorldPlayerBoundary,
   type WorldCommandPort,
@@ -22,6 +22,10 @@ function check(name: string, condition: boolean): void {
 const worldId = brandedId<'WorldId'>('world:player-boundary-test')
 const principalId = brandedId<'PersonId'>('person:authenticated-player')
 const otherPersonId = brandedId<'PersonId'>('person:other-observer')
+let worldAggregate: WorldAggregate = {
+  ...createEmptyWorldAggregate(worldId, { day: 1, period: '晨' }),
+  playerPersonId: principalId,
+}
 const eventId = brandedId<'EventId'>('event:player-boundary-test')
 const receipt: WorldCommandReceipt = {
   status: 'committed',
@@ -44,7 +48,7 @@ const rawCommands: WorldCommandPort = {
 const rawQueries: WorldQueryPort = {
   async read(): Promise<WorldAggregate | null> {
     rawAggregateReads += 1
-    return null
+    return worldAggregate
   },
   subscribe(): () => void { return () => undefined },
 }
@@ -96,8 +100,15 @@ async function main(): Promise<void> {
     && !('observerQueries' in boundary))
 
   const view = await boundary.queries.read(worldId)
-  check('player query binds the observer to the trusted authenticated principal',
+  check('player query binds the observer to the trusted authenticated principal and matching world player',
     view === null && queriedObserver === principalId)
+
+  worldAggregate = { ...worldAggregate, playerPersonId: otherPersonId }
+  queriedObserver = null
+  const foreignWorldView = await boundary.queries.read(worldId)
+  check('a principal who is not this world player receives no player-scoped view',
+    foreignWorldView === null && queriedObserver === null)
+  worldAggregate = { ...worldAggregate, playerPersonId: principalId }
 
   let notified = false
   const unsubscribe = boundary.queries.subscribe(worldId, () => { notified = true })
@@ -109,12 +120,13 @@ async function main(): Promise<void> {
   check('player query subscription cleanup reaches the underlying observer subscription',
     observerUnsubscribed === 1)
 
+  const aggregateReadsBeforeDeniedCommand = rawAggregateReads
   const denied = await boundary.commands.submit(commandRequest)
   check('unknown player intent is denied by the composed boundary',
     denied.status === 'rejected'
     && denied.reason === 'world-command-authorization-requirement-missing'
     && rawSubmissions === 0
-    && rawAggregateReads === 0)
+    && rawAggregateReads === aggregateReadsBeforeDeniedCommand)
 
   authenticated = null
   queriedObserver = null
