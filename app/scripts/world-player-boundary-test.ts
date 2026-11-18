@@ -88,7 +88,7 @@ const policy = {
   schemaVersion: 'w6-command-authorization/1' as const,
   policyId: 'player-boundary-empty-policy',
   revision: '1',
-  rules: [{ intentKind: 'player.command.test', permission: 'world.command.test', scope: { kind: 'world' } }],
+  rules: [{ intentKind: 'player.command.test', permission: 'world.command.test', scope: { kind: 'world' as const } }],
 }
 let authenticated: string | null = principalId
 const principals = {
