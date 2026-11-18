@@ -11,6 +11,7 @@ import type { StreamCursor } from '../../domain/event-replay'
 import type { WorldAggregate } from '../../domain/world/aggregate'
 import type { WorldBootstrapMetadata } from '../../domain/world/metadata'
 import type { WorldId } from '../../domain/event-ledger'
+import type { PersonOrigin } from '../../domain/person/provenance'
 import {
   bootstrapWorld,
   generatedCandidateOrigin,
@@ -112,6 +113,33 @@ function originFor(candidate: GeneratedPersonCandidate | FixedHistoricalPersonCa
     : historicalCandidateOrigin(candidate)
 }
 
+function samePersonOrigin(actual: PersonOrigin, expected: PersonOrigin): boolean {
+  if (actual.kind !== expected.kind) return false
+  if (actual.kind === 'seeded-random' && expected.kind === 'seeded-random') {
+    return actual.candidateId === expected.candidateId
+      && actual.seedFingerprint === expected.seedFingerprint
+      && actual.roleCode === expected.roleCode
+      && actual.populationTier === expected.populationTier
+  }
+  if (actual.kind === 'historical-minister' && expected.kind === 'historical-minister') {
+    const sameScope = actual.scope.kind === expected.scope.kind
+      && (actual.scope.kind === 'world'
+        || (expected.scope.kind === 'location'
+          && actual.scope.locationCode === expected.scope.locationCode))
+    const sameValidity = actual.validFrom.day === expected.validFrom.day
+      && actual.validFrom.period === expected.validFrom.period
+      && ((actual.validThrough === null && expected.validThrough === null)
+        || (!!actual.validThrough && !!expected.validThrough
+          && actual.validThrough.day === expected.validThrough.day
+          && actual.validThrough.period === expected.validThrough.period))
+    return actual.category === expected.category
+      && actual.evidenceRefs.length === expected.evidenceRefs.length
+      && actual.evidenceRefs.every((ref, index) => ref === expected.evidenceRefs[index])
+      && sameScope && sameValidity
+  }
+  return actual.kind === 'player-character' && expected.kind === 'player-character'
+}
+
 function existingPersonMatches(
   aggregate: WorldAggregate,
   candidate: GeneratedPersonCandidate | FixedHistoricalPersonCandidate,
@@ -119,8 +147,19 @@ function existingPersonMatches(
   const person = aggregate.persons.find(item => item.id === candidate.id)
   const origin = aggregate.personOrigins.find(item => item.person === candidate.id)
   if (!person || !origin) return false
-  return person.displayName === candidate.displayName
-    && stableJson(origin.origin) === stableJson(originFor(candidate))
+  const expectedOrigin = originFor(candidate)
+  const matches = person.displayName === candidate.displayName
+    && samePersonOrigin(origin.origin, expectedOrigin)
+  if (!matches) {
+    console.error('World bootstrap provenance mismatch:', JSON.stringify({
+      personId: candidate.id,
+      actualName: person.displayName,
+      expectedName: candidate.displayName,
+      actualOrigin: origin.origin,
+      expectedOrigin,
+    }))
+  }
+  return matches
 }
 
 /**
