@@ -4,7 +4,7 @@ import {
   createEventLedger,
   field,
 } from '../src/domain'
-import type { WorldId, WorldTime } from '../src/domain'
+import type { FailureKind, WorldId, WorldTime } from '../src/domain'
 import {
   createWorldAggregateProjector,
   createWorldDomainEventRegistry,
@@ -16,6 +16,8 @@ import {
   createKnowledgeRecordedEventInput,
   createMessageSentEventInput,
   createMessageStageRecordedEventInput,
+  createMessageFailureRecordedEventInput,
+  createMessagePropagationRecordedEventInput,
   toLedgerEventInput,
 } from '../src/application'
 import type {
@@ -194,8 +196,44 @@ async function run(): Promise<void> {
   append(createMessageStageRecordedEventInput(messageId, 'understood', {
     actor: 'system', source: 'rule', requestWorldTime: start, clientRequestId: 'projector-message-understood',
   }))
-  const replyEvent = append(createMessageStageRecordedEventInput(messageId, 'replied', {
+  append(createMessageStageRecordedEventInput(messageId, 'replied', {
     actor: 'system', source: 'rule', requestWorldTime: start, clientRequestId: 'projector-message-replied',
+  }))
+  const recipientKnowledgeId = brandedId<'KnowledgeId'>('knowledge:projector:recipient')
+  append(createKnowledgeRecordedEventInput({
+    id: recipientKnowledgeId,
+    holder: secondPerson.id,
+    subject: { kind: 'relation', id: relationId },
+    proposition: '收到来信并获知关系',
+    stance: 'believed',
+    secrecy: 'private',
+  }, {
+    actor: 'system', source: 'rule', requestWorldTime: start, clientRequestId: 'projector-recipient-knowledge',
+  }))
+  append(createMessagePropagationRecordedEventInput({
+    id: brandedId<'MessagePropagationId'>('propagation:projector:001'),
+    message: messageId,
+    fromHolder: person.id,
+    toHolder: secondPerson.id,
+    sourceKnowledge: [brandedId<'KnowledgeId'>('knowledge:projector:001')],
+    resultingKnowledge: [recipientKnowledgeId],
+  }, {
+    actor: 'system', source: 'rule', requestWorldTime: start, clientRequestId: 'projector-message-propagation',
+  }))
+  const failedMessageId = brandedId<'MessageId'>('message:projector:failed')
+  append(createMessageSentEventInput({
+    id: failedMessageId,
+    sender: person.id,
+    recipient: secondPerson.id,
+    channel: brandedId<'ChannelRef'>('channel:projector-letter'),
+    contentRefs: [],
+    parentMessage: field.notApplicable,
+    distortion: 0,
+  }, {
+    actor: 'player', source: 'player-command', requestWorldTime: start, clientRequestId: 'projector-failed-message-sent',
+  }))
+  const finalEvent = append(createMessageFailureRecordedEventInput(failedMessageId, 'courier-lost' as FailureKind, {
+    actor: 'system', source: 'rule', requestWorldTime: start, clientRequestId: 'projector-message-failed',
   }))
 
   const projector = createWorldAggregateProjector({ registry, worldStartTime: start })
@@ -206,7 +244,7 @@ async function run(): Promise<void> {
   })
   const complete = await projector.rebuild({
     ledger,
-    target: { kind: 'event', seq: replyEvent.seq, eventId: replyEvent.id },
+    target: { kind: 'event', seq: finalEvent.seq, eventId: finalEvent.id },
   })
 
   check('projector can rebuild a valid empty genesis projection',
@@ -225,9 +263,11 @@ async function run(): Promise<void> {
     && complete.aggregate.society.relations.length === 1
     && complete.aggregate.society.claims.length === 1
     && complete.aggregate.society.evidence.length === 1
-    && complete.aggregate.cognition.knowledge.length === 1
-    && complete.aggregate.cognition.messages.length === 1
-    && complete.aggregate.cognition.messages[0]?.repliedAt.kind === 'value')
+    && complete.aggregate.cognition.knowledge.length === 2
+    && complete.aggregate.cognition.propagations.length === 1
+    && complete.aggregate.cognition.messages.length === 2
+    && complete.aggregate.cognition.messages[0]?.repliedAt.kind === 'value'
+    && complete.aggregate.cognition.messages[1]?.failure.kind === 'value')
 
   const badAnchor = await projector.rebuild({
     ledger,
