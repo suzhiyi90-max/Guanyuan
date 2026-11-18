@@ -4,6 +4,7 @@ import {
   type OwnerIdentityStoragePort,
 } from '../src/infrastructure/local-owner-identity'
 
+// The application OwnerId stays provider-neutral; only this adapter accepts the local UUID namespace.
 let passed = 0
 let failed = 0
 function check(name: string, condition: boolean): void {
