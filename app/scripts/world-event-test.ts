@@ -21,6 +21,11 @@ import {
   createMembershipAddedEventInput,
   createMembershipEndedEventInput,
   createRelationLifecycleChangedEventInput,
+  createGoalCreatedEventInput,
+  createGoalStatusChangedEventInput,
+  createScheduleEntryPlannedEventInput,
+  createDebtRecordedEventInput,
+  createDebtSettledEventInput,
   reduceWorldDomainEvent,
   toLedgerEventInput,
   validateWorldDomainEventPayload,
@@ -85,21 +90,26 @@ let aggregate = createEmptyWorldAggregate(worldId, now)
 check('world domain event registry is frozen and versioned', registry.frozen
   && registry.registryId === 'guanyuan.world-domain'
   && registry.registryVersion === '1.0.0'
-  && registry.schemas.length === 16)
+  && registry.schemas.length === 21)
 
-function apply<K extends WorldDomainEventKind>(
+function applyAt<K extends WorldDomainEventKind>(
   input: WorldDomainEventInput<K>,
+  committedAt: WorldTime,
 ): void {
   const ledgerInput = toLedgerEventInput(input)
   const schema = validateWorldDomainEventPayload(registry, input.kind, ledgerInput.payload)
   if (schema.status !== 'valid') throw new Error(`test-schema-invalid:${input.kind}`)
-  const appended = appendLedgerEvent(ledger, ledgerInput, now)
+  const appended = appendLedgerEvent(ledger, ledgerInput, committedAt)
   if (appended.status !== 'appended') throw new Error(`test-ledger-append-failed:${appended.status}`)
   ledger = appended.ledger
   aggregate = reduceWorldDomainEvent(aggregate, appended.event, registry, {
     eventIds: ledger.events.map(item => item.id),
     eventTimes: new Map(ledger.events.map(item => [item.id, item.committedAt] as const)),
   })
+}
+
+function apply<K extends WorldDomainEventKind>(input: WorldDomainEventInput<K>): void {
+  applyAt(input, now)
 }
 
 const initInput = createWorldInitializationEventInput(descriptor, 'world-init-001')
@@ -540,6 +550,70 @@ if (unlistedAppend.status === 'appended') {
 } else {
   check('unlisted historical minister event was appended for rejection test', false)
 }
+
+const nextMorning: WorldTime = { day: now.day + 1, period: '晨' }
+const nextNoon: WorldTime = { day: now.day + 1, period: '午' }
+const nextEvening: WorldTime = { day: now.day + 1, period: '暮' }
+const goalId = brandedId<'GoalId'>('goal:person:protect-family')
+apply(createGoalCreatedEventInput({
+  id: goalId,
+  person: person.id,
+  statement: '攒足家用并照料家中长辈',
+  priority: 0.8,
+  visibility: { observer: 'player', level: 'private' },
+}, {
+  actor: 'player', source: 'player-command', requestWorldTime: now, clientRequestId: 'goal-create-001',
+}))
+check('goal creation indexes the goal on its owning person and starts active',
+  aggregate.planning.goals[0]?.status === 'active'
+  && aggregate.persons.find(item => item.id === person.id)?.stateDomains.goals.includes(goalId) === true)
+
+applyAt(createGoalStatusChangedEventInput(goalId, 'achieved', {
+  actor: 'player', source: 'player-command', requestWorldTime: nextMorning, clientRequestId: 'goal-achieved-001',
+}), nextMorning)
+check('goal terminal status change records a separate event-backed transition',
+  aggregate.planning.goals[0]?.status === 'achieved'
+  && aggregate.planning.goalStatusTransitions.length === 1
+  && aggregate.planning.goalStatusTransitions[0]?.event === aggregate.streamHead.eventId)
+
+applyAt(createScheduleEntryPlannedEventInput({
+  id: brandedId<'ScheduleId'>('schedule:person:next-noon'),
+  scope: person.stateDomains.scheduleScope,
+  person: person.id,
+  day: nextNoon.day,
+  period: nextNoon.period,
+  action: brandedId<'ActionRef'>('action:review-petitions'),
+  place: brandedId<'PlaceId'>('place:county-yamen'),
+  visibility: { observer: 'player', level: 'private' },
+}, {
+  actor: 'player', source: 'player-command', requestWorldTime: nextMorning, clientRequestId: 'schedule-plan-001',
+}), nextMorning)
+check('schedule entry is planned in its person-owned scope without claiming execution',
+  aggregate.planning.scheduleEntries.length === 1
+  && aggregate.planning.scheduleEntries[0]?.intent === 'planned'
+  && aggregate.planning.scheduleEntries[0]?.execution.kind === 'n/a')
+
+const debtId = brandedId<'DebtId'>('debt:person-to-minister')
+applyAt(createDebtRecordedEventInput({
+  id: debtId,
+  creditor: person.id,
+  debtor: historicalMinisterId,
+  principal: 120,
+  kind: '银两借贷',
+}, {
+  actor: 'player', source: 'player-command', requestWorldTime: nextNoon, clientRequestId: 'debt-record-001',
+}), nextNoon)
+check('debt creation records creditor, debtor, principal and source event',
+  aggregate.economy.debts[0]?.status === 'open'
+  && aggregate.economy.debts[0]?.sourceEvent === aggregate.streamHead.eventId)
+
+applyAt(createDebtSettledEventInput(debtId, {
+  actor: 'player', source: 'player-command', requestWorldTime: nextEvening, clientRequestId: 'debt-settle-001',
+}), nextEvening)
+check('debt settlement is an explicit event reference and terminal status',
+  aggregate.economy.debts[0]?.status === 'settled'
+  && aggregate.economy.debts[0]?.settlements.length === 1
+  && aggregate.economy.debts[0]?.settlements[0] === aggregate.streamHead.eventId)
 
 const finalValidation = validateWorldAggregate(aggregate, ledger)
 if (finalValidation.status === 'rejected') {
