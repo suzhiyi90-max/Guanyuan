@@ -96,7 +96,10 @@ function apply<K extends WorldDomainEventKind>(
   const appended = appendLedgerEvent(ledger, ledgerInput, now)
   if (appended.status !== 'appended') throw new Error(`test-ledger-append-failed:${appended.status}`)
   ledger = appended.ledger
-  aggregate = reduceWorldDomainEvent(aggregate, appended.event, registry)
+  aggregate = reduceWorldDomainEvent(aggregate, appended.event, registry, {
+    eventIds: ledger.events.map(item => item.id),
+    eventTimes: new Map(ledger.events.map(item => [item.id, item.committedAt] as const)),
+  })
 }
 
 const initInput = createWorldInitializationEventInput(descriptor, 'world-init-001')
