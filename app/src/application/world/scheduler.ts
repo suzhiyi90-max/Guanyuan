@@ -69,9 +69,11 @@ export function createScheduleTaskSource(
   return Object.freeze({
     listDueTasks(request: WorldSimulationRequest, aggregate: WorldAggregate) {
       return aggregate.planning.scheduleEntries.flatMap(entry => {
-        const dueAt: WorldTime = { day: entry.day, period: entry.period }
-        if (compareWorldTime(dueAt, request.from) < 0 || compareWorldTime(dueAt, request.to) > 0
+        const plannedAt: WorldTime = { day: entry.day, period: entry.period }
+        if (compareWorldTime(plannedAt, request.to) > 0
           || entry.execution.kind === 'value' || entry.deviation.kind === 'value') return []
+        // An overdue but unsettled task is still eligible; resolve it at the current world time.
+        const dueAt = compareWorldTime(plannedAt, request.from) < 0 ? request.from : plannedAt
         const action = resolver.resolve(entry, aggregate, request.lod)
         if (!action) return []
         return [Object.freeze({
@@ -177,7 +179,7 @@ export function createDeterministicWorldScheduler(
           const entry = initial.planning.scheduleEntries.find(item => item.id === task.scheduleId)
           if (!entry || entry.execution.kind === 'value' || entry.deviation.kind === 'value'
             || task.source !== 'schedule'
-            || !sameTime(task.dueAt, { day: entry.day, period: entry.period })) {
+            || compareWorldTime(task.dueAt, { day: entry.day, period: entry.period }) < 0) {
             return rejected(request, initial.streamHead, 'world-simulation-schedule-task-not-eligible')
           }
         }
