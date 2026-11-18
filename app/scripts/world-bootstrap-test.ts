@@ -1,5 +1,5 @@
 import { brandedId } from '../src/domain'
-import { bootstrapWorld } from '../src/application'
+import { bootstrapWorld, generatedCandidateOrigin, historicalCandidateOrigin } from '../src/application'
 import type { HistoricalMinisterException, WorldBootstrapRequest } from '../src/application'
 import type { WorldId } from '../src/domain'
 
