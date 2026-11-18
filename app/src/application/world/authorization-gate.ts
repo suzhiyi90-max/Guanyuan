@@ -51,11 +51,11 @@ function snapshotJsonValue(value: JsonValue, ancestors = new Set<object>()): Jso
     if (prototype !== Object.prototype && prototype !== null) {
       throw new Error('world-command-payload-not-plain-object')
     }
-    const copy: Record<string, JsonValue> = {}
+    const entries: [string, JsonValue][] = []
     for (const key of Object.keys(value)) {
-      copy[key] = snapshotJsonValue(value[key]!, ancestors)
+      entries.push([key, snapshotJsonValue(value[key]!, ancestors)])
     }
-    return Object.freeze(copy)
+    return Object.freeze(Object.fromEntries(entries)) as { readonly [key: string]: JsonValue }
   } finally {
     ancestors.delete(value)
   }
