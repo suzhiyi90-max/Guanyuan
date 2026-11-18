@@ -69,7 +69,8 @@ export function validateWorldSimulationRuleset(ruleset: WorldSimulationRuleset):
   if (!Array.isArray(ruleset?.rules)) issues.push('policy-rules-invalid')
   const selectors = new Set<string>()
   const ids = new Set<string>()
-  const configuredRules = Array.isArray(ruleset?.rules) ? ruleset.rules : []\n  for (const rule of configuredRules) {
+  const configuredRules = Array.isArray(ruleset?.rules) ? ruleset.rules : []
+  for (const rule of configuredRules) {
     if (!rule || !nonEmpty(rule.policyId) || ids.has(rule.policyId)) issues.push('policy-id-invalid-or-duplicate')
     else ids.add(rule.policyId)
     if (!levels.has(rule?.level)) issues.push('policy-level-unsupported')
@@ -114,7 +115,8 @@ export function resolveWorldSimulationPolicies(
 
   const decisions = candidates.map((candidate): WorldSimulationPolicyDecision => {
     const candidateId = nonEmpty(candidate?.candidateId) ? candidate.candidateId : 'invalid-candidate'
-    if (!nonEmpty(candidate?.candidateId)) return { candidateId, status: 'rejected', reason: 'invalid-candidate-id' }\n    if (duplicates.has(candidateId)) return { candidateId, status: 'rejected', reason: 'candidate-identity-conflict' }
+    if (!nonEmpty(candidate?.candidateId)) return { candidateId, status: 'rejected', reason: 'invalid-candidate-id' }
+    if (duplicates.has(candidateId)) return { candidateId, status: 'rejected', reason: 'candidate-identity-conflict' }
     if (!levels.has(candidate?.level)) return { candidateId, status: 'rejected', reason: 'unknown-level' }
     if (!sources.has(candidate?.source)) return { candidateId, status: 'rejected', reason: 'unknown-source' }
     if (!lods.has(candidate?.lod)) return { candidateId, status: 'rejected', reason: 'unknown-lod' }
