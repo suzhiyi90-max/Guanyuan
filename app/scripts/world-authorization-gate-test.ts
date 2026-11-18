@@ -196,6 +196,17 @@ async function main(): Promise<void> {
   check('duplicate intent mappings invalidate the policy instead of selecting an arbitrary grant',
     duplicatePolicyRejected)
 
+  const mutablePolicy = {
+    ...authorizationPolicy,
+    rules: authorizationPolicy.rules.map(rule => ({ ...rule })),
+  }
+  const snapshottedRequirements = createWorldCommandAuthorizationRequirementResolver(mutablePolicy)
+  mutablePolicy.rules[0]!.permission = 'county.treasury.withdraw'
+  const afterProviderMutation = await snapshottedRequirements.resolve(request)
+  check('mutating the source policy after composition cannot change active authorization',
+    afterProviderMutation?.permission === 'county.order.issue'
+    && JSON.stringify(afterProviderMutation.scope) === JSON.stringify(grant.scope))
+
   if (failed > 0) throw new Error(`World authorization gate tests failed: ${failed}/${passed + failed}`)
   console.log(`World authorization gate tests: ${passed}/${passed + failed} passed`)
 }
