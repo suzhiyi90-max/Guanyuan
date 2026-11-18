@@ -45,6 +45,7 @@ on:
       - work/w5-e3-local-save-management
       - integration/w5-e3-fe170-scene-art
       - work/w5-runtime-semantic-invariants
+      - work/w6-world-aggregate-application-ports
   pull_request:
     branches:
       - work/w5-e2a-portable-import-core
@@ -99,6 +100,8 @@ on:
       - work/w5-d2-runtime-save-package-orchestration
       - work/w5-d3-runtime-startup-restore
       - work/w5-d3b-app-startup-lifecycle
+      - work/w5-runtime-semantic-invariants
+      - work/w6-world-aggregate-application-ports
   workflow_dispatch:
 
 permissions:
