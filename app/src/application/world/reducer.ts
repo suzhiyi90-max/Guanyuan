@@ -18,9 +18,9 @@ import {
   validateAuthorization,
 } from '../../domain/identity/validation'
 import type { Organization, Relation, RelationClaim, RelationEvidence } from '../../domain/relations/model'
-import type { KnowledgeEntry, Message } from '../../domain/cognition/model'
+import type { FailureKind, KnowledgeEntry, Message, MessagePropagation } from '../../domain/cognition/model'
 import { validateOrganization, validateRelation, validateRelationClaim, validateRelationEvidence } from '../../domain/relations/validation'
-import { validateKnowledgeEntry, validateMessage } from '../../domain/cognition/validation'
+import { validateKnowledgeEntry, validateMessage, validateMessagePropagation } from '../../domain/cognition/validation'
 import type { LifeHistory } from '../../domain/life/model'
 import { validateLifeHistory } from '../../domain/life/validation'
 import type { WorldBootstrapMetadata } from '../../domain/world/metadata'
@@ -38,6 +38,7 @@ import {
   type KnowledgeCreationData,
   type MessageCreationData,
   type MessageStage,
+  type MessagePropagationCreationData,
 } from './event-catalog'
 
 function assertNextEvent(
@@ -458,6 +459,66 @@ function applyMessageSent(
   })
 }
 
+function applyMessageFailed(
+  aggregate: WorldAggregate,
+  event: LedgerEvent<WorldDomainEventKind>,
+): WorldAggregate {
+  requireBootstrap(aggregate)
+  const payload = event.payload as unknown as WorldDomainEventPayloadMap['message.failed']
+  const messageIndex = aggregate.cognition.messages.findIndex(item => item.id === payload.messageId)
+  if (messageIndex < 0) throw new Error('world-reducer-message-failure-message-missing')
+  const current = aggregate.cognition.messages[messageIndex]!
+  if (current.failure.kind === 'value'
+    || [current.deliveredAt, current.readAt, current.understoodAt, current.repliedAt].some(stage => stage.kind === 'value')) {
+    throw new Error('world-reducer-message-failure-after-progress')
+  }
+  const updated: Message = Object.freeze({
+    ...current,
+    failure: field.value(payload.failureCode as FailureKind),
+  })
+  const messages = aggregate.cognition.messages.map((item, index) => index === messageIndex ? updated : item)
+  const issues = validateMessage(updated, cognitionReferences(aggregate, event))
+  if (issues.length > 0) throw new Error(`world-reducer-message-failure-invalid:${issues.join(',')}`)
+  return Object.freeze({
+    ...aggregate,
+    ...withEventCursor(aggregate, event),
+    cognition: Object.freeze({ ...aggregate.cognition, messages: Object.freeze(messages) }),
+  })
+}
+
+function applyMessagePropagated(
+  aggregate: WorldAggregate,
+  event: LedgerEvent<WorldDomainEventKind>,
+): WorldAggregate {
+  requireBootstrap(aggregate)
+  const payload = event.payload as unknown as WorldDomainEventPayloadMap['message.propagated']
+  const data: MessagePropagationCreationData = payload.propagation
+  if (aggregate.cognition.propagations.some(item => item.id === data.id)) {
+    throw new Error('world-reducer-message-propagation-duplicate')
+  }
+  const propagation: MessagePropagation = Object.freeze({
+    ...data,
+    sourceKnowledge: Object.freeze([...data.sourceKnowledge]),
+    resultingKnowledge: Object.freeze([...data.resultingKnowledge]),
+    propagatedAt: Object.freeze({ ...event.committedAt }),
+  })
+  const issues = validateMessagePropagation(
+    propagation,
+    aggregate.cognition.messages,
+    aggregate.cognition.knowledge,
+    aggregate.persons.map(item => item.id),
+  )
+  if (issues.length > 0) throw new Error(`world-reducer-message-propagation-invalid:${issues.join(',')}`)
+  return Object.freeze({
+    ...aggregate,
+    ...withEventCursor(aggregate, event),
+    cognition: Object.freeze({
+      ...aggregate.cognition,
+      propagations: Object.freeze([...aggregate.cognition.propagations, propagation]),
+    }),
+  })
+}
+
 function applyMessageStageRecorded(
   aggregate: WorldAggregate,
   event: LedgerEvent<WorldDomainEventKind>,
@@ -527,6 +588,10 @@ export function reduceWorldDomainEvent(
       return applyMessageSent(aggregate, event)
     case 'message.stage.recorded':
       return applyMessageStageRecorded(aggregate, event)
+    case 'message.failed':
+      return applyMessageFailed(aggregate, event)
+    case 'message.propagated':
+      return applyMessagePropagated(aggregate, event)
     default: {
       const unreachable: never = event.kind
       throw new Error(`world-reducer-unhandled-event:${String(unreachable)}`)
