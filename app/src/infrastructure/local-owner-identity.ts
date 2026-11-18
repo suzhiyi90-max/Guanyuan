@@ -7,7 +7,7 @@
  */
 /// <reference types="vite/client" />
 
-import { parseOwnerId, type OwnerIdentityPort, type OwnerId } from '../application/identity/owner'
+import { ownerIdFromTrustedValue, type OwnerIdentityPort, type OwnerId } from '../application/identity/owner'
 
 export interface OwnerIdentityStoragePort {
   getItem(key: string): string | null
@@ -21,9 +21,17 @@ export interface LocalOwnerIdentityOptions {
 
 export const LOCAL_OWNER_IDENTITY_STORAGE_KEY = 'guanyuan:w6:local-owner:v1'
 
+const LOCAL_OWNER_ID_PATTERN = /^owner:local:[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+function parseLocalOwnerId(value: string): OwnerId {
+  const normalized = value.trim()
+  if (!LOCAL_OWNER_ID_PATTERN.test(normalized)) throw new Error('owner-identity-format-invalid')
+  return ownerIdFromTrustedValue(normalized)
+}
+
 function candidateOwnerId(allocateUuid: () => string): OwnerId {
   const uuid = allocateUuid()
-  return parseOwnerId(`owner:local:${uuid}`)
+  return parseLocalOwnerId(`owner:local:${uuid}`)
 }
 
 /**
@@ -42,7 +50,7 @@ export function createLocalOwnerIdentityPort(options: LocalOwnerIdentityOptions)
 
       if (stored !== null) {
         try {
-          return parseOwnerId(stored)
+          return parseLocalOwnerId(stored)
         } catch {
           // Never silently replace a corrupt identity: doing so could orphan
           // worlds already owned by the previous value.
