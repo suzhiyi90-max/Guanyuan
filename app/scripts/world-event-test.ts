@@ -284,6 +284,9 @@ if (unlistedAppend.status === 'appended') {
 }
 
 const finalValidation = validateWorldAggregate(aggregate, ledger)
+if (finalValidation.status === 'rejected') {
+  console.error('World aggregate validation issues:', JSON.stringify(finalValidation.issues))
+}
 check('replayed world aggregate validates against the complete ledger', finalValidation.status === 'valid')
 
 const malformedPayload = validateWorldDomainEventPayload(registry, 'person.created', {
