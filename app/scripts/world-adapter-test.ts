@@ -67,6 +67,11 @@ async function main(): Promise<void> {
   const initialized = await initializeWorldThroughPorts(request, adapter)
   const aggregate = await adapter.queries.read(worldId)
   const ledger = adapter.readLedger()
+  const initialPlayerView = await adapter.observerQueries.read(worldId, 'player')
+  check('player-facing observer query does not expose unconnected bootstrap population',
+    initialPlayerView !== null
+    && initialPlayerView.self === null
+    && initialPlayerView.knownPersons.length === 0)
   check('in-memory command adapter executes bootstrap through canonical ledger and replay',
     initialized.status === 'ready'
     && aggregate?.bootstrap?.seed === request.seed
