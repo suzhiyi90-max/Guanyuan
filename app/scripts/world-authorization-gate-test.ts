@@ -200,7 +200,7 @@ async function main(): Promise<void> {
   }
   const snapshottedRequirements = createWorldCommandAuthorizationRequirementResolver(mutablePolicy)
   mutablePolicy.rules[0]!.permission = 'county.treasury.withdraw'
-  const afterProviderMutation = await snapshottedRequirements.resolve(request)
+  const afterProviderMutation = await snapshottedRequirements.resolve(request.intentKind)
   check('mutating the source policy after composition cannot change active authorization',
     afterProviderMutation?.permission === 'county.order.issue'
     && JSON.stringify(afterProviderMutation.scope) === JSON.stringify(grant.scope))
