@@ -138,7 +138,7 @@ export function createEmptyWorldAggregate(
     schemaVersion: 1,
     worldId,
     worldTime: Object.freeze({ ...worldTime }),
-    streamHead: Object.freeze({ kind: 'genesis', seq: 0 as const }),
+    streamHead: Object.freeze({ kind: 'genesis' as const, seq: 0 as const }),
     persons: empty,
     identity: Object.freeze({ assignments: empty, offices: empty, appointments: empty, authorizations: empty }),
     society: Object.freeze({ relations: empty, claims: empty, evidence: empty, organizations: empty, memberships: empty }),
