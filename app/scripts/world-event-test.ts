@@ -51,6 +51,7 @@ const descriptor: WorldBootstrapDescriptor = {
   scenarioPackId: 'scenario:ming-jiajing-02',
   rulesetVersion: 'ruleset-0.16',
   contentPackVersion: 'ming-content-0.1',
+  seed: 'world-event-test-seed',
   seedFingerprint: 'a1b2c3d4',
   locationCode: 'peixian',
   populationPolicyVersion: 'w6.1',
