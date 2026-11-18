@@ -6,6 +6,7 @@
  */
 import type { JsonValue, LedgerEventInput, LedgerSource } from '../../domain/event-ledger'
 import type { Person } from '../../domain/person/model'
+import type { PersonOrigin } from '../../domain/person/provenance'
 import type { IdentityAssignment, Authorization } from '../../domain/identity/model'
 import type { Organization } from '../../domain/relations/model'
 import type { WorldBootstrapMetadata } from '../../domain/world/metadata'
@@ -36,7 +37,7 @@ export type AuthorizationGrantData = Omit<Authorization,
 
 export interface WorldDomainEventPayloadMap {
   readonly 'world.initialized': WorldBootstrapMetadata
-  readonly 'person.created': { readonly person: PersonCreationData }
+  readonly 'person.created': { readonly person: PersonCreationData; readonly origin: PersonOrigin }
   readonly 'organization.registered': { readonly organization: Organization }
   readonly 'identity.assignment.added': { readonly assignment: IdentityAssignmentCreationData }
   readonly 'authorization.granted': { readonly authorization: AuthorizationGrantData }
@@ -98,8 +99,30 @@ function isBootstrapMetadata(value: JsonValue): value is JsonValue {
     ].every(isNonEmptyString)
 }
 
+function isPersonOrigin(value: JsonValue | undefined): boolean {
+  if (!value || !isRecord(value) || typeof value.kind !== 'string') return false
+  if (value.kind === 'seeded-random') {
+    return hasExactKeys(value, ['kind', 'candidateId', 'seedFingerprint', 'roleCode', 'populationTier'])
+      && [value.candidateId, value.seedFingerprint, value.roleCode].every(isNonEmptyString)
+      && ['county', 'grassroots', 'other'].includes(String(value.populationTier))
+  }
+  if (value.kind === 'historical-minister') {
+    if (!hasExactKeys(value,
+      ['kind', 'category', 'evidenceRefs', 'validFrom', 'validThrough', 'scope'])) return false
+    if (value.category !== 'famous-minister' || !isStringArray(value.evidenceRefs)
+      || value.evidenceRefs.length === 0 || !isWorldTimeValue(value.validFrom)) return false
+    if (value.validThrough !== null && !isWorldTimeValue(value.validThrough)) return false
+    if (!isRecord(value.scope) || typeof value.scope.kind !== 'string') return false
+    if (value.scope.kind === 'world') return hasExactKeys(value.scope, ['kind'])
+    return value.scope.kind === 'location'
+      && hasExactKeys(value.scope, ['kind', 'locationCode'])
+      && isNonEmptyString(value.scope.locationCode)
+  }
+  return value.kind === 'player-character' && hasExactKeys(value, ['kind'])
+}
+
 function isPersonCreationPayload(payload: JsonValue): boolean {
-  if (!isRecord(payload) || !hasExactKeys(payload, ['person']) || !isRecord(payload.person)) return false
+  if (!isRecord(payload) || !hasExactKeys(payload, ['person', 'origin']) || !isRecord(payload.person)) return false
   const person = payload.person
   if (!hasExactKeys(person,
     ['id', 'displayName', 'birth', 'capability', 'stateDomains', 'history'],
@@ -115,6 +138,7 @@ function isPersonCreationPayload(payload: JsonValue): boolean {
   return [domains.body, domains.mind, domains.knowledge, domains.scheduleScope, domains.economy, domains.location]
     .every(isNonEmptyString)
     && isStringArray(domains.goals)
+    && isPersonOrigin(payload.origin)
 }
 
 function isOrganizationPayload(payload: JsonValue): boolean {
@@ -216,6 +240,7 @@ export function createWorldInitializationEventInput(
 
 export function createPersonCreatedEventInput(
   person: PersonCreationData,
+  origin: PersonOrigin,
   options: {
     readonly actor: string
     readonly source: Extract<LedgerSource, 'player-command' | 'rule'>
@@ -230,7 +255,7 @@ export function createPersonCreatedEventInput(
     actor: options.actor,
     requestWorldTime: options.requestWorldTime,
     clientRequestId: options.clientRequestId,
-    payload: { person },
+    payload: { person, origin },
   }
 }
 
