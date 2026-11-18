@@ -37,6 +37,10 @@ const receipt: WorldCommandReceipt = {
 }
 let rawSubmissions = 0
 let rawAggregateReads = 0
+let holdAggregateRead = false
+let resolveAggregateRead: ((aggregate: WorldAggregate | null) => void) | null = null
+let signalAggregateReadStarted: (() => void) | null = null
+let aggregateReadStarted = Promise.resolve()
 let queriedObserver: string | null = null
 let subscribedObserver: string | null = null
 let observerUnsubscribed = 0
@@ -58,7 +62,9 @@ const rawCommands: WorldCommandPort = {
 const rawQueries: WorldQueryPort = {
   async read(): Promise<WorldAggregate | null> {
     rawAggregateReads += 1
-    return worldAggregate
+    if (!holdAggregateRead) return worldAggregate
+    signalAggregateReadStarted?.()
+    return new Promise(resolve => { resolveAggregateRead = resolve })
   },
   subscribe(): () => void { return () => undefined },
 }
@@ -187,6 +193,24 @@ async function main(): Promise<void> {
     && wrongPlayerCommand.reason === 'world-command-principal-not-world-player'
     && rawSubmissions === 0)
   worldAggregate = { ...worldAggregate, playerPersonId: principalId }
+
+  worldAggregate = { ...worldAggregate, playerPersonId: principalId }
+  holdAggregateRead = true
+  aggregateReadStarted = new Promise<void>(resolve => { signalAggregateReadStarted = resolve })
+  const switchingCommand = boundary.commands.submit({
+    ...playerCommandRequest,
+    clientRequestId: 'player-boundary-principal-switch',
+  })
+  await aggregateReadStarted
+  authenticated = otherPersonId
+  resolveAggregateRead?.(worldAggregate)
+  const switchedCommand = await switchingCommand
+  check('command authorization is discarded when the authenticated principal changes during world lookup',
+    switchedCommand.status === 'rejected'
+    && switchedCommand.reason === 'world-command-principal-changed'
+    && rawSubmissions === 0)
+  authenticated = principalId
+  holdAggregateRead = false
 
   authenticated = null
   queriedObserver = null
