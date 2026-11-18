@@ -8,3 +8,4 @@ export * from './world/initialize'
 
 export * from './world/in-memory-adapter'
 export * from './world/observer-view'
+export * from './world/scheduler'
