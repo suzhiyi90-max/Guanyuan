@@ -81,19 +81,19 @@ export function createAuthorizationGatedWorldCommandPort(
         return rejected(command, null, 'world-command-authorization-resolution-failed')
       }
       if (!principal) {
-        return rejected(request, null, 'world-command-authenticated-principal-missing')
+        return rejected(command, null, 'world-command-authenticated-principal-missing')
       }
       if (!requirement || !requirement.permission.trim() || !requirement.scope) {
-        return rejected(request, null, 'world-command-authorization-requirement-missing')
+        return rejected(command, null, 'world-command-authorization-requirement-missing')
       }
 
       let aggregate: WorldAggregate | null
       try {
         aggregate = await options.queries.read(command.worldId)
       } catch {
-        return rejected(request, null, 'world-command-authorization-query-failed')
+        return rejected(command, null, 'world-command-authorization-query-failed')
       }
-      if (!aggregate) return rejected(request, null, 'world-command-world-not-found')
+      if (!aggregate) return rejected(command, null, 'world-command-world-not-found')
 
       const authorized = hasAuthorization(
         aggregate.identity.authorizations,
@@ -101,7 +101,7 @@ export function createAuthorizationGatedWorldCommandPort(
         aggregate.persons,
       )
       if (!authorized) {
-        return rejected(request, aggregate, 'world-command-unauthorized')
+        return rejected(command, aggregate, 'world-command-unauthorized')
       }
       return options.commands.submit({ ...command, actor: principal })
     },
