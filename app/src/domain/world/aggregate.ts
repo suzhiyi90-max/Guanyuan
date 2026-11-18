@@ -223,6 +223,9 @@ export function validateWorldAggregate(
         || !['county', 'grassroots', 'other'].includes(origin.populationTier)) {
         addIssue(issues, 'person', 'person-random-origin-invalid', person.id)
       }
+      if (aggregate.bootstrap && origin.seedFingerprint !== aggregate.bootstrap.seedFingerprint) {
+        addIssue(issues, 'person', 'person-random-origin-seed-mismatch', person.id)
+      }
     } else if (origin.kind === 'historical-minister') {
       if (origin.category !== 'famous-minister' || origin.evidenceRefs.length === 0
         || origin.evidenceRefs.some(ref => !ref.trim())
