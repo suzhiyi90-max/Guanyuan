@@ -133,6 +133,8 @@ jobs:
         run: npm run test:domain
       - name: World bootstrap and randomized population contracts
         run: npm run test:world-bootstrap
+      - name: Replay-backed world command/query adapter contracts
+        run: npm run test:world-adapter
       - name: World application initialization and resumable population contracts
         run: npm run test:world-initialize
       - name: World event registry and aggregate reducer contracts
