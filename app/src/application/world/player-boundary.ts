@@ -69,7 +69,11 @@ export function createWorldPlayerBoundary(
         const aggregate = await options.queries.read(worldId)
         if (!aggregate || aggregate.worldId !== worldId || aggregate.playerPersonId !== principal) return null
         const view = await options.observerQueries.read(worldId, principal)
-        return view && view.worldId === worldId && view.observerPersonId === principal ? view : null
+        if (!view || view.worldId !== worldId || view.observerPersonId !== principal) return null
+        // A session can change while storage/projection reads are pending. Do not
+        // return a previous player's view after logout or account switching.
+        const currentPrincipal = await options.principals.resolve()
+        return currentPrincipal === principal ? view : null
       } catch {
         return null
       }
@@ -84,8 +88,15 @@ export function createWorldPlayerBoundary(
           if (!active || !principal) return
           const aggregate = await options.queries.read(worldId)
           if (!active || !aggregate || aggregate.worldId !== worldId || aggregate.playerPersonId !== principal) return
+          const currentPrincipal = await options.principals.resolve()
+          if (!active || currentPrincipal !== principal) return
           unsubscribe = options.observerQueries.subscribe(worldId, principal, view => {
-            if (active && view.worldId === worldId && view.observerPersonId === principal) listener(view)
+            if (!active || view.worldId !== worldId || view.observerPersonId !== principal) return
+            // Revalidate on every emission so an existing subscription cannot
+            // continue delivering a prior account's view after session change.
+            void Promise.resolve(options.principals.resolve()).then(current => {
+              if (active && current === principal) listener(view)
+            }).catch(() => undefined)
           })
           if (!active) {
             unsubscribe()
