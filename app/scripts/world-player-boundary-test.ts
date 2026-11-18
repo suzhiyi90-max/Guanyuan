@@ -70,7 +70,7 @@ const rawObserverQueries: WorldObserverQueryPort = {
     signalObserverReadStarted?.()
     return new Promise(resolve => { resolveObserverRead = resolve })
   },
-  subscribe(_id, observer) {
+  subscribe(_id, observer, listener) {
     observerSubscribeCalls += 1
     subscribedObserver = observer
     emitObserverView = listener
