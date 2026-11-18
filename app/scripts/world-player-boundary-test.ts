@@ -1,0 +1,137 @@
+import { brandedId } from '../src/domain'
+import {
+  createWorldPlayerBoundary,
+  type WorldCommandPort,
+  type WorldCommandReceipt,
+  type WorldCommandRequest,
+  type WorldObserverQueryPort,
+  type WorldQueryPort,
+} from '../src/application'
+import type { WorldAggregate } from '../src/domain'
+
+let passed = 0
+let failed = 0
+function check(name: string, condition: boolean): void {
+  if (condition) passed += 1
+  else {
+    failed += 1
+    console.error(`FAIL ${name}`)
+  }
+}
+
+const worldId = brandedId<'WorldId'>('world:player-boundary-test')
+const principalId = brandedId<'PersonId'>('person:authenticated-player')
+const otherPersonId = brandedId<'PersonId'>('person:other-observer')
+const eventId = brandedId<'EventId'>('event:player-boundary-test')
+const receipt: WorldCommandReceipt = {
+  status: 'committed',
+  worldId,
+  clientRequestId: 'player-boundary-test',
+  eventId,
+  streamHead: { kind: 'event', seq: 1, eventId },
+}
+let rawSubmissions = 0
+let rawAggregateReads = 0
+let queriedObserver: string | null = null
+let subscribedObserver: string | null = null
+let observerUnsubscribed = 0
+const rawCommands: WorldCommandPort = {
+  async submit(): Promise<WorldCommandReceipt> {
+    rawSubmissions += 1
+    return receipt
+  },
+}
+const rawQueries: WorldQueryPort = {
+  async read(): Promise<WorldAggregate | null> {
+    rawAggregateReads += 1
+    return null
+  },
+  subscribe(): () => void { return () => undefined },
+}
+const rawObserverQueries: WorldObserverQueryPort = {
+  async read(_id, observer) {
+    queriedObserver = observer
+    return null
+  },
+  subscribe(_id, observer) {
+    subscribedObserver = observer
+    return () => { observerUnsubscribed += 1 }
+  },
+}
+const policy = {
+  schemaVersion: 'w6-command-authorization/1' as const,
+  policyId: 'player-boundary-empty-policy',
+  revision: '1',
+  rules: [],
+}
+let authenticated: string | null = principalId
+const principals = {
+  resolve: () => authenticated as typeof principalId | null,
+}
+const boundary = createWorldPlayerBoundary({
+  commands: rawCommands,
+  queries: rawQueries,
+  observerQueries: rawObserverQueries,
+  principals,
+  authorizationPolicy: policy,
+})
+
+const commandRequest: WorldCommandRequest = {
+  worldId,
+  clientRequestId: 'player-boundary-unknown-command',
+  actor: 'forged-ui-actor',
+  source: 'player-command',
+  intentKind: 'unregistered.player.intent',
+  requestedAt: { day: 1, period: '晨' },
+  expectedHead: { kind: 'genesis', seq: 0 },
+  payload: { scope: { kind: 'world' } },
+}
+
+async function main(): Promise<void> {
+  const keys = Object.keys(boundary).sort().join(',')
+  check('player boundary exposes only gated commands and principal-bound queries',
+    keys === 'commands,queries'
+    && !('rawCommands' in boundary)
+    && !('aggregateQueries' in boundary)
+    && !('observerQueries' in boundary))
+
+  const view = await boundary.queries.read(worldId)
+  check('player query binds the observer to the trusted authenticated principal',
+    view === null && queriedObserver === principalId)
+
+  let notified = false
+  const unsubscribe = boundary.queries.subscribe(worldId, () => { notified = true })
+  await Promise.resolve()
+  await Promise.resolve()
+  check('player subscription binds the observer to the trusted authenticated principal',
+    subscribedObserver === principalId && !notified)
+  unsubscribe()
+  check('player query subscription cleanup reaches the underlying observer subscription',
+    observerUnsubscribed === 1)
+
+  const denied = await boundary.commands.submit(commandRequest)
+  check('unknown player intent is denied by the composed boundary',
+    denied.status === 'rejected'
+    && denied.reason === 'world-command-authorization-requirement-missing'
+    && rawSubmissions === 0
+    && rawAggregateReads === 0)
+
+  authenticated = null
+  queriedObserver = null
+  const anonymousView = await boundary.queries.read(worldId)
+  let anonymousSubscriptionCalled = false
+  const stopAnonymous = boundary.queries.subscribe(worldId, () => { anonymousSubscriptionCalled = true })
+  await Promise.resolve()
+  await Promise.resolve()
+  check('missing principal yields no player view and cannot subscribe as another person',
+    anonymousView === null
+    && queriedObserver === null
+    && subscribedObserver === principalId
+    && !anonymousSubscriptionCalled)
+  stopAnonymous()
+
+  if (failed > 0) throw new Error(`World player boundary tests failed: ${failed}/${passed + failed}`)
+  console.log(`World player boundary tests: ${passed}/${passed + failed} passed`)
+}
+
+void main().catch(error => { console.error(error); throw error })
