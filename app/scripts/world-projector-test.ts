@@ -26,6 +26,7 @@ import {
   createGoalCreatedEventInput,
   createGoalStatusChangedEventInput,
   createScheduleEntryPlannedEventInput,
+  createScheduleEntryExecutionRecordedEventInput,
   createDebtRecordedEventInput,
   createDebtSettledEventInput,
   createAssetRegisteredEventInput,
@@ -311,8 +312,9 @@ async function run(): Promise<void> {
   appendAt(createGoalStatusChangedEventInput(goalId, 'achieved', {
     actor: 'player', source: 'player-command', requestWorldTime: nextMorning, clientRequestId: 'projector-goal-achieved',
   }), nextMorning)
+  const projectorScheduleId = brandedId<'ScheduleId'>('schedule:projector:001')
   appendAt(createScheduleEntryPlannedEventInput({
-    id: brandedId<'ScheduleId'>('schedule:projector:001'),
+    id: projectorScheduleId,
     scope: person.stateDomains.scheduleScope,
     person: person.id,
     day: nextNoon.day,
@@ -324,7 +326,7 @@ async function run(): Promise<void> {
     actor: 'player', source: 'player-command', requestWorldTime: nextMorning, clientRequestId: 'projector-schedule-planned',
   }), nextMorning)
   const debtId = brandedId<'DebtId'>('debt:projector:001')
-  appendAt(createDebtRecordedEventInput({
+  const projectorDebtEvent = appendAt(createDebtRecordedEventInput({
     id: debtId,
     creditor: person.id,
     debtor: secondPerson.id,
@@ -333,6 +335,11 @@ async function run(): Promise<void> {
   }, {
     actor: 'player', source: 'player-command', requestWorldTime: nextNoon, clientRequestId: 'projector-debt-recorded',
   }), nextNoon)
+  const scheduleExecutionEvent = appendAt(createScheduleEntryExecutionRecordedEventInput(
+    projectorScheduleId,
+    projectorDebtEvent.id,
+    { actor: 'system', source: 'schedule', requestWorldTime: nextEvening, clientRequestId: 'projector-schedule-executed' },
+  ), nextEvening)
   appendAt(createDebtSettledEventInput(debtId, {
     actor: 'player', source: 'player-command', requestWorldTime: nextEvening, clientRequestId: 'projector-debt-settled',
   }), nextEvening)
@@ -404,6 +411,8 @@ async function run(): Promise<void> {
     && complete.aggregate.planning.goals[0]?.status === 'achieved'
     && complete.aggregate.planning.goalStatusTransitions.length === 1
     && complete.aggregate.planning.scheduleEntries.length === 1
+    && complete.aggregate.planning.scheduleEntries[0]?.execution.kind === 'value'
+    && complete.aggregate.planning.scheduleEntries[0]?.execution.value === projectorDebtEvent.id
     && complete.aggregate.economy.debts.length === 1
     && complete.aggregate.economy.debts[0]?.status === 'settled'
     && complete.aggregate.economy.assets.length === 1
