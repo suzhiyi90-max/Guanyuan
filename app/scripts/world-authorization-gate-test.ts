@@ -175,15 +175,11 @@ async function main(): Promise<void> {
     }],
   }
   const policyRequirements = createWorldCommandAuthorizationRequirementResolver(authorizationPolicy)
-  const exactRequirement = await policyRequirements.resolve(request)
+  const exactRequirement = await policyRequirements.resolve(request.intentKind)
   check('versioned policy maps an exact command intent to its declared permission and scope',
     exactRequirement?.permission === 'county.order.issue'
     && JSON.stringify(exactRequirement.scope) === JSON.stringify(grant.scope))
-  const unmappedRequirement = await policyRequirements.resolve({
-    ...request,
-    intentKind: 'county.treasury.withdraw',
-    payload: { scope: { kind: 'world' } },
-  })
+  const unmappedRequirement = await policyRequirements.resolve('county.treasury.withdraw')
   check('unmapped command and caller-supplied payload scope cannot widen authorization',
     unmappedRequirement === null)
   let duplicatePolicyRejected = false
