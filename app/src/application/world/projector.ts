@@ -50,7 +50,7 @@ function isAggregateShape(value: JsonValue): value is JsonRecord {
   if (!groups.every(key => isStringRecord(value[key]))) return false
   const arrays = [
     'assignments', 'offices', 'appointments', 'authorizations',
-    'relations', 'claims', 'evidence', 'organizations', 'memberships',
+    'exposures', 'relations', 'claims', 'evidence', 'organizations', 'memberships',
     'knowledge', 'messages', 'propagations',
     'goals', 'goalStatusTransitions', 'goalDeathDispositions', 'scheduleScopes', 'scheduleEntries',
     'assets', 'debts', 'rightRevocations', 'debtPartySuccessions',
@@ -61,7 +61,7 @@ function isAggregateShape(value: JsonValue): value is JsonRecord {
     return isRecord(group) && arrays
       .filter(name => {
         if (key === 'identity') return ['assignments', 'offices', 'appointments', 'authorizations'].includes(name)
-        if (key === 'society') return ['relations', 'claims', 'evidence', 'organizations', 'memberships'].includes(name)
+        if (key === 'society') return ['exposures', 'relations', 'claims', 'evidence', 'organizations', 'memberships'].includes(name)
         if (key === 'cognition') return ['knowledge', 'messages', 'propagations'].includes(name)
         if (key === 'planning') return ['goals', 'goalStatusTransitions', 'goalDeathDispositions', 'scheduleScopes', 'scheduleEntries'].includes(name)
         if (key === 'economy') return ['assets', 'debts', 'rightRevocations', 'debtPartySuccessions'].includes(name)
