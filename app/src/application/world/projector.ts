@@ -41,6 +41,8 @@ function isAggregateShape(value: JsonValue): value is JsonRecord {
     || !isValidWorldTime(value.worldTime as unknown as WorldTime)
     || !isCursor(value.streamHead)
     || !(value.bootstrap === null || isRecord(value.bootstrap))
+    || !(value.playerPersonId === null || typeof value.playerPersonId === 'string')
+    || !Array.isArray(value.personOrigins)
     || !Array.isArray(value.persons)) return false
 
   const groups = ['identity', 'society', 'cognition', 'planning', 'economy', 'life'] as const
