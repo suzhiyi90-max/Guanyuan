@@ -134,13 +134,23 @@ async function main(): Promise<void> {
     && afterRemoteTick.worldTime.period === lateTime.period
     && afterRemoteTick.planning.scheduleEntries[0]?.execution.kind === 'n/a'
     && afterRemoteTick.planning.goals.every(item => item.id !== goalId))
+  const repeatedRemoteTick = await scheduler.advance({
+    worldId,
+    from: start,
+    to: lateTime,
+    lod: 'remote-world',
+    maxEvents: 2,
+  })
+  check('repeating an already committed clock interval is idempotent',
+    repeatedRemoteTick.status === 'unchanged'
+    && repeatedRemoteTick.streamHead.seq === afterRemoteTick.streamHead.seq)
 
   const first = await scheduler.advance({
     worldId,
     from: lateTime,
     to: nextMorning,
     lod: 'near-field',
-    maxEvents: 2,
+    maxEvents: 3,
   })
   if (first.status !== 'partial') throw new Error(`scheduler-test-expected-partial-result:${JSON.stringify(first)}`)
   const firstActionEventId = first.emittedEventIds[0]
