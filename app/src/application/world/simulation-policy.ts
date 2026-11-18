@@ -69,7 +69,9 @@ export function validateWorldSimulationRuleset(ruleset: WorldSimulationRuleset):
   if (!Array.isArray(ruleset?.rules)) issues.push('policy-rules-invalid')
   const selectors = new Set<string>()
   const ids = new Set<string>()
-  const configuredRules: readonly WorldSimulationPolicyRule[] = Array.isArray(ruleset?.rules)\n    ? ruleset.rules as readonly WorldSimulationPolicyRule[]\n    : []
+  const configuredRules: readonly WorldSimulationPolicyRule[] = Array.isArray(ruleset?.rules)
+    ? ruleset.rules as readonly WorldSimulationPolicyRule[]
+    : []
   for (const rule of configuredRules) {
     if (!rule || !nonEmpty(rule.policyId) || ids.has(rule.policyId)) issues.push('policy-id-invalid-or-duplicate')
     else ids.add(rule.policyId)
