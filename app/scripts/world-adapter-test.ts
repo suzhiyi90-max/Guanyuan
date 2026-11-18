@@ -256,6 +256,8 @@ async function main(): Promise<void> {
     payload: scheduleEvent.payload,
   })
 
+  const nextNoon: WorldTime = { day: 2, period: '午' }
+  const nextEvening: WorldTime = { day: 2, period: '暮' }
   const debtId = brandedId<'DebtId'>('debt:adapter:personal-loan')
   const debtEvent = toLedgerEventInput(createDebtRecordedEventInput({
     id: debtId,
@@ -264,15 +266,13 @@ async function main(): Promise<void> {
     principal: 20,
     kind: 'personal-loan',
   }, {
-    actor: 'system', source: 'rule', requestWorldTime: nextMorning, clientRequestId: 'adapter-debt-record',
+    actor: 'system', source: 'rule', requestWorldTime: nextNoon, clientRequestId: 'adapter-debt-record',
   }))
   const debtReceipt = await submitInput({
     source: 'rule', clientRequestId: debtEvent.clientRequestId, actor: debtEvent.actor,
     intentKind: debtEvent.intentKind, requestWorldTime: debtEvent.requestWorldTime,
     payload: debtEvent.payload,
   })
-  const nextNoon: WorldTime = { day: 2, period: '午' }
-  const nextEvening: WorldTime = { day: 2, period: '暮' }
   const scheduleExecutionEvent = toLedgerEventInput(createScheduleEntryExecutionRecordedEventInput(scheduleId, debtReceipt.eventId, {
     actor: 'system', source: 'schedule', requestWorldTime: nextEvening, clientRequestId: 'adapter-schedule-execution',
   }))
