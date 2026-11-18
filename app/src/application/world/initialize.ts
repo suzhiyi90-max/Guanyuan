@@ -60,6 +60,18 @@ export type WorldInitializationResult =
 
 const genesis: StreamCursor = Object.freeze({ kind: 'genesis', seq: 0 })
 
+function stableJson(value: unknown): string {
+  const normalize = (item: unknown): unknown => {
+    if (Array.isArray(item)) return item.map(normalize)
+    if (item !== null && typeof item === 'object') {
+      const record = item as Record<string, unknown>
+      return Object.fromEntries(Object.keys(record).sort().map(key => [key, normalize(record[key])]))
+    }
+    return item
+  }
+  return JSON.stringify(normalize(value))
+}
+
 function sameBootstrap(left: WorldBootstrapMetadata, right: WorldBootstrapMetadata): boolean {
   return left.scenarioPackId === right.scenarioPackId
     && left.rulesetVersion === right.rulesetVersion
@@ -68,7 +80,7 @@ function sameBootstrap(left: WorldBootstrapMetadata, right: WorldBootstrapMetada
     && left.seedFingerprint === right.seedFingerprint
     && left.locationCode === right.locationCode
     && left.populationPolicyVersion === right.populationPolicyVersion
-    && JSON.stringify(left.historicalNameAllowList) === JSON.stringify(right.historicalNameAllowList)
+    && stableJson(left.historicalNameAllowList) === stableJson(right.historicalNameAllowList)
 }
 
 function createPersonData(
@@ -108,7 +120,7 @@ function existingPersonMatches(
   const origin = aggregate.personOrigins.find(item => item.person === candidate.id)
   if (!person || !origin) return false
   return person.displayName === candidate.displayName
-    && JSON.stringify(origin.origin) === JSON.stringify(originFor(candidate))
+    && stableJson(origin.origin) === stableJson(originFor(candidate))
 }
 
 /**
