@@ -42,6 +42,7 @@ async function run(): Promise<void> {
     seedFingerprint: '0a1b2c3d',
     locationCode: 'peixian',
     populationPolicyVersion: 'w6.1',
+    historicalNameAllowList: [],
   }
   const registry = createWorldDomainEventRegistry()
   let ledger = createEventLedger<WorldDomainEventKind>(worldId)
