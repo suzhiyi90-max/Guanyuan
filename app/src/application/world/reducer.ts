@@ -39,6 +39,7 @@ import {
   type MessageCreationData,
   type MessageStage,
   type MessagePropagationCreationData,
+  type MembershipCreationData,
 } from './event-catalog'
 
 function assertNextEvent(
