@@ -17,13 +17,14 @@ class MemoryStorage implements OwnerIdentityStoragePort {
   readonly values = new Map<string, string>()
   failRead = false
   failWrite = false
+  ignoreWrite = false
   getItem(key: string): string | null {
     if (this.failRead) throw new Error('read denied')
     return this.values.get(key) ?? null
   }
   setItem(key: string, value: string): void {
     if (this.failWrite) throw new Error('write denied')
-    this.values.set(key, value)
+    if (!this.ignoreWrite) this.values.set(key, value)
   }
 }
 
@@ -85,6 +86,16 @@ async function main(): Promise<void> {
     writeRejected = error instanceof Error && error.message === 'owner-identity-storage-write-failed'
   }
   check('unavailable identity storage fails closed on first write', writeRejected)
+
+  const unconfirmedStorage = new MemoryStorage()
+  unconfirmedStorage.ignoreWrite = true
+  let unconfirmedRejected = false
+  try {
+    await createLocalOwnerIdentityPort({ storage: unconfirmedStorage, allocateUuid: () => uuidA }).resolve()
+  } catch (error) {
+    unconfirmedRejected = error instanceof Error && error.message === 'owner-identity-storage-write-failed'
+  }
+  check('identity write must be confirmed by read-back before resolution succeeds', unconfirmedRejected)
 
   let invalidUuidRejected = false
   try {
