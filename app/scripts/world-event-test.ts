@@ -32,6 +32,7 @@ import {
   createAssetRightGrantedEventInput,
   createAssetRightRevokedEventInput,
   createPersonExposureRecordedEventInput,
+  createLifeStateFactRecordedEventInput,
   projectWorldForObserver,
   reduceWorldDomainEvent,
   toLedgerEventInput,
