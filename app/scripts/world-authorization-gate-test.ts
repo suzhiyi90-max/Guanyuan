@@ -72,6 +72,7 @@ const authorizedAggregate: WorldAggregate = {
 let currentAggregate: WorldAggregate | null = authorizedAggregate
 let submitted = 0
 let submittedActor: string | null = null
+let submittedPayload: unknown = null
 const receipt: WorldCommandReceipt = {
   status: 'committed',
   worldId,
@@ -83,6 +84,7 @@ const commands: WorldCommandPort = {
   async submit(command): Promise<WorldCommandReceipt> {
     submitted += 1
     submittedActor = command.actor
+    submittedPayload = command.payload
     return receipt
   },
 }
@@ -114,6 +116,48 @@ async function main(): Promise<void> {
   const accepted = await gated.submit(request)
   check('explicit active grant reaches the command port with the authenticated principal as actor',
     accepted.status === 'committed' && submitted === 1 && submittedActor === personId)
+
+  let releasePayloadRead: ((aggregate: WorldAggregate | null) => void) | null = null
+  let payloadReadStarted = false
+  let snapshottedPayload: unknown = null
+  const delayedQueries: WorldQueryPort = {
+    read() {
+      payloadReadStarted = true
+      return new Promise(resolve => { releasePayloadRead = resolve })
+    },
+    subscribe() { return () => undefined },
+  }
+  const payloadCommands: WorldCommandPort = {
+    async submit(command): Promise<WorldCommandReceipt> {
+      snapshottedPayload = command.payload
+      return { ...receipt, clientRequestId: command.clientRequestId }
+    },
+  }
+  const payloadGate = createAuthorizationGatedWorldCommandPort({
+    commands: payloadCommands, queries: delayedQueries, requirements, principals,
+  })
+  const mutablePayload = { target: { office: 'office:original', personIds: ['person:original'] } }
+  const pendingPayloadCommand = payloadGate.submit({
+    ...request,
+    clientRequestId: 'authorization-gate-payload-snapshot',
+    payload: mutablePayload,
+  })
+  await Promise.resolve()
+  check('authorization query begins after the request snapshot is captured', payloadReadStarted)
+  mutablePayload.target.office = 'office:mutated'
+  mutablePayload.target.personIds[0] = 'person:mutated'
+  if (releasePayloadRead) releasePayloadRead(authorizedAggregate)
+  const payloadSnapshotResult = await pendingPayloadCommand
+  const submittedSnapshot = snapshottedPayload as {
+    readonly target?: { readonly office?: string; readonly personIds?: readonly string[] }
+  }
+  check('nested command payload is snapshotted before asynchronous authorization',
+    payloadSnapshotResult.status === 'committed'
+    && submittedSnapshot.target?.office === 'office:original'
+    && submittedSnapshot.target.personIds?.[0] === 'person:original'
+    && Object.isFrozen(submittedSnapshot)
+    && Object.isFrozen(submittedSnapshot.target)
+    && Object.isFrozen(submittedSnapshot.target?.personIds))
 
   currentAggregate = { ...authorizedAggregate, identity: { ...empty.identity, authorizations: [] } }
   const noGrant = await gated.submit({ ...request, clientRequestId: 'authorization-gate-no-grant' })
