@@ -246,6 +246,20 @@ W6 架构文档 `app/docs/W6-WORLD-AGGREGATE-ARCHITECTURE.md` 已将 W6-I 定义
 
 ---
 
+## 8.1 授权异步窗口中的 payload 快照补充审查
+
+对初始 W6-H 实现进一步审查发现：原 gate 在异步授权前复制了 request 顶层对象、requestedAt 和 expectedHead，但 payload 仍引用调用方原始嵌套对象。调用方可在 principal/requirement/world 查询尚未完成时修改嵌套 payload，从而使最终提交内容与调用时意图不一致。
+
+该问题已在 PR #86 的后续 W6-H 修补中处理：
+
+- 对 JSON payload 进行递归快照；
+- 递归冻结数组和普通对象；
+- 拒绝循环引用与非普通对象 payload；
+- 增加延迟授权查询测试：在异步查询期间修改原始嵌套对象，底层 command port 仍收到调用时的原始值；
+- 同时验证快照的嵌套对象和数组被冻结。
+
+修补提交：`4d9e2f5`、`9217a52`、`b9e1d0b`、`3695ea7`（后续 CI 验收以最新 head 为准）。本项不改变授权策略语义，不修改 W5 账本或存档。
+
 ## 8. 验收结论
 
 - [x] 当前 App 的 W5 预览命令入口已定位。
