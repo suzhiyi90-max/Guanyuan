@@ -10,6 +10,9 @@ import {
   createWorldDomainEventRegistry,
   createWorldInitializationEventInput,
   createPersonCreatedEventInput,
+  createRelationCreatedEventInput,
+  createRelationClaimRecordedEventInput,
+  createRelationEvidenceRecordedEventInput,
   toLedgerEventInput,
 } from '../src/application'
 import type {
@@ -87,6 +90,71 @@ async function run(): Promise<void> {
     clientRequestId: 'projector-person-create',
   }))
 
+  const secondPerson: PersonCreationData = {
+    ...person,
+    id: brandedId<'PersonId'>('person:projector:002'),
+    displayName: '另一名随机基层人物',
+    capability: brandedId<'CapabilityRef'>('cap:projector:002'),
+    stateDomains: {
+      ...person.stateDomains,
+      body: brandedId<'BodyScopeRef'>('body:projector:002'),
+      mind: brandedId<'MindScopeRef'>('mind:projector:002'),
+      knowledge: brandedId<'KnowledgeScopeId'>('knowledge:projector:002'),
+      scheduleScope: brandedId<'ScheduleScopeId'>('schedule:projector:002'),
+      economy: brandedId<'EconomyScopeId'>('economy:projector:002'),
+      location: brandedId<'LocationStateRef'>('location:projector:002'),
+    },
+    history: brandedId<'LifeHistoryRef'>('history:projector:002'),
+  }
+  append(createPersonCreatedEventInput(secondPerson, {
+    kind: 'seeded-random',
+    candidateId: secondPerson.id,
+    seedFingerprint: '0a1b2c3d',
+    roleCode: 'county-clerk',
+    populationTier: 'county',
+  }, {
+    actor: 'system',
+    source: 'rule',
+    requestWorldTime: start,
+    clientRequestId: 'projector-person-create-002',
+  }))
+  const relationId = brandedId<'RelationId'>('relation:projector:001')
+  append(createRelationCreatedEventInput({
+    id: relationId,
+    from: person.id,
+    to: secondPerson.id,
+    type: 'colleague',
+    visibility: { observer: 'player', level: 'contact' },
+  }, {
+    actor: 'system',
+    source: 'rule',
+    requestWorldTime: start,
+    clientRequestId: 'projector-relation-create',
+  }))
+  const claimId = brandedId<'RelationClaimId'>('relation-claim:projector:001')
+  append(createRelationClaimRecordedEventInput({
+    id: claimId,
+    relation: relationId,
+    claimant: 'player',
+    certainty: 'reported',
+  }, {
+    actor: 'player',
+    source: 'player-command',
+    requestWorldTime: start,
+    clientRequestId: 'projector-relation-claim',
+  }))
+  const evidenceEvent = append(createRelationEvidenceRecordedEventInput({
+    id: brandedId<'RelationEvidenceId'>('relation-evidence:projector:001'),
+    claim: claimId,
+    evidence: { kind: 'person', id: secondPerson.id },
+    weight: 'corroborating',
+  }, {
+    actor: 'player',
+    source: 'player-command',
+    requestWorldTime: start,
+    clientRequestId: 'projector-relation-evidence',
+  }))
+
   const projector = createWorldAggregateProjector({ registry, worldStartTime: start })
   const genesis = await projector.rebuild({ ledger, target: { kind: 'genesis', seq: 0 } })
   const initialized = await projector.rebuild({
@@ -95,7 +163,7 @@ async function run(): Promise<void> {
   })
   const complete = await projector.rebuild({
     ledger,
-    target: { kind: 'event', seq: personEvent.seq, eventId: personEvent.id },
+    target: { kind: 'event', seq: evidenceEvent.seq, eventId: evidenceEvent.id },
   })
 
   check('projector can rebuild a valid empty genesis projection',
@@ -108,9 +176,12 @@ async function run(): Promise<void> {
     && initialized.aggregate.persons.length === 0)
   check('projector replays person creation into the aggregate',
     complete.status === 'valid'
-    && complete.aggregate.persons.length === 1
+    && complete.aggregate.persons.length === 2
     && complete.aggregate.persons[0].id === person.id
-    && complete.aggregate.life.histories.length === 1)
+    && complete.aggregate.life.histories.length === 2
+    && complete.aggregate.society.relations.length === 1
+    && complete.aggregate.society.claims.length === 1
+    && complete.aggregate.society.evidence.length === 1)
 
   const badAnchor = await projector.rebuild({
     ledger,
