@@ -5,3 +5,5 @@ export * from './world/reducer'
 export * from './world/projector'
 
 export * from './world/initialize'
+
+export * from './world/in-memory-adapter'
