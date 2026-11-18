@@ -19,6 +19,7 @@ import {
   createAssetRegisteredEventInput,
   createAssetRightGrantedEventInput,
   createAssetRightRevokedEventInput,
+  createPersonExposureRecordedEventInput,
 } from '../src/application'
 import type { PersonCreationData, WorldBootstrapRequest, WorldCommandRequest } from '../src/application'
 
@@ -190,6 +191,26 @@ async function main(): Promise<void> {
   const people = (await adapter.queries.read(worldId))!.persons
   const actor = people[0]!
   const counterpart = people[1]!
+  const exposureEvent = toLedgerEventInput(createPersonExposureRecordedEventInput({
+    id: brandedId<'ExposureId'>('exposure:adapter:player-heard-first-person'),
+    observer: 'player',
+    subject: actor.id,
+    kind: 'heard-of',
+  }, {
+    actor: 'system', source: 'rule', requestWorldTime: worldTime, clientRequestId: 'adapter-person-exposure',
+  }))
+  const exposureReceipt = await submitInput({
+    source: 'rule', clientRequestId: exposureEvent.clientRequestId, actor: exposureEvent.actor,
+    intentKind: exposureEvent.intentKind, requestWorldTime: exposureEvent.requestWorldTime,
+    payload: exposureEvent.payload,
+  })
+  const exposedPlayerView = await adapter.observerQueries.read(worldId, 'player')
+  check('exposure command makes one known-person summary available without adding a relation',
+    exposureReceipt.status === 'committed'
+    && exposedPlayerView?.exposures.length === 1
+    && exposedPlayerView.knownPersons.length === 1
+    && exposedPlayerView.knownPersons[0]?.id === actor.id
+    && exposedPlayerView.relations.length === 0)
   const goalId = brandedId<'GoalId'>('goal:adapter:independent-life')
   const goalEvent = toLedgerEventInput(createGoalCreatedEventInput({
     id: goalId,
@@ -307,8 +328,8 @@ async function main(): Promise<void> {
     && fullyUpdated.economy.assets.find(item => item.id === assetId)?.rights.ownership.length === 1
     && fullyUpdated.economy.assets.find(item => item.id === assetId)?.owner.kind === 'n/a')
   check('adapter publishes every newly committed command to subscribers',
-    notifications === 12
-    && adapter.readLedger().head === 12)
+    notifications === 13
+    && adapter.readLedger().head === 13)
 
   const finalReplay = await adapter.projector.rebuild({
     ledger: adapter.readLedger(),
@@ -319,7 +340,8 @@ async function main(): Promise<void> {
     && finalReplay.aggregate.planning.goals.find(item => item.id === goalId)?.status === 'achieved'
     && finalReplay.aggregate.planning.scheduleEntries.length === 1
     && finalReplay.aggregate.economy.debts.find(item => item.id === debtId)?.status === 'settled'
-    && finalReplay.aggregate.economy.assets.find(item => item.id === assetId)?.owner.kind === 'n/a')
+    && finalReplay.aggregate.economy.assets.find(item => item.id === assetId)?.owner.kind === 'n/a'
+    && finalReplay.aggregate.society.exposures.length === 1)
 
   unsubscribe()
   if (failed > 0) throw new Error(`In-memory world adapter tests failed: ${failed}/${passed + failed}`)
