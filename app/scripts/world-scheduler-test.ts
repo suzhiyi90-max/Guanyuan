@@ -7,11 +7,13 @@ import {
   createInMemoryWorldAdapter,
   createGoalCreatedEventInput,
   createScheduleEntryPlannedEventInput,
+  createLifeStateFactRecordedEventInput,
   initializeWorldThroughPorts,
   toLedgerEventInput,
   createDeterministicWorldScheduler,
   createScheduleTaskSource,
   createCompositeWorldSimulationTaskSource,
+  createLifeStateMaintenanceTaskSource,
 } from '../src/application'
 import type { WorldBootstrapRequest, WorldCommandPort } from '../src/application'
 
@@ -30,6 +32,7 @@ const start: WorldTime = { day: 1, period: '晨' }
 const due: WorldTime = { day: 2, period: '午' }
 const lateTime: WorldTime = { day: 2, period: '暮' }
 const nextMorning: WorldTime = { day: 3, period: '晨' }
+const maintenanceTime: WorldTime = { day: 4, period: '晨' }
 const request: WorldBootstrapRequest = {
   worldId,
   seed: 'scheduler-test-seed',
@@ -263,6 +266,89 @@ async function main(): Promise<void> {
   })
   check('scheduler rejects stale time windows rather than replaying an old simulation interval',
     stale.status === 'rejected' && stale.reason === 'world-simulation-stale-from-time')
+
+  const beforeMaintenance = (await adapter.queries.read(worldId))!
+  const baselineFactId = brandedId<'LifeStateFactId'>('life-state:scheduler:baseline-stamina')
+  const baselineInput = toLedgerEventInput(createLifeStateFactRecordedEventInput({
+    id: baselineFactId,
+    person: person.id,
+    domain: 'body',
+    scope: person.stateDomains.body,
+    dimension: 'stamina',
+    value: field.value({ kind: 'qualitative', code: 'test-baseline' }),
+    supersedes: field.notApplicable,
+    visibility: { observer: 'player', level: 'private' },
+  }, {
+    actor: 'system',
+    source: 'rule',
+    requestWorldTime: nextMorning,
+    clientRequestId: 'scheduler-test:life-state:baseline',
+  }))
+  const baselineReceipt = await adapter.commands.submit({
+    worldId,
+    clientRequestId: baselineInput.clientRequestId,
+    actor: 'system',
+    source: 'rule',
+    intentKind: baselineInput.intentKind,
+    requestedAt: nextMorning,
+    expectedHead: beforeMaintenance.streamHead,
+    payload: baselineInput.payload,
+  })
+  check('life-state maintenance fixture records its prior fact through the command port',
+    baselineReceipt.status === 'committed')
+
+  const maintainedFactId = brandedId<'LifeStateFactId'>('life-state:scheduler:maintained-stamina')
+  let maintenanceResolverCalls = 0
+  const maintenanceSource = createLifeStateMaintenanceTaskSource({
+    resolve({ person: target, previousFact }) {
+      maintenanceResolverCalls += 1
+      return {
+        priority: 7,
+        fact: {
+          id: maintainedFactId,
+          person: target.id,
+          domain: 'body',
+          scope: target.stateDomains.body,
+          dimension: 'stamina',
+          value: field.value({ kind: 'qualitative', code: 'test-maintained' }),
+          supersedes: field.value(previousFact.id),
+          visibility: { observer: 'player', level: 'private' },
+        },
+      }
+    },
+  })
+  const maintenanceScheduler = createDeterministicWorldScheduler({
+    commands: adapter.commands,
+    queries: adapter.queries,
+    tasks: maintenanceSource,
+  })
+  const maintenanceResult = await maintenanceScheduler.advance({
+    worldId,
+    from: nextMorning,
+    to: maintenanceTime,
+    lod: 'near-field',
+    maxEvents: 2,
+  })
+  const afterMaintenance = (await adapter.queries.read(worldId))!
+  check('life-state maintenance commits a superseding fact and advances the clock through the scheduler',
+    maintenanceResult.status === 'advanced'
+    && afterMaintenance.life.stateFacts.some(fact => fact.id === maintainedFactId
+      && fact.supersedes.kind === 'value' && fact.supersedes.value === baselineFactId
+      && fact.sourceEvent === maintenanceResult.emittedEventIds[0]
+      && fact.at.day === maintenanceTime.day && fact.at.period === maintenanceTime.period)
+    && afterMaintenance.worldTime.day === maintenanceTime.day
+    && afterMaintenance.worldTime.period === maintenanceTime.period)
+
+  const callsBeforeSameTickRetry = maintenanceResolverCalls
+  const sameTickTasks = await maintenanceSource.listDueTasks({
+    worldId,
+    from: maintenanceTime,
+    to: maintenanceTime,
+    lod: 'near-field',
+    maxEvents: 2,
+  }, afterMaintenance)
+  check('life-state maintenance does not generate a second fact for an already-maintained tick',
+    sameTickTasks.length === 0 && maintenanceResolverCalls === callsBeforeSameTickRetry)
 
   if (failed > 0) throw new Error(`Deterministic world scheduler tests failed: ${failed}/${passed + failed}`)
   console.log(`Deterministic world scheduler tests: ${passed}/${passed + failed} passed`)
