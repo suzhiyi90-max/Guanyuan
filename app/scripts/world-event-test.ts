@@ -29,6 +29,7 @@ import {
   createAssetRegisteredEventInput,
   createAssetRightGrantedEventInput,
   createAssetRightRevokedEventInput,
+  createPersonExposureRecordedEventInput,
   projectWorldForObserver,
   reduceWorldDomainEvent,
   toLedgerEventInput,
@@ -94,7 +95,7 @@ let aggregate = createEmptyWorldAggregate(worldId, now)
 check('world domain event registry is frozen and versioned', registry.frozen
   && registry.registryId === 'guanyuan.world-domain'
   && registry.registryVersion === '1.0.0'
-  && registry.schemas.length === 24)
+  && registry.schemas.length === 25)
 
 function applyAt<K extends WorldDomainEventKind>(
   input: WorldDomainEventInput<K>,
@@ -266,6 +267,46 @@ apply(createPersonCreatedEventInput(historicalPerson, {
 check('fixed historical name is accepted only when it matches the world allow-list',
   aggregate.persons.some(item => item.id === historicalMinisterId)
   && aggregate.personOrigins.some(item => item.person === historicalMinisterId && item.origin.kind === 'historical-minister'))
+
+const unconnectedPerson: PersonCreationData = {
+  ...person,
+  id: brandedId<'PersonId'>('person:generated:unconnected-003'),
+  displayName: '随机生成未接触人物',
+  capability: brandedId<'CapabilityRef'>('cap:generated:unconnected-003'),
+  stateDomains: {
+    ...person.stateDomains,
+    body: brandedId<'BodyScopeRef'>('body:generated:unconnected-003'),
+    mind: brandedId<'MindScopeRef'>('mind:generated:unconnected-003'),
+    knowledge: brandedId<'KnowledgeScopeId'>('knowledge:generated:unconnected-003'),
+    scheduleScope: brandedId<'ScheduleScopeId'>('schedule:generated:unconnected-003'),
+    economy: brandedId<'EconomyScopeId'>('economy:generated:unconnected-003'),
+    location: brandedId<'LocationStateRef'>('location:generated:unconnected-003'),
+  },
+  history: brandedId<'LifeHistoryRef'>('history:generated:unconnected-003'),
+}
+apply(createPersonCreatedEventInput(unconnectedPerson, {
+  kind: 'seeded-random',
+  candidateId: unconnectedPerson.id,
+  seedFingerprint: 'a1b2c3d4',
+  roleCode: 'county-scholar',
+  populationTier: 'county',
+}, {
+  actor: 'system', source: 'rule', requestWorldTime: now, clientRequestId: 'unconnected-person-create-003',
+}))
+apply(createPersonExposureRecordedEventInput({
+  id: brandedId<'ExposureId'>('exposure:player-heard-unconnected-person'),
+  observer: 'player',
+  subject: unconnectedPerson.id,
+  kind: 'heard-of',
+}, {
+  actor: 'system', source: 'rule', requestWorldTime: now, clientRequestId: 'player-exposure-heard-003',
+}))
+check('exposure enters the observer contact book without creating a social relation',
+  aggregate.society.exposures.length === 1
+  && aggregate.society.exposures[0]?.observer === 'player'
+  && aggregate.society.exposures[0]?.subject === unconnectedPerson.id
+  && aggregate.society.exposures[0]?.kind === 'heard-of'
+  && aggregate.society.relations.length === 0)
 
 const relationId = brandedId<'RelationId'>('relation:person-to-minister')
 apply(createRelationCreatedEventInput({
@@ -672,6 +713,13 @@ check('player social projection contains only player-visible relations and playe
   && playerSocialView.claims.some(item => item.id === claimId)
   && playerSocialView.knownPersons.some(item => item.id === person.id)
   && playerSocialView.knownPersons.some(item => item.id === historicalMinisterId))
+check('contact-book exposure reveals the person identity without inventing a relationship',
+  playerSocialView.exposures.length === 1
+  && playerSocialView.exposures[0]?.subject === unconnectedPerson.id
+  && playerSocialView.knownPersons.some(item => item.id === unconnectedPerson.id)
+  && !playerSocialView.relations.some(item => item.from === unconnectedPerson.id || item.to === unconnectedPerson.id)
+  && firstPersonView.exposures.length === 0
+  && ministerView.exposures.length === 0)
 check('known-person cards expose only identity summary, not hidden life or state-domain records',
   playerSocialView.knownPersons.length > 0
   && !('lifeState' in playerSocialView.knownPersons[0]!)
