@@ -13,6 +13,9 @@ import {
   createRelationCreatedEventInput,
   createRelationClaimRecordedEventInput,
   createRelationEvidenceRecordedEventInput,
+  createKnowledgeRecordedEventInput,
+  createMessageSentEventInput,
+  createMessageStageRecordedEventInput,
   reduceWorldDomainEvent,
   toLedgerEventInput,
   validateWorldDomainEventPayload,
@@ -77,7 +80,7 @@ let aggregate = createEmptyWorldAggregate(worldId, now)
 check('world domain event registry is frozen and versioned', registry.frozen
   && registry.registryId === 'guanyuan.world-domain'
   && registry.registryVersion === '1.0.0'
-  && registry.schemas.length === 8)
+  && registry.schemas.length === 11)
 
 function apply<K extends WorldDomainEventKind>(
   input: WorldDomainEventInput<K>,
@@ -290,6 +293,83 @@ check('relation evidence remains a separate provenance record attached to a clai
   aggregate.society.evidence.length === 1
   && aggregate.society.evidence[0]?.claim === claimId
   && aggregate.society.evidence[0]?.weight === 'direct')
+
+const knowledgeId = brandedId<'KnowledgeId'>('knowledge:person-knows-relation')
+apply(createKnowledgeRecordedEventInput({
+  id: knowledgeId,
+  holder: person.id,
+  subject: { kind: 'relation', id: relationId },
+  proposition: '已获知该人物与名臣存在师生关系',
+  stance: 'suspected',
+  secrecy: 'private',
+}, {
+  actor: 'player',
+  source: 'player-command',
+  requestWorldTime: now,
+  clientRequestId: 'knowledge-record-001',
+}))
+check('knowledge is holder-scoped and records its own source event and acquisition time',
+  aggregate.cognition.knowledge.length === 1
+  && aggregate.cognition.knowledge[0]?.holder === person.id
+  && aggregate.cognition.knowledge[0]?.subject.kind === 'relation'
+  && aggregate.cognition.knowledge[0]?.sourceEvent === aggregate.streamHead.eventId
+  && aggregate.cognition.knowledge[0]?.stance === 'suspected')
+
+const messageId = brandedId<'MessageId'>('message:letter-to-minister')
+apply(createMessageSentEventInput({
+  id: messageId,
+  sender: person.id,
+  recipient: historicalMinisterId,
+  channel: brandedId<'ChannelRef'>('channel:letter'),
+  contentRefs: [{ kind: 'relation', id: relationId }],
+  parentMessage: field.notApplicable,
+  distortion: 0.15,
+}, {
+  actor: 'player',
+  source: 'player-command',
+  requestWorldTime: now,
+  clientRequestId: 'message-send-001',
+}))
+check('sent message begins with no delivery or comprehension milestones',
+  aggregate.cognition.messages.length === 1
+  && aggregate.cognition.messages[0]?.deliveredAt.kind === 'n/a'
+  && aggregate.cognition.messages[0]?.readAt.kind === 'n/a'
+  && aggregate.cognition.messages[0]?.sentAt.day === now.day)
+
+const prematureReadInput = createMessageStageRecordedEventInput(messageId, 'read', {
+  actor: 'system',
+  source: 'rule',
+  requestWorldTime: now,
+  clientRequestId: 'message-premature-read',
+})
+const prematureReadAppend = appendLedgerEvent(ledger, toLedgerEventInput(prematureReadInput), now)
+if (prematureReadAppend.status === 'appended') {
+  expectThrow('message cannot be read before delivery',
+    () => reduceWorldDomainEvent(aggregate, prematureReadAppend.event, registry),
+    'message-stage-prerequisite')
+} else {
+  check('premature message read event is prepared for rejection', false)
+}
+
+apply(createMessageStageRecordedEventInput(messageId, 'delivered', {
+  actor: 'system', source: 'rule', requestWorldTime: now, clientRequestId: 'message-delivered-001',
+}))
+apply(createMessageStageRecordedEventInput(messageId, 'read', {
+  actor: 'system', source: 'rule', requestWorldTime: now, clientRequestId: 'message-read-001',
+}))
+apply(createMessageStageRecordedEventInput(messageId, 'understood', {
+  actor: 'system', source: 'rule', requestWorldTime: now, clientRequestId: 'message-understood-001',
+}))
+apply(createMessageStageRecordedEventInput(messageId, 'replied', {
+  actor: 'system', source: 'rule', requestWorldTime: now, clientRequestId: 'message-replied-001',
+}))
+const completedMessage = aggregate.cognition.messages[0]
+check('message delivery, reading, understanding and reply are separately event-backed stages',
+  completedMessage?.deliveredAt.kind === 'value'
+  && completedMessage.readAt.kind === 'value'
+  && completedMessage.understoodAt.kind === 'value'
+  && completedMessage.repliedAt.kind === 'value')
+
 
 
 const reversedValidityPayload = {
