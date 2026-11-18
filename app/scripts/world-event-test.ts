@@ -18,6 +18,9 @@ import {
   createMessageStageRecordedEventInput,
   createMessageFailureRecordedEventInput,
   createMessagePropagationRecordedEventInput,
+  createMembershipAddedEventInput,
+  createMembershipEndedEventInput,
+  createRelationLifecycleChangedEventInput,
   reduceWorldDomainEvent,
   toLedgerEventInput,
   validateWorldDomainEventPayload,
@@ -82,7 +85,7 @@ let aggregate = createEmptyWorldAggregate(worldId, now)
 check('world domain event registry is frozen and versioned', registry.frozen
   && registry.registryId === 'guanyuan.world-domain'
   && registry.registryVersion === '1.0.0'
-  && registry.schemas.length === 13)
+  && registry.schemas.length === 16)
 
 function apply<K extends WorldDomainEventKind>(
   input: WorldDomainEventInput<K>,
@@ -261,6 +264,52 @@ check('relation creation commits an objective directed edge with event-backed li
   && aggregate.society.relations[0]?.to === historicalMinisterId
   && aggregate.society.relations[0]?.lifecycle.validFrom === aggregate.society.relations[0]?.sourceEvent
   && aggregate.society.relations[0]?.lifecycle.validTo === 'open')
+
+const membershipId = brandedId<'MembershipId'>('membership:person-county-office')
+apply(createMembershipAddedEventInput({
+  id: membershipId,
+  organization: organizationId,
+  person: person.id,
+  role: '书吏',
+  obligations: ['按期应召', '保守公务文书'],
+}, {
+  actor: 'system', source: 'rule', requestWorldTime: now, clientRequestId: 'membership-added-001',
+}))
+check('organization membership is a separate time-bounded record with event provenance',
+  aggregate.society.memberships.length === 1
+  && aggregate.society.memberships[0]?.validFrom === aggregate.society.memberships[0]?.sourceEvent
+  && aggregate.society.memberships[0]?.validTo === 'open')
+
+apply(createMembershipEndedEventInput(membershipId, {
+  actor: 'system', source: 'rule', requestWorldTime: now, clientRequestId: 'membership-ended-001',
+}))
+check('membership exit closes the existing interval without deleting membership history',
+  aggregate.society.memberships[0]?.validTo === aggregate.streamHead.eventId)
+
+apply(createRelationLifecycleChangedEventInput(relationId, 'dormant', {
+  actor: 'system', source: 'rule', requestWorldTime: now, clientRequestId: 'relation-dormant-001',
+}))
+apply(createRelationLifecycleChangedEventInput(relationId, 'active', {
+  actor: 'system', source: 'rule', requestWorldTime: now, clientRequestId: 'relation-reactivated-001',
+}))
+apply(createRelationLifecycleChangedEventInput(relationId, 'severed', {
+  actor: 'system', source: 'rule', requestWorldTime: now, clientRequestId: 'relation-severed-001',
+}))
+check('relation may become dormant, resume, and finally sever while preserving its history',
+  aggregate.society.relations[0]?.lifecycle.status === 'severed'
+  && aggregate.society.relations[0]?.lifecycle.validTo === aggregate.streamHead.eventId)
+const relationReopenAppend = appendLedgerEvent(ledger, toLedgerEventInput(
+  createRelationLifecycleChangedEventInput(relationId, 'active', {
+    actor: 'system', source: 'rule', requestWorldTime: now, clientRequestId: 'relation-reopen-after-severed',
+  }),
+), now)
+if (relationReopenAppend.status === 'appended') {
+  expectThrow('severed relation cannot be silently reopened',
+    () => reduceWorldDomainEvent(aggregate, relationReopenAppend.event, registry),
+    'relation-lifecycle-transition-invalid')
+} else {
+  check('relation reopen event is prepared for rejection', false)
+}
 
 const claimId = brandedId<'RelationClaimId'>('relation-claim:player-says-teacher')
 apply(createRelationClaimRecordedEventInput({
