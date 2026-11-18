@@ -147,7 +147,7 @@ async function main(): Promise<void> {
   check('authorization query begins after the request snapshot is captured', true)
   mutablePayload.target.office = 'office:mutated'
   mutablePayload.target.personIds[0] = 'person:mutated'
-  if (releasePayloadRead) releasePayloadRead(authorizedAggregate)
+  payloadReadSignal.release?.(authorizedAggregate)
   const payloadSnapshotResult = await pendingPayloadCommand
   const submittedSnapshot = snapshottedPayload as {
     readonly target?: { readonly office?: string; readonly personIds?: readonly string[] }
