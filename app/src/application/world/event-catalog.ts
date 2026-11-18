@@ -9,6 +9,7 @@ import type { Person } from '../../domain/person/model'
 import type { PersonOrigin } from '../../domain/person/provenance'
 import type { IdentityAssignment, Authorization } from '../../domain/identity/model'
 import type { Organization, Relation, RelationClaim, RelationEvidence } from '../../domain/relations/model'
+import type { EntityRef, KnowledgeEntry, Message } from '../../domain/cognition/model'
 import type { WorldBootstrapMetadata } from '../../domain/world/metadata'
 import type { WorldBootstrapDescriptor } from './bootstrap'
 import {
@@ -32,6 +33,9 @@ export type WorldDomainEventKind =
   | 'relation.created'
   | 'relation.claim.recorded'
   | 'relation.evidence.recorded'
+  | 'knowledge.recorded'
+  | 'message.sent'
+  | 'message.stage.recorded'
 
 export type PersonCreationData = Omit<Person, 'lifeState' | 'archiveState' | 'death'>
 export type IdentityAssignmentCreationData = Omit<IdentityAssignment, 'validFrom' | 'validTo' | 'sourceEvent'>
@@ -40,6 +44,9 @@ export type AuthorizationGrantData = Omit<Authorization,
 export type RelationCreationData = Pick<Relation, 'id' | 'from' | 'to' | 'type' | 'visibility'>
 export type RelationClaimCreationData = Omit<RelationClaim, 'assertedAt' | 'sourceEvent'>
 export type RelationEvidenceCreationData = Omit<RelationEvidence, 'sourceEvent'>
+export type KnowledgeCreationData = Omit<KnowledgeEntry, 'sourceEvent' | 'acquiredAt'>
+export type MessageCreationData = Pick<Message, 'id' | 'sender' | 'recipient' | 'channel' | 'contentRefs' | 'parentMessage' | 'distortion'>
+export type MessageStage = 'delivered' | 'read' | 'understood' | 'replied'
 
 export interface WorldDomainEventPayloadMap {
   readonly 'world.initialized': WorldBootstrapMetadata
@@ -50,6 +57,9 @@ export interface WorldDomainEventPayloadMap {
   readonly 'relation.created': { readonly relation: RelationCreationData }
   readonly 'relation.claim.recorded': { readonly claim: RelationClaimCreationData }
   readonly 'relation.evidence.recorded': { readonly evidence: RelationEvidenceCreationData }
+  readonly 'knowledge.recorded': { readonly entry: KnowledgeCreationData }
+  readonly 'message.sent': { readonly message: MessageCreationData }
+  readonly 'message.stage.recorded': { readonly messageId: string; readonly stage: MessageStage }
 }
 
 export type WorldDomainEventInput<Kind extends WorldDomainEventKind = WorldDomainEventKind> =
@@ -247,6 +257,44 @@ function isRelationEvidencePayload(payload: JsonValue): boolean {
     && ['direct', 'corroborating', 'hearsay'].includes(String(evidence.weight))
 }
 
+function isEntityRef(value: JsonValue | undefined): value is JsonValue {
+  return !!value && isRecord(value)
+    && hasExactKeys(value, ['kind', 'id'])
+    && isNonEmptyString(value.id)
+    && ['person', 'relation', 'claim', 'office', 'org', 'asset', 'debt', 'event', 'knowledge', 'message']
+      .includes(String(value.kind))
+}
+
+function isKnowledgePayload(payload: JsonValue): boolean {
+  if (!isRecord(payload) || !hasExactKeys(payload, ['entry']) || !isRecord(payload.entry)) return false
+  const entry = payload.entry
+  return hasExactKeys(entry, ['id', 'holder', 'subject', 'proposition', 'stance', 'secrecy'])
+    && [entry.id, entry.holder, entry.proposition].every(isNonEmptyString)
+    && isEntityRef(entry.subject)
+    && ['known', 'believed', 'suspected', 'misunderstood'].includes(String(entry.stance))
+    && ['public', 'private', 'secret'].includes(String(entry.secrecy))
+}
+
+function isMessagePayload(payload: JsonValue): boolean {
+  if (!isRecord(payload) || !hasExactKeys(payload, ['message']) || !isRecord(payload.message)) return false
+  const message = payload.message
+  return hasExactKeys(message, ['id', 'sender', 'recipient', 'channel', 'contentRefs', 'parentMessage', 'distortion'])
+    && [message.id, message.sender, message.recipient, message.channel].every(isNonEmptyString)
+    && Array.isArray(message.contentRefs)
+    && message.contentRefs.every(isEntityRef)
+    && isField(message.parentMessage, isNonEmptyString)
+    && typeof message.distortion === 'number'
+    && Number.isFinite(message.distortion)
+    && message.distortion >= 0
+    && message.distortion <= 1
+}
+
+function isMessageStagePayload(payload: JsonValue): boolean {
+  if (!isRecord(payload) || !hasExactKeys(payload, ['messageId', 'stage'])) return false
+  return isNonEmptyString(payload.messageId)
+    && ['delivered', 'read', 'understood', 'replied'].includes(String(payload.stage))
+}
+
 const schemas: ReadonlyArray<{ readonly kind: WorldDomainEventKind; readonly validate: EventSchemaValidator }> = [
   { kind: 'world.initialized', validate: isBootstrapMetadata },
   { kind: 'person.created', validate: isPersonCreationPayload },
@@ -256,6 +304,9 @@ const schemas: ReadonlyArray<{ readonly kind: WorldDomainEventKind; readonly val
   { kind: 'relation.created', validate: isRelationPayload },
   { kind: 'relation.claim.recorded', validate: isRelationClaimPayload },
   { kind: 'relation.evidence.recorded', validate: isRelationEvidencePayload },
+  { kind: 'knowledge.recorded', validate: isKnowledgePayload },
+  { kind: 'message.sent', validate: isMessagePayload },
+  { kind: 'message.stage.recorded', validate: isMessageStagePayload },
 ]
 
 export function createWorldDomainEventRegistry(): EventRegistry<WorldDomainEventKind> {
@@ -384,6 +435,67 @@ export function createRelationEvidenceRecordedEventInput(
     requestWorldTime: options.requestWorldTime,
     clientRequestId: options.clientRequestId,
     payload: { evidence },
+  }
+}
+
+export function createKnowledgeRecordedEventInput(
+  entry: KnowledgeCreationData,
+  options: {
+    readonly actor: string
+    readonly source: Extract<LedgerSource, 'player-command' | 'rule'>
+    readonly requestWorldTime: WorldTime
+    readonly clientRequestId: string
+  },
+): WorldDomainEventInput<'knowledge.recorded'> {
+  return {
+    source: options.source,
+    kind: 'knowledge.recorded',
+    intentKind: 'knowledge.record',
+    actor: options.actor,
+    requestWorldTime: options.requestWorldTime,
+    clientRequestId: options.clientRequestId,
+    payload: { entry },
+  }
+}
+
+export function createMessageSentEventInput(
+  message: MessageCreationData,
+  options: {
+    readonly actor: string
+    readonly source: Extract<LedgerSource, 'player-command' | 'rule'>
+    readonly requestWorldTime: WorldTime
+    readonly clientRequestId: string
+  },
+): WorldDomainEventInput<'message.sent'> {
+  return {
+    source: options.source,
+    kind: 'message.sent',
+    intentKind: 'message.send',
+    actor: options.actor,
+    requestWorldTime: options.requestWorldTime,
+    clientRequestId: options.clientRequestId,
+    payload: { message },
+  }
+}
+
+export function createMessageStageRecordedEventInput(
+  messageId: string,
+  stage: MessageStage,
+  options: {
+    readonly actor: string
+    readonly source: Extract<LedgerSource, 'player-command' | 'rule'>
+    readonly requestWorldTime: WorldTime
+    readonly clientRequestId: string
+  },
+): WorldDomainEventInput<'message.stage.recorded'> {
+  return {
+    source: options.source,
+    kind: 'message.stage.recorded',
+    intentKind: 'message.stage',
+    actor: options.actor,
+    requestWorldTime: options.requestWorldTime,
+    clientRequestId: options.clientRequestId,
+    payload: { messageId, stage },
   }
 }
 
