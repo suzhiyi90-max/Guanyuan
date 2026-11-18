@@ -14,6 +14,7 @@ import {
   createGoalCreatedEventInput,
   createGoalStatusChangedEventInput,
   createScheduleEntryPlannedEventInput,
+  createScheduleEntryExecutionRecordedEventInput,
   createDebtRecordedEventInput,
   createDebtSettledEventInput,
   createAssetRegisteredEventInput,
@@ -236,8 +237,9 @@ async function main(): Promise<void> {
     payload: goalStatusEvent.payload,
   })
 
+  const scheduleId = brandedId<'ScheduleId'>('schedule:adapter:work-afternoon')
   const scheduleEvent = toLedgerEventInput(createScheduleEntryPlannedEventInput({
-    id: brandedId<'ScheduleId'>('schedule:adapter:work-afternoon'),
+    id: scheduleId,
     scope: actor.stateDomains.scheduleScope,
     person: actor.id,
     day: 2,
@@ -269,8 +271,18 @@ async function main(): Promise<void> {
     intentKind: debtEvent.intentKind, requestWorldTime: debtEvent.requestWorldTime,
     payload: debtEvent.payload,
   })
+  const nextNoon: WorldTime = { day: 2, period: '午' }
+  const nextEvening: WorldTime = { day: 2, period: '暮' }
+  const scheduleExecutionEvent = toLedgerEventInput(createScheduleEntryExecutionRecordedEventInput(scheduleId, debtReceipt.eventId, {
+    actor: 'system', source: 'schedule', requestWorldTime: nextEvening, clientRequestId: 'adapter-schedule-execution',
+  }))
+  const scheduleExecutionReceipt = await submitInput({
+    source: 'schedule', clientRequestId: scheduleExecutionEvent.clientRequestId, actor: scheduleExecutionEvent.actor,
+    intentKind: scheduleExecutionEvent.intentKind, requestWorldTime: scheduleExecutionEvent.requestWorldTime,
+    payload: scheduleExecutionEvent.payload,
+  })
   const debtSettleEvent = toLedgerEventInput(createDebtSettledEventInput(debtId, {
-    actor: 'system', source: 'rule', requestWorldTime: nextMorning, clientRequestId: 'adapter-debt-settle',
+    actor: 'system', source: 'rule', requestWorldTime: nextEvening, clientRequestId: 'adapter-debt-settle',
   }))
   const debtSettleReceipt = await submitInput({
     source: 'rule', clientRequestId: debtSettleEvent.clientRequestId, actor: debtSettleEvent.actor,
@@ -286,7 +298,7 @@ async function main(): Promise<void> {
     custody: field.value(actor.id),
     valuation: field.value(100),
   }, {
-    actor: 'system', source: 'rule', requestWorldTime: nextMorning, clientRequestId: 'adapter-asset-register',
+    actor: 'system', source: 'rule', requestWorldTime: nextEvening, clientRequestId: 'adapter-asset-register',
   }))
   const assetReceipt = await submitInput({
     source: 'rule', clientRequestId: assetEvent.clientRequestId, actor: assetEvent.actor,
@@ -302,7 +314,7 @@ async function main(): Promise<void> {
     transferable: true,
     expires: field.notApplicable,
   }, {
-    actor: 'system', source: 'rule', requestWorldTime: nextMorning, clientRequestId: 'adapter-asset-right-grant',
+    actor: 'system', source: 'rule', requestWorldTime: nextEvening, clientRequestId: 'adapter-asset-right-grant',
   }))
   const grantReceipt = await submitInput({
     source: 'rule', clientRequestId: grantEvent.clientRequestId, actor: grantEvent.actor,
@@ -310,7 +322,7 @@ async function main(): Promise<void> {
     payload: grantEvent.payload,
   })
   const revokeEvent = toLedgerEventInput(createAssetRightRevokedEventInput(grantId, {
-    actor: 'system', source: 'rule', requestWorldTime: nextMorning, clientRequestId: 'adapter-asset-right-revoke',
+    actor: 'system', source: 'rule', requestWorldTime: nextEvening, clientRequestId: 'adapter-asset-right-revoke',
   }))
   const revokeReceipt = await submitInput({
     source: 'rule', clientRequestId: revokeEvent.clientRequestId, actor: revokeEvent.actor,
@@ -320,16 +332,18 @@ async function main(): Promise<void> {
 
   const fullyUpdated = await adapter.queries.read(worldId)
   check('adapter command map executes goal, schedule, debt and asset-right intents through replay',
-    [goalReceipt, goalStatusReceipt, scheduleReceipt, debtReceipt, debtSettleReceipt, assetReceipt, grantReceipt, revokeReceipt]
+    [goalReceipt, goalStatusReceipt, scheduleReceipt, debtReceipt, scheduleExecutionReceipt, debtSettleReceipt, assetReceipt, grantReceipt, revokeReceipt]
       .every(receipt => receipt.status === 'committed')
     && fullyUpdated?.planning.goals.find(item => item.id === goalId)?.status === 'achieved'
     && fullyUpdated.planning.scheduleEntries.length === 1
+    && fullyUpdated.planning.scheduleEntries[0]?.execution.kind === 'value'
+    && fullyUpdated.planning.scheduleEntries[0]?.execution.value === debtReceipt.eventId
     && fullyUpdated.economy.debts.find(item => item.id === debtId)?.status === 'settled'
     && fullyUpdated.economy.assets.find(item => item.id === assetId)?.rights.ownership.length === 1
     && fullyUpdated.economy.assets.find(item => item.id === assetId)?.owner.kind === 'n/a')
   check('adapter publishes every newly committed command to subscribers',
-    notifications === 13
-    && adapter.readLedger().head === 13)
+    notifications === 14
+    && adapter.readLedger().head === 14)
 
   const finalReplay = await adapter.projector.rebuild({
     ledger: adapter.readLedger(),
@@ -339,6 +353,8 @@ async function main(): Promise<void> {
     finalReplay.status === 'valid'
     && finalReplay.aggregate.planning.goals.find(item => item.id === goalId)?.status === 'achieved'
     && finalReplay.aggregate.planning.scheduleEntries.length === 1
+    && finalReplay.aggregate.planning.scheduleEntries[0]?.execution.kind === 'value'
+    && finalReplay.aggregate.planning.scheduleEntries[0]?.execution.value === debtReceipt.eventId
     && finalReplay.aggregate.economy.debts.find(item => item.id === debtId)?.status === 'settled'
     && finalReplay.aggregate.economy.assets.find(item => item.id === assetId)?.owner.kind === 'n/a'
     && finalReplay.aggregate.society.exposures.length === 1)
