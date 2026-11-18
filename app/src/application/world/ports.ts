@@ -11,6 +11,7 @@ import type { WorldTime } from '../../domain/shared/world-time'
 import type { StreamCursor } from '../../domain/event-replay'
 import type { WorldAggregate, WorldAggregateValidation } from '../../domain/world/aggregate'
 import type { WorldSnapshot } from '../../domain/world-snapshot'
+import type { WorldObserver, WorldObserverSocialView } from './observer-view'
 
 export interface WorldCommandRequest {
   readonly worldId: WorldId
@@ -56,9 +57,20 @@ export interface WorldProjectionPort<Kind extends string = string> {
   rebuild(request: WorldProjectionRequest<Kind>): Promise<WorldAggregateValidation>
 }
 
+/** Internal aggregate access for bootstrap/orchestration; never bind directly to player UI. */
 export interface WorldQueryPort {
   read(worldId: WorldId): Promise<WorldAggregate | null>
   subscribe(worldId: WorldId, listener: (aggregate: WorldAggregate) => void): () => void
+}
+
+/** Observer-scoped projection for screens; excludes unrelated NPC-private information. */
+export interface WorldObserverQueryPort {
+  read(worldId: WorldId, observer: WorldObserver): Promise<WorldObserverSocialView | null>
+  subscribe(
+    worldId: WorldId,
+    observer: WorldObserver,
+    listener: (view: WorldObserverSocialView) => void,
+  ): () => void
 }
 
 export interface WorldSnapshotWriteRequest {
@@ -133,7 +145,10 @@ export interface WorldCandidateProviderPort {
 export interface WorldApplicationPorts<Kind extends string = string> {
   readonly commands: WorldCommandPort
   readonly projector: WorldProjectionPort<Kind>
+  /** Internal aggregate query used by bootstrap/application orchestration only. */
   readonly queries: WorldQueryPort
+  /** Safe observer-scoped query for presentation and player-facing screens. */
+  readonly observerQueries: WorldObserverQueryPort
   readonly snapshots: WorldSnapshotPort
   readonly simulation: WorldSimulationPort
   readonly candidates: WorldCandidateProviderPort
