@@ -13,6 +13,10 @@ import {
   createRelationCreatedEventInput,
   createRelationClaimRecordedEventInput,
   createRelationEvidenceRecordedEventInput,
+  createOrganizationRegisteredEventInput,
+  createMembershipAddedEventInput,
+  createMembershipEndedEventInput,
+  createRelationLifecycleChangedEventInput,
   createKnowledgeRecordedEventInput,
   createMessageSentEventInput,
   createMessageStageRecordedEventInput,
@@ -123,6 +127,17 @@ async function run(): Promise<void> {
     requestWorldTime: start,
     clientRequestId: 'projector-person-create-002',
   }))
+  const organizationId = brandedId<'OrgId'>('org:projector:county-office')
+  append(createOrganizationRegisteredEventInput({
+    id: organizationId,
+    type: 'county-administration',
+    name: '县署',
+    purpose: '办理县级公务',
+    region: 'projector-region',
+    rules: [],
+  }, {
+    actor: 'system', source: 'rule', requestWorldTime: start, clientRequestId: 'projector-organization',
+  }))
   const relationId = brandedId<'RelationId'>('relation:projector:001')
   append(createRelationCreatedEventInput({
     id: relationId,
@@ -158,6 +173,28 @@ async function run(): Promise<void> {
     source: 'player-command',
     requestWorldTime: start,
     clientRequestId: 'projector-relation-evidence',
+  }))
+  const membershipId = brandedId<'MembershipId'>('membership:projector:001')
+  append(createMembershipAddedEventInput({
+    id: membershipId,
+    organization: organizationId,
+    person: person.id,
+    role: '书吏',
+    obligations: ['应召办事'],
+  }, {
+    actor: 'system', source: 'rule', requestWorldTime: start, clientRequestId: 'projector-membership-added',
+  }))
+  const membershipEndEvent = append(createMembershipEndedEventInput(membershipId, {
+    actor: 'system', source: 'rule', requestWorldTime: start, clientRequestId: 'projector-membership-ended',
+  }))
+  append(createRelationLifecycleChangedEventInput(relationId, 'dormant', {
+    actor: 'system', source: 'rule', requestWorldTime: start, clientRequestId: 'projector-relation-dormant',
+  }))
+  append(createRelationLifecycleChangedEventInput(relationId, 'active', {
+    actor: 'system', source: 'rule', requestWorldTime: start, clientRequestId: 'projector-relation-active',
+  }))
+  const relationSeveredEvent = append(createRelationLifecycleChangedEventInput(relationId, 'severed', {
+    actor: 'system', source: 'rule', requestWorldTime: start, clientRequestId: 'projector-relation-severed',
   }))
   append(createKnowledgeRecordedEventInput({
     id: brandedId<'KnowledgeId'>('knowledge:projector:001'),
@@ -263,6 +300,10 @@ async function run(): Promise<void> {
     && complete.aggregate.society.relations.length === 1
     && complete.aggregate.society.claims.length === 1
     && complete.aggregate.society.evidence.length === 1
+    && complete.aggregate.society.memberships.length === 1
+    && complete.aggregate.society.memberships[0]?.validTo === membershipEndEvent.id
+    && complete.aggregate.society.relations[0]?.lifecycle.status === 'severed'
+    && complete.aggregate.society.relations[0]?.lifecycle.validTo === relationSeveredEvent.id
     && complete.aggregate.cognition.knowledge.length === 2
     && complete.aggregate.cognition.propagations.length === 1
     && complete.aggregate.cognition.messages.length === 2
