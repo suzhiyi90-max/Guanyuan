@@ -132,6 +132,23 @@ function applyWorldInitialized(
   })
 }
 
+function applyWorldTimeAdvanced(
+  aggregate: WorldAggregate,
+  event: LedgerEvent<WorldDomainEventKind>,
+): WorldAggregate {
+  requireBootstrap(aggregate)
+  const payload = event.payload as unknown as WorldDomainEventPayloadMap['world.time.advanced']
+  if (compareWorldTime(payload.from, aggregate.worldTime) !== 0
+    || compareWorldTime(payload.to, event.committedAt) !== 0
+    || compareWorldTime(payload.to, aggregate.worldTime) <= 0) {
+    throw new Error('world-reducer-clock-advance-invalid')
+  }
+  return Object.freeze({
+    ...aggregate,
+    ...withEventCursor(aggregate, event),
+  })
+}
+
 function applyPersonCreated(
   aggregate: WorldAggregate,
   event: LedgerEvent<WorldDomainEventKind>,
@@ -1116,6 +1133,8 @@ export function reduceWorldDomainEvent(
   switch (event.kind) {
     case 'world.initialized':
       return applyWorldInitialized(aggregate, event)
+    case 'world.time.advanced':
+      return applyWorldTimeAdvanced(aggregate, event)
     case 'person.created':
       return applyPersonCreated(aggregate, event)
     case 'organization.registered':
