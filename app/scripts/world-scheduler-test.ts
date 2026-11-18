@@ -1,5 +1,6 @@
 import {
   brandedId,
+  field,
   type WorldTime,
 } from '../src/domain'
 import {
@@ -186,6 +187,28 @@ async function main(): Promise<void> {
     && afterRemoteTick.worldTime.period === lateTime.period
     && afterRemoteTick.planning.scheduleEntries[0]?.execution.kind === 'n/a'
     && afterRemoteTick.planning.goals.every(item => item.id !== goalId))
+  const unknownScheduleAggregate = {
+    ...afterRemoteTick,
+    planning: {
+      ...afterRemoteTick.planning,
+      scheduleEntries: afterRemoteTick.planning.scheduleEntries.map(entry => ({
+        ...entry,
+        execution: field.unknown,
+      })),
+    },
+  }
+  const unknownScheduleTasks = await createScheduleTaskSource({
+    resolve: () => ({ actor: 'system', intentKind: goal.intentKind, payload: goal.payload, priority: 10 }),
+  }).listDueTasks({
+    worldId,
+    from: lateTime,
+    to: nextMorning,
+    lod: 'near-field',
+    maxEvents: 3,
+  }, unknownScheduleAggregate)
+  check('unknown schedule settlement state is never assumed to mean pending execution',
+    unknownScheduleTasks.length === 0)
+
   const repeatedRemoteTick = await scheduler.advance({
     worldId,
     from: start,
