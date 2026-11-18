@@ -434,8 +434,9 @@ export function validateWorldAggregate(
       addIssue(issues, 'planning', 'schedule-execution-and-deviation-both-set', entry.id)
     }
     if (entry.execution.kind === 'value') {
-      const resultTime = eventTimes.get(entry.execution.value)
-      const resultIndex = ledgerEventIndex.get(entry.execution.value)
+      const executionEventId = entry.execution.value
+      const resultTime = eventTimes.get(executionEventId)
+      const resultIndex = ledgerEventIndex.get(executionEventId)
       const plannedAt: WorldTime = { day: entry.day, period: entry.period }
       if (resultTime && isValidWorldTime(resultTime)
         && compareWorldTime(resultTime, plannedAt) < 0) {
@@ -445,7 +446,7 @@ export function validateWorldAggregate(
         if (item.kind !== 'schedule.entry.execution.recorded'
           || item.payload === null || typeof item.payload !== 'object' || Array.isArray(item.payload)) return false
         const payload = item.payload as { readonly [key: string]: import('../event-ledger').JsonValue }
-        return payload.scheduleId === entry.id && payload.resultEventId === entry.execution.value
+        return payload.scheduleId === entry.id && payload.resultEventId === executionEventId
       })
       if (settlementEvents.length === 0) {
         addIssue(issues, 'planning', 'schedule-execution-settlement-event-missing', entry.id)
@@ -463,7 +464,8 @@ export function validateWorldAggregate(
       }
     }
     if (entry.deviation.kind === 'value') {
-      const deviationEvent = ledger.events.find(item => item.id === entry.deviation.value)
+      const deviationEventId = entry.deviation.value
+      const deviationEvent = ledger.events.find(item => item.id === deviationEventId)
       const payload = deviationEvent?.payload
       const matches = deviationEvent?.kind === 'schedule.entry.deviation.recorded'
         && payload !== null && typeof payload === 'object' && !Array.isArray(payload)
