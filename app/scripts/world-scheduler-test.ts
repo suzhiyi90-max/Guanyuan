@@ -118,6 +118,17 @@ async function main(): Promise<void> {
     }),
   })
 
+  const deferredLod = await scheduler.advance({
+    worldId,
+    from: start,
+    to: due,
+    lod: 'remote-world',
+    maxEvents: 2,
+  })
+  check('LOD resolver can defer a local schedule without advancing or writing facts',
+    deferredLod.status === 'unchanged'
+    && adapter.readLedger().head === planReceipt.streamHead.seq)
+
   const first = await scheduler.advance({
     worldId,
     from: start,
