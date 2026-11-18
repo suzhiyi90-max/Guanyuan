@@ -53,6 +53,7 @@ export type WorldDomainEventKind =
   | 'debt.recorded'
   | 'debt.settled'
   | 'asset.registered'
+  | 'asset.custody.transferred'
   | 'asset.right.granted'
   | 'asset.right.revoked'
   | 'person.exposure.recorded'
@@ -109,6 +110,7 @@ export interface WorldDomainEventPayloadMap {
   readonly 'debt.recorded': { readonly debt: DebtCreationData }
   readonly 'debt.settled': { readonly debtId: string }
   readonly 'asset.registered': { readonly asset: AssetCreationData }
+  readonly 'asset.custody.transferred': { readonly assetId: string; readonly fromPersonId: string; readonly toPersonId: string }
   readonly 'asset.right.granted': { readonly assetId: string; readonly rightKind: AssetRightKind; readonly grant: AssetRightGrantData }
   readonly 'asset.right.revoked': { readonly grantId: string }
   readonly 'person.exposure.recorded': { readonly exposure: PersonExposureCreationData }
@@ -430,6 +432,13 @@ function isAssetPayload(payload: JsonValue): boolean {
     && isField(asset.valuation, (value): value is number => typeof value === 'number' && Number.isFinite(value))
 }
 
+function isAssetCustodyTransferPayload(payload: JsonValue): boolean {
+  return isRecord(payload)
+    && hasExactKeys(payload, ['assetId', 'fromPersonId', 'toPersonId'])
+    && [payload.assetId, payload.fromPersonId, payload.toPersonId].every(isNonEmptyString)
+    && payload.fromPersonId !== payload.toPersonId
+}
+
 function isAssetRightGrantPayload(payload: JsonValue): boolean {
   if (!isRecord(payload) || !hasExactKeys(payload, ['assetId', 'rightKind', 'grant']) || !isRecord(payload.grant)) return false
   const grant = payload.grant
@@ -527,6 +536,7 @@ const schemas: ReadonlyArray<{ readonly kind: WorldDomainEventKind; readonly val
   { kind: 'debt.recorded', validate: isDebtPayload },
   { kind: 'debt.settled', validate: isDebtSettlementPayload },
   { kind: 'asset.registered', validate: isAssetPayload },
+  { kind: 'asset.custody.transferred', validate: isAssetCustodyTransferPayload },
   { kind: 'asset.right.granted', validate: isAssetRightGrantPayload },
   { kind: 'asset.right.revoked', validate: isAssetRightRevocationPayload },
   { kind: 'person.exposure.recorded', validate: isPersonExposurePayload },
@@ -535,7 +545,7 @@ const schemas: ReadonlyArray<{ readonly kind: WorldDomainEventKind; readonly val
 ]
 
 export function createWorldDomainEventRegistry(): EventRegistry<WorldDomainEventKind> {
-  let registry = createEventRegistry<WorldDomainEventKind>('guanyuan.world-domain', '1.2.0')
+  let registry = createEventRegistry<WorldDomainEventKind>('guanyuan.world-domain', '1.3.0')
   for (const schema of schemas) {
     const result = registerEventSchema(registry, {
       kind: schema.kind,
@@ -964,6 +974,28 @@ export function createAssetRegisteredEventInput(
     requestWorldTime: options.requestWorldTime,
     clientRequestId: options.clientRequestId,
     payload: { asset },
+  }
+}
+
+export function createAssetCustodyTransferredEventInput(
+  assetId: string,
+  fromPersonId: string,
+  toPersonId: string,
+  options: {
+    readonly actor: string
+    readonly source: Extract<LedgerSource, 'player-command' | 'rule'>
+    readonly requestWorldTime: WorldTime
+    readonly clientRequestId: string
+  },
+): WorldDomainEventInput<'asset.custody.transferred'> {
+  return {
+    source: options.source,
+    kind: 'asset.custody.transferred',
+    intentKind: 'asset.custody.transfer',
+    actor: options.actor,
+    requestWorldTime: options.requestWorldTime,
+    clientRequestId: options.clientRequestId,
+    payload: { assetId, fromPersonId, toPersonId },
   }
 }
 
