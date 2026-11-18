@@ -22,11 +22,11 @@ function isRecord(value: JsonValue): value is JsonRecord {
 }
 
 function isStringRecord(value: JsonValue | undefined): value is JsonRecord {
-  return isRecord(value)
+  return value !== undefined && isRecord(value)
 }
 
 function isCursor(value: JsonValue | undefined): value is JsonRecord {
-  if (!isRecord(value)) return false
+  if (value === undefined || !isRecord(value)) return false
   if (value.kind === 'genesis') return value.seq === 0
   return value.kind === 'event'
     && Number.isSafeInteger(value.seq)
