@@ -16,6 +16,8 @@ import {
   createKnowledgeRecordedEventInput,
   createMessageSentEventInput,
   createMessageStageRecordedEventInput,
+  createMessageFailureRecordedEventInput,
+  createMessagePropagationRecordedEventInput,
   reduceWorldDomainEvent,
   toLedgerEventInput,
   validateWorldDomainEventPayload,
@@ -26,7 +28,7 @@ import type {
   PersonCreationData,
   WorldDomainEventKind,
 } from '../src/application'
-import type { WorldId } from '../src/domain'
+import type { FailureKind, WorldId } from '../src/domain'
 import type { RelationTypeCode } from '../src/domain'
 
 let passed = 0
@@ -80,7 +82,7 @@ let aggregate = createEmptyWorldAggregate(worldId, now)
 check('world domain event registry is frozen and versioned', registry.frozen
   && registry.registryId === 'guanyuan.world-domain'
   && registry.registryVersion === '1.0.0'
-  && registry.schemas.length === 11)
+  && registry.schemas.length === 13)
 
 function apply<K extends WorldDomainEventKind>(
   input: WorldDomainEventInput<K>,
@@ -369,6 +371,64 @@ check('message delivery, reading, understanding and reply are separately event-b
   && completedMessage.readAt.kind === 'value'
   && completedMessage.understoodAt.kind === 'value'
   && completedMessage.repliedAt.kind === 'value')
+
+const recipientKnowledgeId = brandedId<'KnowledgeId'>('knowledge:minister-learns-relation')
+apply(createKnowledgeRecordedEventInput({
+  id: recipientKnowledgeId,
+  holder: historicalMinisterId,
+  subject: { kind: 'relation', id: relationId },
+  proposition: '来信告知双方存在师生关系',
+  stance: 'believed',
+  secrecy: 'private',
+}, {
+  actor: 'system', source: 'rule', requestWorldTime: now, clientRequestId: 'knowledge-recipient-001',
+}))
+const propagationId = brandedId<'MessagePropagationId'>('propagation:letter-001')
+apply(createMessagePropagationRecordedEventInput({
+  id: propagationId,
+  message: messageId,
+  fromHolder: person.id,
+  toHolder: historicalMinisterId,
+  sourceKnowledge: [knowledgeId],
+  resultingKnowledge: [recipientKnowledgeId],
+}, {
+  actor: 'system', source: 'rule', requestWorldTime: now, clientRequestId: 'message-propagation-001',
+}))
+check('message propagation transfers holder-scoped knowledge without mutating the source entry',
+  aggregate.cognition.propagations.length === 1
+  && aggregate.cognition.propagations[0]?.fromHolder === person.id
+  && aggregate.cognition.propagations[0]?.toHolder === historicalMinisterId
+  && aggregate.cognition.knowledge.length === 2)
+
+const failedMessageId = brandedId<'MessageId'>('message:failed-letter')
+apply(createMessageSentEventInput({
+  id: failedMessageId,
+  sender: person.id,
+  recipient: historicalMinisterId,
+  channel: brandedId<'ChannelRef'>('channel:letter'),
+  contentRefs: [],
+  parentMessage: field.notApplicable,
+  distortion: 0,
+}, {
+  actor: 'player', source: 'player-command', requestWorldTime: now, clientRequestId: 'message-failure-send-001',
+}))
+apply(createMessageFailureRecordedEventInput(failedMessageId, 'courier-lost' as FailureKind, {
+  actor: 'system', source: 'rule', requestWorldTime: now, clientRequestId: 'message-failure-001',
+}))
+check('message delivery failure is an explicit terminal fact before any delivery progress',
+  aggregate.cognition.messages.find(item => item.id === failedMessageId)?.failure.kind === 'value')
+const stageAfterFailure = appendLedgerEvent(ledger, toLedgerEventInput(
+  createMessageStageRecordedEventInput(failedMessageId, 'delivered', {
+    actor: 'system', source: 'rule', requestWorldTime: now, clientRequestId: 'message-after-failure',
+  }),
+), now)
+if (stageAfterFailure.status === 'appended') {
+  expectThrow('failed message cannot later acquire delivery milestones',
+    () => reduceWorldDomainEvent(aggregate, stageAfterFailure.event, registry),
+    'message-stage-prerequisite')
+} else {
+  check('post-failure delivery event is prepared for rejection', false)
+}
 
 
 
