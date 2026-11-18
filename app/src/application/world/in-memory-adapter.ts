@@ -92,8 +92,10 @@ export function createInMemoryWorldAdapter(options: InMemoryWorldAdapterOptions)
   const projector = createWorldAggregateProjector({ registry, worldStartTime: options.worldStartTime })
   const listeners = new Set<(value: WorldAggregate) => void>()
 
-  const commands: WorldCommandPort = {
-    async submit(request): Promise<WorldCommandReceipt> {
+  let commandQueue: Promise<void> = Promise.resolve()
+  const submitCommand = async (
+    request: Parameters<WorldCommandPort['submit']>[0],
+  ): Promise<WorldCommandReceipt> => {
       if (request.worldId !== options.worldId) {
         return {
           status: 'rejected',
@@ -199,6 +201,12 @@ export function createInMemoryWorldAdapter(options: InMemoryWorldAdapterOptions)
         eventId: tail.id,
         streamHead: aggregate.streamHead,
       }
+  }
+  const commands: WorldCommandPort = {
+    submit(request) {
+      const result = commandQueue.then(() => submitCommand(request))
+      commandQueue = result.then(() => undefined, () => undefined)
+      return result
     },
   }
 
