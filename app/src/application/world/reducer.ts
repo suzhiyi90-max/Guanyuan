@@ -127,6 +127,10 @@ function applyPersonCreated(
     }
   }
   requireUniquePerson(aggregate, data.id, data.history)
+  if (aggregate.planning.scheduleScopes.some(scope => scope.id === data.stateDomains.scheduleScope
+    || scope.person === data.id)) {
+    throw new Error('world-reducer-person-schedule-scope-duplicate')
+  }
   const person: Person = Object.freeze({
     ...data,
     lifeState: 'alive',
@@ -164,6 +168,15 @@ function applyPersonCreated(
     life: Object.freeze({
       ...aggregate.life,
       histories: Object.freeze([...aggregate.life.histories, history]),
+    }),
+    planning: Object.freeze({
+      ...aggregate.planning,
+      // Every person owns exactly one schedule scope from creation; the
+      // scope ID is part of the person's immutable state-domain references.
+      scheduleScopes: Object.freeze([
+        ...aggregate.planning.scheduleScopes,
+        Object.freeze({ id: data.stateDomains.scheduleScope, person: person.id }),
+      ]),
     }),
   })
 }
