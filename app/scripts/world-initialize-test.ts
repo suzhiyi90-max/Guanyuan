@@ -30,8 +30,10 @@ function createHarness(worldId: WorldId) {
       })
       const previous = receipts.get(request.clientRequestId)
       if (previous) return {
-        ...previous,
         status: 'duplicate' as const,
+        worldId: previous.worldId,
+        clientRequestId: previous.clientRequestId,
+        eventId: previous.eventId,
         streamHead: head,
       }
       if (failRequestId === request.clientRequestId) {
