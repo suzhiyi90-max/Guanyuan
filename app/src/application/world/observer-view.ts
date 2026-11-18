@@ -14,6 +14,7 @@ import type { Person } from '../../domain/person/model'
 import type {
   IdentityAssignment,
 } from '../../domain/identity/model'
+import type { PersonExposure } from '../../domain/relations/exposure'
 import type {
   Relation,
   RelationClaim,
@@ -47,6 +48,7 @@ export interface WorldObserverSocialView {
   /** People explicitly known through visible records; never the global person table. */
   readonly knownPersons: readonly KnownPersonSummary[]
   readonly identityAssignments: readonly IdentityAssignment[]
+  readonly exposures: readonly PersonExposure[]
   readonly relations: readonly Relation[]
   readonly claims: readonly RelationClaim[]
   readonly evidence: readonly RelationEvidence[]
@@ -138,6 +140,10 @@ export function projectWorldForObserver(
   observer: WorldObserver,
 ): WorldObserverSocialView {
   const personId = observerPersonId(aggregate, observer)
+  const exposures = aggregate.society.exposures.filter(item =>
+    item.observer === 'player'
+      ? observer === 'player'
+      : personId !== null && item.observer === personId)
   const identityAssignments = aggregate.identity.assignments.filter(item =>
     visibleTo(item.visibility, observer, personId))
   const relations = aggregate.society.relations.filter(item =>
@@ -176,6 +182,7 @@ export function projectWorldForObserver(
   }
 
   if (personId) addPerson(personId)
+  for (const item of exposures) addPerson(item.subject)
   for (const item of identityAssignments) addPerson(item.person)
   for (const relation of relations) {
     addPerson(relation.from)
@@ -218,6 +225,7 @@ export function projectWorldForObserver(
     streamHead: aggregate.streamHead,
     self,
     knownPersons: Object.freeze(knownPersons),
+    exposures: Object.freeze(exposures),
     identityAssignments: Object.freeze(identityAssignments),
     relations: Object.freeze(relations),
     claims: Object.freeze(claims),
