@@ -102,24 +102,27 @@ function applyPersonCreated(
     throw new Error('world-reducer-random-person-seed-mismatch')
   }
   if (payload.origin.kind === 'historical-minister') {
+    // Capture the narrowed union member before entering callbacks; TypeScript
+    // otherwise widens payload.origin inside Array#every.
+    const historicalOrigin = payload.origin
     const allowed = aggregate.bootstrap?.historicalNameAllowList.find(item => item.personId === data.id)
-    const sameScope = !!allowed && allowed.scope.kind === payload.origin.scope.kind
-      && (payload.origin.scope.kind === 'world'
+    const sameScope = !!allowed && allowed.scope.kind === historicalOrigin.scope.kind
+      && (historicalOrigin.scope.kind === 'world'
         || (allowed.scope.kind === 'location'
-          && allowed.scope.locationCode === payload.origin.scope.locationCode))
+          && allowed.scope.locationCode === historicalOrigin.scope.locationCode))
     const sameValidity = !!allowed
-      && compareWorldTime(allowed.validFrom, payload.origin.validFrom) === 0
-      && ((allowed.validThrough === null && payload.origin.validThrough === null)
-        || (!!allowed.validThrough && !!payload.origin.validThrough
-          && compareWorldTime(allowed.validThrough, payload.origin.validThrough) === 0))
+      && compareWorldTime(allowed.validFrom, historicalOrigin.validFrom) === 0
+      && ((allowed.validThrough === null && historicalOrigin.validThrough === null)
+        || (!!allowed.validThrough && !!historicalOrigin.validThrough
+          && compareWorldTime(allowed.validThrough, historicalOrigin.validThrough) === 0))
     const sameEvidence = !!allowed
-      && allowed.evidenceRefs.length === payload.origin.evidenceRefs.length
-      && allowed.evidenceRefs.every((ref, index) => ref === payload.origin.evidenceRefs[index])
+      && allowed.evidenceRefs.length === historicalOrigin.evidenceRefs.length
+      && allowed.evidenceRefs.every((ref, index) => ref === historicalOrigin.evidenceRefs[index])
     if (!allowed || allowed.displayName !== data.displayName || !sameScope || !sameValidity || !sameEvidence) {
       throw new Error('world-reducer-historical-person-not-allowlisted')
     }
-    if (compareWorldTime(payload.origin.validFrom, event.committedAt) > 0
-      || (payload.origin.validThrough && compareWorldTime(payload.origin.validThrough, event.committedAt) < 0)) {
+    if (compareWorldTime(historicalOrigin.validFrom, event.committedAt) > 0
+      || (historicalOrigin.validThrough && compareWorldTime(historicalOrigin.validThrough, event.committedAt) < 0)) {
       throw new Error('world-reducer-historical-person-outside-validity')
     }
   }
