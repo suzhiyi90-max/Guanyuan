@@ -1,3 +1,4 @@
+import { ownerIdFromTrustedValue } from '../src/application/identity/owner'
 import {
   createLocalOwnerIdentityPort,
   LOCAL_OWNER_IDENTITY_STORAGE_KEY,
@@ -33,6 +34,14 @@ const uuidA = '123e4567-e89b-42d3-a456-426614174000'
 const uuidB = '123e4567-e89b-42d3-a456-426614174001'
 
 async function main(): Promise<void> {
+  const serverMappedOwner = ownerIdFromTrustedValue('owner:account:server-verified-subject')
+  check('application OwnerId accepts a trusted provider-neutral server mapping', serverMappedOwner === 'owner:account:server-verified-subject')
+  let emptyOwnerRejected = false
+  try { ownerIdFromTrustedValue('   ') } catch (error) {
+    emptyOwnerRejected = error instanceof Error && error.message === 'owner-identity-value-empty'
+  }
+  check('application OwnerId rejects empty trusted identity values', emptyOwnerRejected)
+
   const storage = new MemoryStorage()
   let allocations = 0
   const first = createLocalOwnerIdentityPort({
