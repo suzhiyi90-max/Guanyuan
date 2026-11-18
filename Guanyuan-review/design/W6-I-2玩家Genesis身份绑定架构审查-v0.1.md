@@ -228,3 +228,18 @@ PR：[#90](https://github.com/suzhiyi90-max/Guanyuan/pull/90)，目标分支为 
 - 未修改页面、导航、布局、动效、交互或美术资源。
 
 **验收限制：** localStorage 只作为当前单机开发身份的持久化载体，不承担多记录事务、跨标签原子锁或世界所有权争抢。上述能力必须在后续 Owner/World reservation 工作包中由明确的事务适配器实现。
+
+
+## 13. 跨标签页初始化互斥补强（PR #90 后续修订）
+
+第一轮完整 G1.7：run `44332859747`，67/67 steps success。通过后复核发现 localStorage 首次写入/回读本身不构成跨标签页互斥，因此没有直接把第一轮结果作为最终身份适配器验收。
+
+PR #90 后续增加：
+- `OwnerIdentityInitializationLockPort`，把初始化互斥作为显式注入端口。
+- 浏览器组合使用 Web Locks API 对同一 local-owner 初始化键执行跨标签页互斥；不支持 Web Locks 时 fail closed，不降级为无锁创建。
+- 并发测试用两个独立适配器实例共享同一存储和互斥端口同时首次 resolve，要求返回相同 OwnerId，且 UUID 仅分配一次。
+- 重启恢复、损坏存储、读写故障、写入回读确认和生产禁用测试继续保留。
+
+补强提交：`0b473a1b5a5f42379b73e6b4789ab4138133dca4`。其对应最新 G1.7 run `44335272863` 尚在执行，最终验收以该 head 的完整工作流结果为准。
+
+该互斥仅解决本地身份首次初始化，不承担 Owner/World 多记录事务、世界所有权竞争或 Genesis 幂等；这些仍属于下一阶段独立事务边界。
