@@ -156,14 +156,15 @@ async function main(): Promise<void> {
   emitObserverView?.(observerView)
   await Promise.resolve()
   await Promise.resolve()
-  check('existing subscription stops delivering after authenticated principal changes', !notified)
+  check('existing subscription stops delivering and is revoked after authenticated principal changes',
+    !notified && observerUnsubscribed === 1)
   authenticated = principalId
   emitObserverView?.(observerView)
   await Promise.resolve()
   await Promise.resolve()
-  check('active subscription delivers only while the same principal remains authenticated', notified)
+  check('revoked subscription cannot resume delivering after the prior principal returns', !notified)
   unsubscribe()
-  check('player query subscription cleanup reaches the underlying observer subscription',
+  check('player query subscription cleanup is idempotent after principal revocation',
     observerUnsubscribed === 1)
 
   const aggregateReadsBeforeDeniedCommand = rawAggregateReads
