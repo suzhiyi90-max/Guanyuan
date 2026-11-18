@@ -700,7 +700,7 @@ check('aggregate rejects generated people whose provenance seed differs from wor
   && mismatchedSeedResult.issues.some(issue => issue.code === 'person-random-origin-seed-mismatch'))
 
 const duplicateInit = createWorldInitializationEventInput({ ...descriptor, startedAt: aggregate.worldTime }, 'world-init-duplicate')
-const duplicateAppend = appendLedgerEvent(ledger, toLedgerEventInput(duplicateInit), now)
+const duplicateAppend = appendLedgerEvent(ledger, toLedgerEventInput(duplicateInit), aggregate.worldTime)
 if (duplicateAppend.status === 'appended') {
   expectThrow('world cannot be initialized twice',
     () => reduceWorldDomainEvent(aggregate, duplicateAppend.event, registry),
