@@ -14,9 +14,14 @@ export interface OwnerIdentityStoragePort {
   setItem(key: string, value: string): void
 }
 
+export interface OwnerIdentityInitializationLockPort {
+  runExclusive<T>(name: string, operation: () => Promise<T>): Promise<T>
+}
+
 export interface LocalOwnerIdentityOptions {
   readonly storage: OwnerIdentityStoragePort
   readonly allocateUuid: () => string
+  readonly initializationLock: OwnerIdentityInitializationLockPort
 }
 
 export const LOCAL_OWNER_IDENTITY_STORAGE_KEY = 'guanyuan:w6:local-owner:v1'
@@ -41,32 +46,37 @@ function candidateOwnerId(allocateUuid: () => string): OwnerId {
 export function createLocalOwnerIdentityPort(options: LocalOwnerIdentityOptions): OwnerIdentityPort {
   return Object.freeze({
     async resolve(): Promise<OwnerId> {
-      let stored: string | null
-      try {
-        stored = options.storage.getItem(LOCAL_OWNER_IDENTITY_STORAGE_KEY)
-      } catch {
-        throw new Error('owner-identity-storage-read-failed')
-      }
+      return options.initializationLock.runExclusive(
+        'guanyuan:w6:local-owner-identity:init',
+        async () => {
+          let stored: string | null
+          try {
+            stored = options.storage.getItem(LOCAL_OWNER_IDENTITY_STORAGE_KEY)
+          } catch {
+            throw new Error('owner-identity-storage-read-failed')
+          }
 
-      if (stored !== null) {
-        try {
-          return parseLocalOwnerId(stored)
-        } catch {
-          // Never silently replace a corrupt identity: doing so could orphan
-          // worlds already owned by the previous value.
-          throw new Error('owner-identity-storage-corrupt')
-        }
-      }
+          if (stored !== null) {
+            try {
+              return parseLocalOwnerId(stored)
+            } catch {
+              // Never silently replace a corrupt identity: doing so could orphan
+              // worlds already owned by the previous value.
+              throw new Error('owner-identity-storage-corrupt')
+            }
+          }
 
-      const ownerId = candidateOwnerId(options.allocateUuid)
-      try {
-        options.storage.setItem(LOCAL_OWNER_IDENTITY_STORAGE_KEY, ownerId)
-        const confirmed = options.storage.getItem(LOCAL_OWNER_IDENTITY_STORAGE_KEY)
-        if (confirmed !== ownerId) throw new Error('owner-identity-write-not-confirmed')
-      } catch {
-        throw new Error('owner-identity-storage-write-failed')
-      }
-      return ownerId
+          const ownerId = candidateOwnerId(options.allocateUuid)
+          try {
+            options.storage.setItem(LOCAL_OWNER_IDENTITY_STORAGE_KEY, ownerId)
+            const confirmed = options.storage.getItem(LOCAL_OWNER_IDENTITY_STORAGE_KEY)
+            if (confirmed !== ownerId) throw new Error('owner-identity-write-not-confirmed')
+          } catch {
+            throw new Error('owner-identity-storage-write-failed')
+          }
+          return ownerId
+        },
+      )
     },
   })
 }
@@ -84,8 +94,12 @@ export function createBrowserLocalDevelopmentOwnerIdentityPort(): OwnerIdentityP
   } catch {
     throw new Error('owner-identity-storage-unavailable')
   }
+  if (!globalThis.navigator?.locks) throw new Error('owner-identity-lock-unavailable')
   return createLocalOwnerIdentityPort({
     storage,
+    initializationLock: {
+      runExclusive: (name, operation) => globalThis.navigator.locks.request(name, () => operation()),
+    },
     allocateUuid: () => {
       if (!globalThis.crypto?.randomUUID) throw new Error('owner-identity-crypto-unavailable')
       return globalThis.crypto.randomUUID()
