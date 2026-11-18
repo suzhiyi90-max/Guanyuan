@@ -102,3 +102,5 @@ export type PlanningIssue =
   | 'schedule-entry-execution-event-missing'
   | 'schedule-entry-deviation-event-missing'
   | 'schedule-entry-visibility-invalid'
+  | 'schedule-execution-before-planned-time'
+  | 'schedule-execution-and-deviation-both-set'
