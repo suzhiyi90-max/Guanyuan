@@ -187,6 +187,9 @@ export function validateWorldAggregate(
   if (aggregate.streamHead.kind === 'event' && aggregate.bootstrap === null) {
     addIssue(issues, 'envelope', 'world-bootstrap-metadata-missing')
   }
+  if (aggregate.bootstrap === null && (aggregate.persons.length > 0 || aggregate.personOrigins.length > 0)) {
+    addIssue(issues, 'envelope', 'world-bootstrap-required-before-persons')
+  }
   if (aggregate.bootstrap && [aggregate.bootstrap.scenarioPackId, aggregate.bootstrap.rulesetVersion,
     aggregate.bootstrap.contentPackVersion, aggregate.bootstrap.seedFingerprint,
     aggregate.bootstrap.locationCode, aggregate.bootstrap.populationPolicyVersion].some(value => !value.trim())) {
