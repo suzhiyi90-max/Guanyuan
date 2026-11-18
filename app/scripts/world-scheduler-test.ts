@@ -26,6 +26,8 @@ function check(name: string, condition: boolean): void {
 const worldId = brandedId<'WorldId'>('world-deterministic-scheduler-test')
 const start: WorldTime = { day: 1, period: '晨' }
 const due: WorldTime = { day: 2, period: '午' }
+const lateTime: WorldTime = { day: 2, period: '暮' }
+const nextMorning: WorldTime = { day: 3, period: '晨' }
 const request: WorldBootstrapRequest = {
   worldId,
   seed: 'scheduler-test-seed',
@@ -76,6 +78,32 @@ async function main(): Promise<void> {
   check('schedule plan is recorded before simulation', planReceipt.status === 'committed')
   if (planReceipt.status !== 'committed') throw new Error('scheduler-test-plan-not-committed')
 
+  const clockGoal = toLedgerEventInput(createGoalCreatedEventInput({
+    id: brandedId<'GoalId'>('goal:scheduler-test:advance-world-time'),
+    person: person.id,
+    statement: '记录世界时点推进',
+    priority: 1,
+    visibility: { observer: 'player', level: 'private' },
+  }, {
+    actor: 'system',
+    source: 'rule',
+    requestWorldTime: lateTime,
+    clientRequestId: 'scheduler-test:advance-world-time',
+  }))
+  const clockReceipt = await adapter.commands.submit({
+    worldId,
+    clientRequestId: clockGoal.clientRequestId,
+    actor: 'system',
+    source: 'rule',
+    intentKind: clockGoal.intentKind,
+    requestedAt: clockGoal.requestWorldTime,
+    expectedHead: planReceipt.streamHead,
+    payload: clockGoal.payload,
+  })
+  check('world time can pass an unexecuted schedule without erasing its pending obligation',
+    clockReceipt.status === 'committed')
+  if (clockReceipt.status !== 'committed') throw new Error('scheduler-test-clock-advance-not-committed')
+
   const goalId = brandedId<'GoalId'>('goal:scheduler-test:complete-duty')
   const goal = toLedgerEventInput(createGoalCreatedEventInput({
     id: goalId,
@@ -120,8 +148,8 @@ async function main(): Promise<void> {
 
   const deferredLod = await scheduler.advance({
     worldId,
-    from: start,
-    to: due,
+    from: lateTime,
+    to: nextMorning,
     lod: 'remote-world',
     maxEvents: 2,
   })
@@ -131,8 +159,8 @@ async function main(): Promise<void> {
 
   const first = await scheduler.advance({
     worldId,
-    from: start,
-    to: due,
+    from: lateTime,
+    to: nextMorning,
     lod: 'near-field',
     maxEvents: 2,
   })
@@ -150,7 +178,7 @@ async function main(): Promise<void> {
   const resumed = await scheduler.advance({
     worldId,
     from: afterPartial.worldTime,
-    to: { day: 2, period: '暮' },
+    to: nextMorning,
     lod: 'near-field',
     maxEvents: 2,
   })
