@@ -3,3 +3,5 @@ export * from './world/bootstrap'
 export * from './world/event-catalog'
 export * from './world/reducer'
 export * from './world/projector'
+
+export * from './world/initialize'
