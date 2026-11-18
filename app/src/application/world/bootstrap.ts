@@ -283,7 +283,7 @@ export function bootstrapWorld(request: WorldBootstrapRequest): WorldBootstrapRe
   }
 }
 
-export function generatedCandidateOrigin(candidate: GeneratedPersonCandidate): PersonOrigin {
+export function generatedCandidateOrigin(candidate: GeneratedPersonCandidate): Extract<PersonOrigin, { readonly kind: 'seeded-random' }> {
   return Object.freeze({
     kind: 'seeded-random' as const,
     candidateId: candidate.id,
@@ -293,7 +293,7 @@ export function generatedCandidateOrigin(candidate: GeneratedPersonCandidate): P
   })
 }
 
-export function historicalCandidateOrigin(candidate: FixedHistoricalPersonCandidate): PersonOrigin {
+export function historicalCandidateOrigin(candidate: FixedHistoricalPersonCandidate): Extract<PersonOrigin, { readonly kind: 'historical-minister' }> {
   return Object.freeze({
     kind: 'historical-minister' as const,
     category: 'famous-minister',
