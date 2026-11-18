@@ -672,6 +672,11 @@ check('player social projection contains only player-visible relations and playe
   && playerSocialView.claims.some(item => item.id === claimId)
   && playerSocialView.knownPersons.some(item => item.id === person.id)
   && playerSocialView.knownPersons.some(item => item.id === historicalMinisterId))
+check('known-person cards expose only identity summary, not hidden life or state-domain records',
+  playerSocialView.knownPersons.length > 0
+  && !('lifeState' in playerSocialView.knownPersons[0]!)
+  && !('death' in playerSocialView.knownPersons[0]!)
+  && !('stateDomains' in playerSocialView.knownPersons[0]!))
 check('NPC observer receives only their own knowledge and participant messages, not player-private claims',
   firstPersonView.knowledge.length === 1
   && firstPersonView.knowledge[0]?.id === knowledgeId
