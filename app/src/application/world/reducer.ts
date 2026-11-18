@@ -5,7 +5,7 @@
  * call AI, mutate the ledger or repair invalid records.
  */
 import { field } from '../../domain/shared/field'
-import { brandedId, type EventId } from '../../domain/shared/ids'
+import { brandedId, type EventId, type ScheduleId } from '../../domain/shared/ids'
 import { compareWorldTime, isValidWorldTime } from '../../domain/shared/world-time'
 import type { LedgerEvent } from '../../domain/event-ledger'
 import type { WorldTime } from '../../domain/shared/world-time'
@@ -51,6 +51,8 @@ import {
   type GoalCreationData,
   type GoalTerminalStatus,
   type ScheduleEntryCreationData,
+  type ScheduleExecutionData,
+  type ScheduleDeviationData,
   type DebtCreationData,
   type AssetCreationData,
   type AssetRightGrantData,
@@ -795,6 +797,87 @@ function applyScheduleEntryPlanned(
   })
 }
 
+function applyScheduleEntryExecutionRecorded(
+  aggregate: WorldAggregate,
+  event: LedgerEvent<WorldDomainEventKind>,
+  context?: WorldEventContext,
+): WorldAggregate {
+  requireBootstrap(aggregate)
+  const payload = event.payload as unknown as WorldDomainEventPayloadMap['schedule.entry.execution.recorded']
+  const data: ScheduleExecutionData = payload
+  const index = aggregate.planning.scheduleEntries.findIndex(item => item.id === data.scheduleId)
+  if (index < 0) throw new Error('world-reducer-schedule-execution-entry-missing')
+  const current = aggregate.planning.scheduleEntries[index]!
+  if (current.execution.kind === 'value' || current.deviation.kind === 'value') {
+    throw new Error('world-reducer-schedule-already-settled')
+  }
+  if (data.resultEventId === event.id) throw new Error('world-reducer-schedule-result-event-self-reference')
+  const refs = eventReferences(event, context)
+  const resultTime = refs.eventTimes.get(data.resultEventId)
+  if (!refs.events.includes(data.resultEventId) || !resultTime) {
+    throw new Error('world-reducer-schedule-result-event-missing')
+  }
+  const plannedAt: WorldTime = { day: current.day, period: current.period }
+  if (compareWorldTime(resultTime, plannedAt) < 0) {
+    throw new Error('world-reducer-schedule-result-before-planned-time')
+  }
+  if (compareWorldTime(resultTime, event.committedAt) > 0) {
+    throw new Error('world-reducer-schedule-result-after-settlement')
+  }
+  const updated: ScheduleEntry = Object.freeze({
+    ...current,
+    execution: field.value(data.resultEventId),
+  })
+  const entries = aggregate.planning.scheduleEntries.map((item, itemIndex) => itemIndex === index ? updated : item)
+  const issues = validateScheduleEntries(
+    entries,
+    aggregate.planning.scheduleScopes,
+    aggregate.persons,
+    refs.events,
+  )
+  if (issues.length > 0) throw new Error(`world-reducer-schedule-execution-invalid:${issues.join(',')}`)
+  return Object.freeze({
+    ...aggregate,
+    ...withEventCursor(aggregate, event),
+    planning: Object.freeze({ ...aggregate.planning, scheduleEntries: Object.freeze(entries) }),
+  })
+}
+
+function applyScheduleEntryDeviationRecorded(
+  aggregate: WorldAggregate,
+  event: LedgerEvent<WorldDomainEventKind>,
+  context?: WorldEventContext,
+): WorldAggregate {
+  requireBootstrap(aggregate)
+  const payload = event.payload as unknown as WorldDomainEventPayloadMap['schedule.entry.deviation.recorded']
+  const data: ScheduleDeviationData = payload
+  const index = aggregate.planning.scheduleEntries.findIndex(item => item.id === data.scheduleId)
+  if (index < 0) throw new Error('world-reducer-schedule-deviation-entry-missing')
+  const current = aggregate.planning.scheduleEntries[index]!
+  if (current.execution.kind === 'value' || current.deviation.kind === 'value') {
+    throw new Error('world-reducer-schedule-already-settled')
+  }
+  if (!data.reason.trim()) throw new Error('world-reducer-schedule-deviation-reason-empty')
+  const updated: ScheduleEntry = Object.freeze({
+    ...current,
+    deviation: field.value(event.id),
+  })
+  const refs = eventReferences(event, context)
+  const entries = aggregate.planning.scheduleEntries.map((item, itemIndex) => itemIndex === index ? updated : item)
+  const issues = validateScheduleEntries(
+    entries,
+    aggregate.planning.scheduleScopes,
+    aggregate.persons,
+    refs.events,
+  )
+  if (issues.length > 0) throw new Error(`world-reducer-schedule-deviation-invalid:${issues.join(',')}`)
+  return Object.freeze({
+    ...aggregate,
+    ...withEventCursor(aggregate, event),
+    planning: Object.freeze({ ...aggregate.planning, scheduleEntries: Object.freeze(entries) }),
+  })
+}
+
 function applyDebtRecorded(
   aggregate: WorldAggregate,
   event: LedgerEvent<WorldDomainEventKind>,
@@ -1065,6 +1148,10 @@ export function reduceWorldDomainEvent(
       return applyGoalStatusChanged(aggregate, event, context)
     case 'schedule.entry.planned':
       return applyScheduleEntryPlanned(aggregate, event, context)
+    case 'schedule.entry.execution.recorded':
+      return applyScheduleEntryExecutionRecorded(aggregate, event, context)
+    case 'schedule.entry.deviation.recorded':
+      return applyScheduleEntryDeviationRecorded(aggregate, event, context)
     case 'debt.recorded':
       return applyDebtRecorded(aggregate, event, context)
     case 'debt.settled':
