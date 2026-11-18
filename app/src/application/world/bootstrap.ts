@@ -28,6 +28,17 @@ export interface ScenarioNamePool {
 
 export type HistoricalAppearanceScope = HistoricalPersonScope
 
+export interface HistoricalMinisterException {
+  readonly personId: PersonId
+  readonly displayName: string
+  readonly category: 'famous-minister'
+  readonly evidenceStatus: 'verified' | 'unverified'
+  readonly evidenceRefs: readonly string[]
+  readonly validFrom: WorldTime
+  readonly validThrough: WorldTime | null
+  readonly scope: HistoricalAppearanceScope
+}
+
 export interface WorldBootstrapRequest {
   readonly worldId: WorldId
   readonly seed: string
