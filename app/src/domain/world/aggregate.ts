@@ -455,8 +455,9 @@ export function validateWorldAggregate(
         const settlementIndex = ledgerEventIndex.get(settlementEvents[0]!.id)
         const settlementTime = settlementEvents[0]!.committedAt
         if (resultIndex === undefined || settlementIndex === undefined
-          || resultIndex >= settlementIndex || !isValidWorldTime(resultTime!)
-          || compareWorldTime(resultTime!, settlementTime) > 0) {
+          || resultIndex >= settlementIndex || !resultTime || !isValidWorldTime(resultTime)
+          || !isValidWorldTime(settlementTime)
+          || compareWorldTime(resultTime, settlementTime) > 0) {
           addIssue(issues, 'planning', 'schedule-execution-settlement-order-invalid', entry.id)
         }
       }
