@@ -118,6 +118,18 @@ const futureMinister = bootstrapWorld({
 check('future historical appearance is rejected', futureMinister.status === 'rejected'
   && futureMinister.issues.includes('bootstrap-historical-person-not-yet-active'))
 
+const reversedMinisterWindow = bootstrapWorld({
+  ...baseRequest,
+  historicalMinisters: [{
+    ...historicalMinister,
+    validFrom: { day: 3, period: '晨' },
+    validThrough: { day: 2, period: '夜' },
+  }],
+})
+check('reversed historical appearance window is rejected',
+  reversedMinisterWindow.status === 'rejected'
+  && reversedMinisterWindow.issues.includes('bootstrap-historical-person-time-invalid'))
+
 const exhaustedNames = bootstrapWorld({
   ...baseRequest,
   roleSlots: [{ roleCode: 'county-clerk', tier: 'county', minCount: 2, maxCount: 2 }],
