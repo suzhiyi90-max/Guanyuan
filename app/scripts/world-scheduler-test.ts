@@ -85,7 +85,7 @@ async function main(): Promise<void> {
     visibility: { observer: 'player', level: 'private' },
   }, {
     actor: 'system',
-    source: 'schedule',
+    source: 'rule',
     requestWorldTime: due,
     clientRequestId: 'scheduler-test:action:complete-duty',
   }))
