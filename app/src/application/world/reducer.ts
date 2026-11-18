@@ -8,6 +8,7 @@ import { field } from '../../domain/shared/field'
 import { brandedId, type EventId } from '../../domain/shared/ids'
 import { compareWorldTime, isValidWorldTime } from '../../domain/shared/world-time'
 import type { LedgerEvent } from '../../domain/event-ledger'
+import type { WorldTime } from '../../domain/shared/world-time'
 import type { EventRegistry } from '../../domain/event-registry'
 import type { Person } from '../../domain/person/model'
 import type { PersonOrigin, PersonOriginRecord } from '../../domain/person/provenance'
@@ -21,6 +22,11 @@ import type { Organization, Relation, RelationClaim, RelationEvidence, Membershi
 import type { FailureKind, KnowledgeEntry, Message, MessagePropagation } from '../../domain/cognition/model'
 import { validateOrganization, validateRelation, validateRelationClaim, validateRelationEvidence, validateMembership } from '../../domain/relations/validation'
 import { validateKnowledgeEntry, validateMessage, validateMessagePropagation } from '../../domain/cognition/validation'
+import type { Goal, GoalStatusTransition, ScheduleEntry } from '../../domain/planning/model'
+import { validateGoal, validateScheduleEntries } from '../../domain/planning/validation'
+import { validateGoalStatusHistory } from '../../domain/planning/status-history'
+import type { Debt } from '../../domain/economy/model'
+import { validateDebt, validateDebtSet } from '../../domain/economy/validation'
 import type { LifeHistory } from '../../domain/life/model'
 import { validateLifeHistory } from '../../domain/life/validation'
 import type { WorldBootstrapMetadata } from '../../domain/world/metadata'
@@ -40,6 +46,10 @@ import {
   type MessageStage,
   type MessagePropagationCreationData,
   type MembershipCreationData,
+  type GoalCreationData,
+  type GoalTerminalStatus,
+  type ScheduleEntryCreationData,
+  type DebtCreationData,
 } from './event-catalog'
 
 function assertNextEvent(
@@ -61,6 +71,21 @@ function assertNextEvent(
     || compareWorldTime(event.committedAt, aggregate.worldTime) < 0) {
     throw new Error('world-reducer-event-time-regressed')
   }
+}
+
+export interface WorldEventContext {
+  readonly eventIds: readonly EventId[]
+  readonly eventTimes: ReadonlyMap<EventId, WorldTime>
+}
+
+function eventReferences(
+  event: LedgerEvent<WorldDomainEventKind>,
+  context?: WorldEventContext,
+): { readonly events: readonly EventId[]; readonly eventTimes: ReadonlyMap<EventId, WorldTime> } {
+  const eventIds = new Set([...(context?.eventIds ?? []), event.id])
+  const eventTimes = new Map(context?.eventTimes ?? [])
+  eventTimes.set(event.id, event.committedAt)
+  return { events: [...eventIds], eventTimes }
 }
 
 function withEventCursor(
@@ -640,11 +665,206 @@ function applyRelationLifecycleChanged(
   })
 }
 
+function applyGoalCreated(
+  aggregate: WorldAggregate,
+  event: LedgerEvent<WorldDomainEventKind>,
+  context?: WorldEventContext,
+): WorldAggregate {
+  requireBootstrap(aggregate)
+  const payload = event.payload as unknown as WorldDomainEventPayloadMap['goal.created']
+  const data: GoalCreationData = payload.goal
+  if (aggregate.planning.goals.some(item => item.id === data.id)) {
+    throw new Error('world-reducer-goal-duplicate')
+  }
+  const personIndex = aggregate.persons.findIndex(item => item.id === data.person)
+  if (personIndex < 0) throw new Error('world-reducer-goal-person-missing')
+  const person = aggregate.persons[personIndex]!
+  if (person.lifeState !== 'alive' || person.death.kind !== 'n/a') {
+    throw new Error('world-reducer-goal-owner-not-alive')
+  }
+  const goal: Goal = Object.freeze({ ...data, status: 'active', sourceEvent: event.id })
+  const updatedPerson: Person = Object.freeze({
+    ...person,
+    stateDomains: Object.freeze({
+      ...person.stateDomains,
+      goals: Object.freeze([...person.stateDomains.goals, goal.id]),
+    }),
+  })
+  const persons = aggregate.persons.map((item, index) => index === personIndex ? updatedPerson : item)
+  const refs = eventReferences(event, context)
+  const issues = validateGoal(goal, persons, refs.events)
+  if (issues.length > 0) throw new Error(`world-reducer-goal-invalid:${issues.join(',')}`)
+  return Object.freeze({
+    ...aggregate,
+    ...withEventCursor(aggregate, event),
+    persons: Object.freeze(persons),
+    planning: Object.freeze({
+      ...aggregate.planning,
+      goals: Object.freeze([...aggregate.planning.goals, goal]),
+    }),
+  })
+}
+
+function applyGoalStatusChanged(
+  aggregate: WorldAggregate,
+  event: LedgerEvent<WorldDomainEventKind>,
+  context?: WorldEventContext,
+): WorldAggregate {
+  requireBootstrap(aggregate)
+  const payload = event.payload as unknown as WorldDomainEventPayloadMap['goal.status.changed']
+  const index = aggregate.planning.goals.findIndex(item => item.id === payload.goalId)
+  if (index < 0) throw new Error('world-reducer-goal-status-goal-missing')
+  const current = aggregate.planning.goals[index]!
+  if (current.status !== 'active') throw new Error('world-reducer-goal-status-transition-invalid')
+  const owner = aggregate.persons.find(item => item.id === current.person)
+  if (!owner || owner.lifeState !== 'alive' || owner.death.kind !== 'n/a') {
+    throw new Error('world-reducer-goal-status-owner-not-alive')
+  }
+  if (compareWorldTime(event.committedAt, aggregate.worldTime) <= 0) {
+    throw new Error('world-reducer-goal-status-transition-not-after-source')
+  }
+  const status = payload.status as GoalTerminalStatus
+  const updated: Goal = Object.freeze({ ...current, status })
+  const transition: GoalStatusTransition = Object.freeze({
+    id: brandedId<'GoalStatusTransitionId'>(`goal-transition:${event.id}`),
+    goal: current.id,
+    fromStatus: 'active',
+    toStatus: status,
+    event: event.id,
+  })
+  const goals = aggregate.planning.goals.map((item, itemIndex) => itemIndex === index ? updated : item)
+  const transitions = [...aggregate.planning.goalStatusTransitions, transition]
+  const refs = eventReferences(event, context)
+  const issues = validateGoalStatusHistory(
+    goals,
+    transitions,
+    aggregate.persons,
+    aggregate.planning.goalDeathDispositions,
+    { events: refs.events, eventTimes: refs.eventTimes },
+  )
+  if (issues.length > 0) throw new Error(`world-reducer-goal-status-invalid:${issues.join(',')}`)
+  return Object.freeze({
+    ...aggregate,
+    ...withEventCursor(aggregate, event),
+    planning: Object.freeze({
+      ...aggregate.planning,
+      goals: Object.freeze(goals),
+      goalStatusTransitions: Object.freeze(transitions),
+    }),
+  })
+}
+
+function applyScheduleEntryPlanned(
+  aggregate: WorldAggregate,
+  event: LedgerEvent<WorldDomainEventKind>,
+  context?: WorldEventContext,
+): WorldAggregate {
+  requireBootstrap(aggregate)
+  const payload = event.payload as unknown as WorldDomainEventPayloadMap['schedule.entry.planned']
+  const data: ScheduleEntryCreationData = payload.entry
+  if (aggregate.planning.scheduleEntries.some(item => item.id === data.id)) {
+    throw new Error('world-reducer-schedule-entry-duplicate')
+  }
+  const entry: ScheduleEntry = Object.freeze({
+    ...data,
+    intent: 'planned',
+    execution: field.notApplicable,
+    deviation: field.notApplicable,
+  })
+  if (compareWorldTime({ day: entry.day, period: entry.period }, aggregate.worldTime) < 0) {
+    throw new Error('world-reducer-schedule-entry-in-past')
+  }
+  const entries = [...aggregate.planning.scheduleEntries, entry]
+  const refs = eventReferences(event, context)
+  const issues = validateScheduleEntries(
+    entries,
+    aggregate.planning.scheduleScopes,
+    aggregate.persons,
+    refs.events,
+  )
+  if (issues.length > 0) throw new Error(`world-reducer-schedule-entry-invalid:${issues.join(',')}`)
+  return Object.freeze({
+    ...aggregate,
+    ...withEventCursor(aggregate, event),
+    planning: Object.freeze({ ...aggregate.planning, scheduleEntries: Object.freeze(entries) }),
+  })
+}
+
+function applyDebtRecorded(
+  aggregate: WorldAggregate,
+  event: LedgerEvent<WorldDomainEventKind>,
+  context?: WorldEventContext,
+): WorldAggregate {
+  requireBootstrap(aggregate)
+  const payload = event.payload as unknown as WorldDomainEventPayloadMap['debt.recorded']
+  const data: DebtCreationData = payload.debt
+  if (aggregate.economy.debts.some(item => item.id === data.id)) {
+    throw new Error('world-reducer-debt-duplicate')
+  }
+  const debt: Debt = Object.freeze({
+    ...data,
+    sourceEvent: event.id,
+    status: 'open',
+    settlements: Object.freeze([]),
+  })
+  const refs = eventReferences(event, context)
+  const issues = validateDebt(debt, {
+    persons: aggregate.persons.map(item => item.id),
+    organizations: aggregate.society.organizations.map(item => item.id),
+    events: refs.events,
+    eventTimes: refs.eventTimes,
+    revocations: aggregate.economy.rightRevocations,
+  })
+  if (issues.length > 0) throw new Error(`world-reducer-debt-invalid:${issues.join(',')}`)
+  return Object.freeze({
+    ...aggregate,
+    ...withEventCursor(aggregate, event),
+    economy: Object.freeze({
+      ...aggregate.economy,
+      debts: Object.freeze([...aggregate.economy.debts, debt]),
+    }),
+  })
+}
+
+function applyDebtSettled(
+  aggregate: WorldAggregate,
+  event: LedgerEvent<WorldDomainEventKind>,
+  context?: WorldEventContext,
+): WorldAggregate {
+  requireBootstrap(aggregate)
+  const payload = event.payload as unknown as WorldDomainEventPayloadMap['debt.settled']
+  const index = aggregate.economy.debts.findIndex(item => item.id === payload.debtId)
+  if (index < 0) throw new Error('world-reducer-debt-settlement-debt-missing')
+  const current = aggregate.economy.debts[index]!
+  if (current.status === 'settled') throw new Error('world-reducer-debt-already-settled')
+  const updated: Debt = Object.freeze({
+    ...current,
+    status: 'settled',
+    settlements: Object.freeze([...current.settlements, event.id]),
+  })
+  const debts = aggregate.economy.debts.map((item, itemIndex) => itemIndex === index ? updated : item)
+  const refs = eventReferences(event, context)
+  const issues = validateDebtSet(debts, {
+    persons: aggregate.persons.map(item => item.id),
+    organizations: aggregate.society.organizations.map(item => item.id),
+    events: refs.events,
+    eventTimes: refs.eventTimes,
+    revocations: aggregate.economy.rightRevocations,
+  })
+  if (issues.length > 0) throw new Error(`world-reducer-debt-settlement-invalid:${issues.join(',')}`)
+  return Object.freeze({
+    ...aggregate,
+    ...withEventCursor(aggregate, event),
+    economy: Object.freeze({ ...aggregate.economy, debts: Object.freeze(debts) }),
+  })
+}
+
 /** Apply one schema-validated event to the read-only world projection. */
 export function reduceWorldDomainEvent(
   aggregate: WorldAggregate,
   event: LedgerEvent<WorldDomainEventKind>,
   registry: EventRegistry<WorldDomainEventKind>,
+  context?: WorldEventContext,
 ): WorldAggregate {
   assertNextEvent(aggregate, event)
   const schemaResult = validateWorldDomainEventPayload(registry, event.kind, event.payload)
@@ -685,6 +905,16 @@ export function reduceWorldDomainEvent(
       return applyMembershipEnded(aggregate, event)
     case 'relation.lifecycle.changed':
       return applyRelationLifecycleChanged(aggregate, event)
+    case 'goal.created':
+      return applyGoalCreated(aggregate, event, context)
+    case 'goal.status.changed':
+      return applyGoalStatusChanged(aggregate, event, context)
+    case 'schedule.entry.planned':
+      return applyScheduleEntryPlanned(aggregate, event, context)
+    case 'debt.recorded':
+      return applyDebtRecorded(aggregate, event, context)
+    case 'debt.settled':
+      return applyDebtSettled(aggregate, event, context)
     default: {
       const unreachable: never = event.kind
       throw new Error(`world-reducer-unhandled-event:${String(unreachable)}`)
