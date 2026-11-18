@@ -135,7 +135,15 @@ export function createDeterministicWorldScheduler(
         return { status: 'unchanged', worldId: request.worldId, streamHead: initial.streamHead }
       }
 
-      const selected = ordered.slice(0, request.maxEvents)
+      let selectedCount = 0
+      let budgetUsed = 0
+      for (const task of ordered) {
+        const eventCost = task.scheduleId === undefined ? 1 : 2
+        if (budgetUsed + eventCost > request.maxEvents) break
+        budgetUsed += eventCost
+        selectedCount += 1
+      }
+      const selected = ordered.slice(0, selectedCount)
       const emittedEventIds: EventId[] = []
       const pendingTaskIds = ordered.slice(selected.length).map(task => task.taskId)
       let latest = initial
