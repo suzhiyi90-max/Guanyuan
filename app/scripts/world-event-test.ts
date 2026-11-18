@@ -96,6 +96,12 @@ const person: PersonCreationData = {
   history: brandedId<'LifeHistoryRef'>('history:generated:001'),
 }
 apply(createPersonCreatedEventInput(person, {
+  kind: 'seeded-random',
+  candidateId: person.id,
+  seedFingerprint: 'a1b2c3d4',
+  roleCode: 'grassroots-runner',
+  populationTier: 'grassroots',
+}, {
   actor: 'system',
   source: 'rule',
   requestWorldTime: now,
