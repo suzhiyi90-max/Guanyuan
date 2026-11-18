@@ -168,7 +168,7 @@ async function main(): Promise<void> {
     from: afterPartial.worldTime,
     to: nextMorning,
     lod: 'near-field',
-    maxEvents: 2,
+    maxEvents: 3,
   })
   const final = (await adapter.queries.read(worldId))!
   check('retry reuses the stable action request and commits exactly one schedule settlement',
