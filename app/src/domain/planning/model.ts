@@ -104,3 +104,7 @@ export type PlanningIssue =
   | 'schedule-entry-visibility-invalid'
   | 'schedule-execution-before-planned-time'
   | 'schedule-execution-and-deviation-both-set'
+  | 'schedule-execution-settlement-event-missing'
+  | 'schedule-execution-settlement-event-duplicate'
+  | 'schedule-execution-settlement-order-invalid'
+  | 'schedule-deviation-source-event-invalid'
