@@ -254,6 +254,7 @@ export function createWorldInitializationEventInput(
       seedFingerprint: descriptor.seedFingerprint,
       locationCode: descriptor.locationCode,
       populationPolicyVersion: descriptor.populationPolicyVersion,
+      historicalNameAllowList: descriptor.historicalNameAllowList,
     },
   }
 }
