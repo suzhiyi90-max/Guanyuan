@@ -16,6 +16,7 @@ export type DeathOfficeInventoryEntryId = BrandedId<'DeathOfficeInventoryEntryId
 export type RelationId = BrandedId<'RelationId'>
 export type RelationClaimId = BrandedId<'RelationClaimId'>
 export type RelationEvidenceId = BrandedId<'RelationEvidenceId'>
+export type ExposureId = BrandedId<'ExposureId'>
 export type MembershipId = BrandedId<'MembershipId'>
 export type MembershipDeathHandoffId = BrandedId<'MembershipDeathHandoffId'>
 export type MembershipDeathInventoryId = BrandedId<'MembershipDeathInventoryId'>

@@ -45,6 +45,7 @@ on:
       - work/w5-e3-local-save-management
       - integration/w5-e3-fe170-scene-art
       - work/w5-runtime-semantic-invariants
+      - work/w6-world-aggregate-application-ports
   pull_request:
     branches:
       - work/w5-e2a-portable-import-core
@@ -99,6 +100,8 @@ on:
       - work/w5-d2-runtime-save-package-orchestration
       - work/w5-d3-runtime-startup-restore
       - work/w5-d3b-app-startup-lifecycle
+      - work/w5-runtime-semantic-invariants
+      - work/w6-world-aggregate-application-ports
   workflow_dispatch:
 
 permissions:
@@ -129,6 +132,20 @@ jobs:
         run: npm run test:engine
       - name: Domain contract tests
         run: npm run test:domain
+      - name: World bootstrap and randomized population contracts
+        run: npm run test:world-bootstrap
+      - name: Replay-backed world command/query adapter contracts
+        run: npm run test:world-adapter
+      - name: World application initialization and resumable population contracts
+        run: npm run test:world-initialize
+      - name: Deterministic world simulation scheduler contracts
+        run: npm run test:world-scheduler
+      - name: Player command authorization gate contracts
+        run: npm run test:world-authorization-gate
+      - name: World event registry and aggregate reducer contracts
+        run: npm run test:world-event
+      - name: Replay-backed world projector contracts
+        run: npm run test:world-projector
       - name: Identity and authorization contract tests
         run: npm run test:domain:identity
       - name: Authorization principal death gate contracts

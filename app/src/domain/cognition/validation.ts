@@ -38,6 +38,8 @@ function validEntityRef(ref: EntityRef, known: {
   events: readonly EventId[]
   knowledge: readonly KnowledgeId[]
   messages: readonly MessageId[]
+  /** Optional deterministic lookup for event IDs in a replayed stream. */
+  eventExists?: (id: EventId) => boolean
 }): boolean {
   switch (ref.kind) {
     case 'person': return hasId(known.persons, ref.id)
@@ -47,7 +49,7 @@ function validEntityRef(ref: EntityRef, known: {
     case 'org': return hasId(known.organizations, ref.id)
     case 'asset': return hasId(known.assets, ref.id)
     case 'debt': return hasId(known.debts, ref.id)
-    case 'event': return hasId(known.events, ref.id)
+    case 'event': return hasId(known.events, ref.id) || known.eventExists?.(ref.id) === true
     case 'knowledge': return hasId(known.knowledge, ref.id)
     case 'message': return hasId(known.messages, ref.id)
   }
@@ -64,6 +66,8 @@ export interface CognitionReferences {
   events: readonly EventId[]
   knowledge: readonly KnowledgeId[]
   messages: readonly MessageId[]
+  /** Optional deterministic lookup for event IDs in a replayed stream. */
+  eventExists?: (id: EventId) => boolean
 }
 
 export function validateKnowledgeEntry(entry: KnowledgeEntry, refs: CognitionReferences): CognitionIssue[] {

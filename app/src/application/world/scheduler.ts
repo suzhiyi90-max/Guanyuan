@@ -1,0 +1,519 @@
+/**
+ * W6-G — deterministic world simulation queue.
+ *
+ * The scheduler orders trusted rule/schedule commands, commits them through the
+ * application command port, and resumes safely through stable request IDs.
+ * It never writes the ledger, mutates an aggregate, or promotes AI proposals.
+ */
+import type { JsonValue, WorldId } from '../../domain/event-ledger'
+import type { EventId, ScheduleId } from '../../domain/shared/ids'
+import { compareWorldTime, isValidWorldTime, type WorldTime } from '../../domain/shared/world-time'
+import type { WorldAggregate } from '../../domain/world/aggregate'
+import type { LifeStateFact } from '../../domain/life/state'
+import { createLifeStateFactRecordedEventInput, createScheduleEntryExecutionRecordedEventInput, createWorldTimeAdvancedEventInput, toLedgerEventInput, type LifeStateFactCreationData } from './event-catalog'
+import type {
+  WorldCommandPort,
+  WorldCommandReceipt,
+  WorldQueryPort,
+  WorldSimulationPort,
+  WorldSimulationRequest,
+  WorldSimulationResult,
+} from './ports'
+
+export interface WorldSimulationTask {
+  readonly taskId: string
+  readonly requestId: string
+  readonly dueAt: WorldTime
+  readonly priority: number
+  readonly actor: string
+  readonly source: 'rule' | 'schedule'
+  readonly intentKind: string
+  readonly payload: JsonValue
+  /** When present, a successful action is followed by its canonical schedule settlement event. */
+  readonly scheduleId?: ScheduleId
+}
+
+export interface WorldSimulationTaskSourcePort {
+  /** Must be deterministic for the same aggregate, interval and LOD. AI output is not accepted here. */
+  listDueTasks(
+    request: WorldSimulationRequest,
+    aggregate: WorldAggregate,
+  ): Promise<readonly WorldSimulationTask[]> | readonly WorldSimulationTask[]
+}
+
+export interface DeterministicWorldSchedulerOptions {
+  readonly commands: WorldCommandPort
+  readonly queries: WorldQueryPort
+  readonly tasks: WorldSimulationTaskSourcePort
+}
+
+export interface ScheduledActionCommand {
+  readonly actor: string
+  readonly intentKind: string
+  readonly payload: JsonValue
+  readonly priority: number
+}
+
+/** Maps a planned action to a trusted domain command; null means this LOD defers it. */
+export interface WorldScheduledActionResolverPort {
+  resolve(
+    entry: WorldAggregate['planning']['scheduleEntries'][number],
+    aggregate: WorldAggregate,
+    lod: WorldSimulationRequest['lod'],
+  ): ScheduledActionCommand | null
+}
+
+/** Concrete schedule-backed queue. Stable IDs make interrupted action/settlement pairs resumable. */
+export function createScheduleTaskSource(
+  resolver: WorldScheduledActionResolverPort,
+): WorldSimulationTaskSourcePort {
+  return Object.freeze({
+    listDueTasks(request: WorldSimulationRequest, aggregate: WorldAggregate) {
+      return aggregate.planning.scheduleEntries.flatMap(entry => {
+        const plannedAt: WorldTime = { day: entry.day, period: entry.period }
+        if (compareWorldTime(plannedAt, request.to) > 0
+          || entry.execution.kind !== 'n/a' || entry.deviation.kind !== 'n/a') return []
+        // An overdue but unsettled task is still eligible; resolve it at the current world time.
+        const dueAt = compareWorldTime(plannedAt, request.from) < 0 ? request.from : plannedAt
+        const action = resolver.resolve(entry, aggregate, request.lod)
+        if (!action) return []
+        return [Object.freeze({
+          taskId: `schedule:${entry.id}`,
+          requestId: `w6-simulation:${request.worldId}:schedule:${entry.id}:action`,
+          dueAt,
+          priority: action.priority,
+          actor: action.actor,
+          source: 'schedule' as const,
+          intentKind: action.intentKind,
+          payload: action.payload,
+          scheduleId: entry.id,
+        })]
+      })
+    },
+  })
+}
+
+/**
+ * A deterministic maintenance rule proposes the next immutable fact for one
+ * already-established life-state dimension. It supplies policy, not storage.
+ */
+export interface LifeStateMaintenanceResolverPort {
+  resolve(input: {
+    readonly request: WorldSimulationRequest
+    readonly aggregate: WorldAggregate
+    readonly person: WorldAggregate['persons'][number]
+    readonly previousFact: LifeStateFact
+  }): { readonly fact: LifeStateFactCreationData; readonly priority: number } | null
+}
+
+/**
+ * Builds event-backed body/mind maintenance tasks from the latest fact in each
+ * dimension. No numeric decay, rate or outcome is assumed by this adapter.
+ */
+export function createLifeStateMaintenanceTaskSource(
+  resolver: LifeStateMaintenanceResolverPort,
+): WorldSimulationTaskSourcePort {
+  return Object.freeze({
+    listDueTasks(request: WorldSimulationRequest, aggregate: WorldAggregate) {
+      const replaced = new Set(aggregate.life.stateFacts.flatMap(fact =>
+        fact.supersedes.kind === 'value' ? [fact.supersedes.value] : []))
+      const latestFacts = aggregate.life.stateFacts.filter(fact => !replaced.has(fact.id))
+      const tasks: WorldSimulationTask[] = []
+      for (const previousFact of latestFacts) {
+        const person = aggregate.persons.find(item => item.id === previousFact.person)
+        if (!person || person.lifeState !== 'alive'
+          || compareWorldTime(previousFact.at, request.to) >= 0) continue
+        const expectedScope = previousFact.domain === 'body'
+          ? person.stateDomains.body
+          : person.stateDomains.mind
+        if (previousFact.scope !== expectedScope) continue
+        const decision = resolver.resolve({ request, aggregate, person, previousFact })
+        if (!decision || !Number.isInteger(decision.priority)
+          || !Number.isFinite(decision.priority)) continue
+        const fact = decision.fact
+        if (!fact || aggregate.life.stateFacts.some(item => item.id === fact.id)
+          || fact.person !== person.id
+          || fact.domain !== previousFact.domain
+          || fact.scope !== previousFact.scope
+          || fact.dimension !== previousFact.dimension
+          || fact.supersedes.kind !== 'value'
+          || fact.supersedes.value !== previousFact.id) continue
+        const input = toLedgerEventInput(createLifeStateFactRecordedEventInput(fact, {
+          actor: 'system',
+          source: 'rule',
+          requestWorldTime: request.to,
+          clientRequestId: `w6-simulation:${request.worldId}:life-state:${fact.id}`,
+        }))
+        tasks.push(Object.freeze({
+          taskId: `life-state:${fact.id}`,
+          requestId: input.clientRequestId,
+          dueAt: request.to,
+          priority: decision.priority,
+          actor: 'system',
+          source: 'rule',
+          intentKind: input.intentKind,
+          payload: input.payload as unknown as JsonValue,
+        }))
+      }
+      return Object.freeze(tasks.sort(compareTasks))
+    },
+  })
+}
+
+/** Combines deterministic rule, schedule and maintenance queues behind one stable ordering boundary. */
+export function createCompositeWorldSimulationTaskSource(
+  ...sources: readonly WorldSimulationTaskSourcePort[]
+): WorldSimulationTaskSourcePort {
+  if (sources.some(source => !source || typeof source.listDueTasks !== 'function')) {
+    throw new Error('world-simulation-task-source-invalid')
+  }
+  const stableSources = Object.freeze([...sources])
+  return Object.freeze({
+    async listDueTasks(request: WorldSimulationRequest, aggregate: WorldAggregate) {
+      const tasks: WorldSimulationTask[] = []
+      for (const source of stableSources) {
+        const batch = await source.listDueTasks(request, aggregate)
+        if (!Array.isArray(batch)) throw new Error('world-simulation-task-source-invalid-result')
+        tasks.push(...batch)
+      }
+      return Object.freeze(tasks.sort(compareTasks))
+    },
+  })
+}
+
+const genesis = Object.freeze({ kind: 'genesis' as const, seq: 0 })
+
+function sameTime(left: WorldTime, right: WorldTime): boolean {
+  return left.day === right.day && left.period === right.period
+}
+
+function rejected(
+  request: WorldSimulationRequest,
+  streamHead: WorldAggregate['streamHead'],
+  reason: string,
+): WorldSimulationResult {
+  return { status: 'rejected', worldId: request.worldId, reason, streamHead }
+}
+
+function compareTasks(left: WorldSimulationTask, right: WorldSimulationTask): number {
+  const time = compareWorldTime(left.dueAt, right.dueAt)
+  if (time !== 0) return time
+  if (left.priority !== right.priority) return right.priority - left.priority
+  return left.taskId < right.taskId ? -1 : left.taskId > right.taskId ? 1 : 0
+}
+
+function validTask(task: WorldSimulationTask): boolean {
+  return typeof task.taskId === 'string' && task.taskId.trim().length > 0
+    && typeof task.requestId === 'string' && task.requestId.trim().length > 0
+    && isValidWorldTime(task.dueAt)
+    && Number.isFinite(task.priority)
+    && Number.isInteger(task.priority)
+    && typeof task.actor === 'string' && task.actor.trim().length > 0
+    && (task.source === 'rule' || task.source === 'schedule')
+    && typeof task.intentKind === 'string' && task.intentKind.trim().length > 0
+    && task.payload !== undefined
+    && (task.scheduleId === undefined
+      ? task.source !== 'schedule'
+      : task.source === 'schedule' && typeof task.scheduleId === 'string' && task.scheduleId.length > 0)
+}
+
+function isFailure(receipt: WorldCommandReceipt): receipt is Extract<WorldCommandReceipt, { status: 'rejected' | 'conflict' }> {
+  return receipt.status === 'rejected' || receipt.status === 'conflict'
+}
+
+export function createDeterministicWorldScheduler(
+  options: DeterministicWorldSchedulerOptions,
+): WorldSimulationPort {
+  return Object.freeze({
+    async advance(request: WorldSimulationRequest): Promise<WorldSimulationResult> {
+      let initial: WorldAggregate | null
+      try {
+        initial = await options.queries.read(request.worldId)
+      } catch {
+        return rejected(request, genesis, 'world-simulation-world-query-failed')
+      }
+      const initialHead = initial?.streamHead ?? genesis
+      if (!initial) return rejected(request, initialHead, 'world-simulation-world-missing')
+      if (!isValidWorldTime(request.from) || !isValidWorldTime(request.to)
+        || compareWorldTime(request.from, request.to) > 0) {
+        return rejected(request, initial.streamHead, 'world-simulation-invalid-interval')
+      }
+      if (!sameTime(request.from, initial.worldTime)) {
+        // A retry after the final clock append may observe the already-committed target time.
+        if (sameTime(request.to, initial.worldTime)) {
+          return { status: 'unchanged', worldId: request.worldId, streamHead: initial.streamHead }
+        }
+        return rejected(request, initial.streamHead, 'world-simulation-stale-from-time')
+      }
+      if (!Number.isInteger(request.maxEvents) || request.maxEvents < 1) {
+        return rejected(request, initial.streamHead, 'world-simulation-invalid-event-budget')
+      }
+
+      let tasks: readonly WorldSimulationTask[]
+      try {
+        tasks = await options.tasks.listDueTasks(request, initial)
+      } catch {
+        return rejected(request, initial.streamHead, 'world-simulation-task-source-failed')
+      }
+      if (!Array.isArray(tasks) || tasks.some(task => !validTask(task))) {
+        return rejected(request, initial.streamHead, 'world-simulation-task-invalid')
+      }
+      const ordered = [...tasks].sort(compareTasks)
+      const scheduledIds = ordered.flatMap(task => task.scheduleId === undefined ? [] : [task.scheduleId])
+      if (new Set(ordered.map(task => task.taskId)).size !== ordered.length
+        || new Set(ordered.map(task => task.requestId)).size !== ordered.length
+        || new Set(scheduledIds).size !== scheduledIds.length) {
+        return rejected(request, initial.streamHead, 'world-simulation-task-identity-duplicate')
+      }
+      if (ordered.some(task => compareWorldTime(task.dueAt, request.from) < 0
+        || compareWorldTime(task.dueAt, request.to) > 0)) {
+        return rejected(request, initial.streamHead, 'world-simulation-task-outside-interval')
+      }
+      for (const task of ordered) {
+        if (task.scheduleId !== undefined) {
+          const entry = initial.planning.scheduleEntries.find(item => item.id === task.scheduleId)
+          if (!entry || entry.execution.kind !== 'n/a' || entry.deviation.kind !== 'n/a'
+            || task.source !== 'schedule'
+            || compareWorldTime(task.dueAt, { day: entry.day, period: entry.period }) < 0) {
+            return rejected(request, initial.streamHead, 'world-simulation-schedule-task-not-eligible')
+          }
+        }
+      }
+      const clockRequired = compareWorldTime(request.to, request.from) > 0
+      if (ordered.length === 0 && !clockRequired) {
+        return { status: 'unchanged', worldId: request.worldId, streamHead: initial.streamHead }
+      }
+
+      let selectedCount = 0
+      let budgetUsed = 0
+      const clockCost = clockRequired ? 1 : 0
+      for (const task of ordered) {
+        const eventCost = task.scheduleId === undefined ? 1 : 2
+        if (budgetUsed + eventCost + clockCost > request.maxEvents) break
+        budgetUsed += eventCost
+        selectedCount += 1
+      }
+      const selected = ordered.slice(0, selectedCount)
+      const emittedEventIds: EventId[] = []
+      const pendingTaskIds = ordered.slice(selected.length).map(task => task.taskId)
+      let latest = initial
+
+      const submit = async (
+        requestId: string,
+        actor: string,
+        source: 'rule' | 'schedule',
+        intentKind: string,
+        requestedAt: WorldTime,
+        payload: JsonValue,
+      ): Promise<{ readonly receipt: WorldCommandReceipt; readonly aggregate: WorldAggregate | null }> => {
+        const receipt = await options.commands.submit({
+          worldId: request.worldId,
+          clientRequestId: requestId,
+          actor,
+          source,
+          intentKind,
+          requestedAt,
+          expectedHead: latest.streamHead,
+          payload,
+        })
+        const refreshed = await options.queries.read(request.worldId)
+        return { receipt, aggregate: refreshed }
+      }
+
+      const advanceClock = async (): Promise<{ readonly receipt: WorldCommandReceipt; readonly aggregate: WorldAggregate | null }> => {
+        const input = toLedgerEventInput(createWorldTimeAdvancedEventInput(
+          latest.worldTime,
+          request.to,
+          {
+            actor: 'system',
+            requestWorldTime: request.to,
+            clientRequestId: `w6-simulation:${request.worldId}:clock:${request.from.day}-${request.from.period}:${request.to.day}-${request.to.period}`,
+          },
+        ))
+        return submit(
+          input.clientRequestId,
+          input.actor,
+          'rule',
+          input.intentKind,
+          request.to,
+          input.payload,
+        )
+      }
+
+      if (selected.length === 0 && ordered.length === 0 && clockRequired) {
+        try {
+          const clock = await advanceClock()
+          if (isFailure(clock.receipt) || !clock.aggregate) {
+            const reason = isFailure(clock.receipt) ? clock.receipt.reason : 'world-simulation-clock-query-refresh-failed'
+            return rejected(request, latest.streamHead, reason)
+          }
+          if (clock.receipt.status === 'committed' || clock.receipt.status === 'duplicate') {
+            emittedEventIds.push(clock.receipt.eventId)
+          }
+          return {
+            status: 'advanced',
+            worldId: request.worldId,
+            from: request.from,
+            to: clock.aggregate.worldTime,
+            emittedEventIds: Object.freeze(emittedEventIds),
+            streamHead: clock.aggregate.streamHead,
+          }
+        } catch {
+          return rejected(request, latest.streamHead, 'world-simulation-clock-command-failed')
+        }
+      }
+
+      for (let index = 0; index < selected.length; index += 1) {
+        const task = selected[index]!
+        let action: { readonly receipt: WorldCommandReceipt; readonly aggregate: WorldAggregate | null }
+        try {
+          action = await submit(task.requestId, task.actor, task.source, task.intentKind, task.dueAt, task.payload)
+        } catch {
+          pendingTaskIds.unshift(...selected.slice(index).map(item => item.taskId))
+          return {
+            status: 'partial',
+            worldId: request.worldId,
+            from: request.from,
+            to: latest.worldTime,
+            emittedEventIds: Object.freeze(emittedEventIds),
+            pendingTaskIds: Object.freeze(pendingTaskIds),
+            streamHead: latest.streamHead,
+            reason: 'world-simulation-command-port-failed',
+          }
+        }
+        if (!isFailure(action.receipt)
+          && (action.receipt.status === 'committed' || action.receipt.status === 'duplicate')) {
+          emittedEventIds.push(action.receipt.eventId)
+        }
+        if (isFailure(action.receipt) || !action.aggregate) {
+          pendingTaskIds.unshift(...selected.slice(index).map(item => item.taskId))
+          const reason = isFailure(action.receipt) ? action.receipt.reason : 'world-simulation-query-refresh-failed'
+          if (emittedEventIds.length === 0) return rejected(request, latest.streamHead, reason)
+          return {
+            status: 'partial',
+            worldId: request.worldId,
+            from: request.from,
+            to: latest.worldTime,
+            emittedEventIds: Object.freeze(emittedEventIds),
+            pendingTaskIds: Object.freeze(pendingTaskIds),
+            streamHead: latest.streamHead,
+            reason,
+          }
+        }
+        latest = action.aggregate
+
+        if (task.scheduleId !== undefined) {
+          const settlementInput = toLedgerEventInput(createScheduleEntryExecutionRecordedEventInput(
+            task.scheduleId,
+            action.receipt.eventId,
+            {
+              actor: task.actor,
+              source: 'schedule',
+              requestWorldTime: task.dueAt,
+              clientRequestId: `w6-simulation:${request.worldId}:schedule:${task.scheduleId}:settle`,
+            },
+          ))
+          let settlement: { readonly receipt: WorldCommandReceipt; readonly aggregate: WorldAggregate | null }
+          try {
+            settlement = await submit(
+              settlementInput.clientRequestId,
+              task.actor,
+              'schedule',
+              settlementInput.intentKind,
+              task.dueAt,
+              settlementInput.payload,
+            )
+          } catch {
+            pendingTaskIds.unshift(...selected.slice(index).map(item => item.taskId))
+            return {
+              status: 'partial',
+              worldId: request.worldId,
+              from: request.from,
+              to: latest.worldTime,
+              emittedEventIds: Object.freeze(emittedEventIds),
+              pendingTaskIds: Object.freeze(pendingTaskIds),
+              streamHead: latest.streamHead,
+              reason: 'world-simulation-schedule-settlement-port-failed',
+            }
+          }
+          if (!isFailure(settlement.receipt)
+            && (settlement.receipt.status === 'committed' || settlement.receipt.status === 'duplicate')) {
+            emittedEventIds.push(settlement.receipt.eventId)
+          }
+          if (isFailure(settlement.receipt) || !settlement.aggregate) {
+            pendingTaskIds.unshift(...selected.slice(index).map(item => item.taskId))
+            const reason = isFailure(settlement.receipt) ? settlement.receipt.reason : 'world-simulation-query-refresh-failed'
+            return {
+              status: 'partial',
+              worldId: request.worldId,
+              from: request.from,
+              to: latest.worldTime,
+              emittedEventIds: Object.freeze(emittedEventIds),
+              pendingTaskIds: Object.freeze(pendingTaskIds),
+              streamHead: latest.streamHead,
+              reason,
+            }
+          }
+          latest = settlement.aggregate
+        }
+      }
+
+      if (pendingTaskIds.length > 0) {
+        return {
+          status: 'partial',
+          worldId: request.worldId,
+          from: request.from,
+          to: latest.worldTime,
+          emittedEventIds: Object.freeze(emittedEventIds),
+          pendingTaskIds: Object.freeze(pendingTaskIds),
+          streamHead: latest.streamHead,
+          reason: 'world-simulation-event-budget-exhausted',
+        }
+      }
+      if (compareWorldTime(request.to, latest.worldTime) > 0) {
+        try {
+          const clock = await advanceClock()
+          if (!isFailure(clock.receipt)
+            && (clock.receipt.status === 'committed' || clock.receipt.status === 'duplicate')) {
+            emittedEventIds.push(clock.receipt.eventId)
+          }
+          if (isFailure(clock.receipt) || !clock.aggregate) {
+            return {
+              status: 'partial',
+              worldId: request.worldId,
+              from: request.from,
+              to: latest.worldTime,
+              emittedEventIds: Object.freeze(emittedEventIds),
+              pendingTaskIds: Object.freeze([]),
+              streamHead: latest.streamHead,
+              reason: isFailure(clock.receipt) ? clock.receipt.reason : 'world-simulation-clock-query-refresh-failed',
+            }
+          }
+          latest = clock.aggregate
+        } catch {
+          return {
+            status: 'partial',
+            worldId: request.worldId,
+            from: request.from,
+            to: latest.worldTime,
+            emittedEventIds: Object.freeze(emittedEventIds),
+            pendingTaskIds: Object.freeze([]),
+            streamHead: latest.streamHead,
+            reason: 'world-simulation-clock-command-failed',
+          }
+        }
+      }
+      if (emittedEventIds.length === 0) {
+        return { status: 'unchanged', worldId: request.worldId, streamHead: latest.streamHead }
+      }
+      return {
+        status: 'advanced',
+        worldId: request.worldId,
+        from: request.from,
+        to: latest.worldTime,
+        emittedEventIds: Object.freeze(emittedEventIds),
+        streamHead: latest.streamHead,
+      }
+    },
+  })
+}
