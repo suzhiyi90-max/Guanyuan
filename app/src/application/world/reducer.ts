@@ -235,5 +235,9 @@ export function reduceWorldDomainEvent(
       return applyIdentityAssignmentAdded(aggregate, event)
     case 'authorization.granted':
       return applyAuthorizationGranted(aggregate, event)
+    default: {
+      const unreachable: never = event.kind
+      throw new Error(`world-reducer-unhandled-event:${String(unreachable)}`)
+    }
   }
 }
