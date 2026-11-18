@@ -18,7 +18,9 @@ import {
   validateAuthorization,
 } from '../../domain/identity/validation'
 import type { Organization, Relation, RelationClaim, RelationEvidence } from '../../domain/relations/model'
+import type { KnowledgeEntry, Message } from '../../domain/cognition/model'
 import { validateOrganization, validateRelation, validateRelationClaim, validateRelationEvidence } from '../../domain/relations/validation'
+import { validateKnowledgeEntry, validateMessage } from '../../domain/cognition/validation'
 import type { LifeHistory } from '../../domain/life/model'
 import { validateLifeHistory } from '../../domain/life/validation'
 import type { WorldBootstrapMetadata } from '../../domain/world/metadata'
@@ -33,6 +35,9 @@ import {
   type RelationCreationData,
   type RelationClaimCreationData,
   type RelationEvidenceCreationData,
+  type KnowledgeCreationData,
+  type MessageCreationData,
+  type MessageStage,
 } from './event-catalog'
 
 function assertNextEvent(
@@ -372,6 +377,123 @@ function applyRelationEvidenceRecorded(
   })
 }
 
+function cognitionReferences(aggregate: WorldAggregate, event: LedgerEvent<WorldDomainEventKind>) {
+  const prefix = `evt:${aggregate.worldId}:`
+  return {
+    persons: aggregate.persons.map(item => item.id),
+    relations: aggregate.society.relations.map(item => item.id),
+    claims: aggregate.society.claims.map(item => item.id),
+    offices: aggregate.identity.offices.map(item => item.id),
+    organizations: aggregate.society.organizations.map(item => item.id),
+    assets: aggregate.economy.assets.map(item => item.id),
+    debts: aggregate.economy.debts.map(item => item.id),
+    events: [event.id],
+    knowledge: aggregate.cognition.knowledge.map(item => item.id),
+    messages: aggregate.cognition.messages.map(item => item.id),
+    eventExists: (id: EventId) => {
+      if (!id.startsWith(prefix)) return false
+      const sequence = Number(id.slice(prefix.length))
+      return Number.isSafeInteger(sequence) && sequence > 0 && sequence <= event.seq
+    },
+  }
+}
+
+function applyKnowledgeRecorded(
+  aggregate: WorldAggregate,
+  event: LedgerEvent<WorldDomainEventKind>,
+): WorldAggregate {
+  requireBootstrap(aggregate)
+  const payload = event.payload as unknown as WorldDomainEventPayloadMap['knowledge.recorded']
+  const data: KnowledgeCreationData = payload.entry
+  if (aggregate.cognition.knowledge.some(item => item.id === data.id)) {
+    throw new Error('world-reducer-knowledge-duplicate')
+  }
+  const entry: KnowledgeEntry = Object.freeze({
+    ...data,
+    subject: Object.freeze({ ...data.subject }) as KnowledgeEntry['subject'],
+    sourceEvent: event.id,
+    acquiredAt: Object.freeze({ ...event.committedAt }),
+  })
+  const issues = validateKnowledgeEntry(entry, cognitionReferences(aggregate, event))
+  if (issues.length > 0) throw new Error(`world-reducer-knowledge-invalid:${issues.join(',')}`)
+  return Object.freeze({
+    ...aggregate,
+    ...withEventCursor(aggregate, event),
+    cognition: Object.freeze({
+      ...aggregate.cognition,
+      knowledge: Object.freeze([...aggregate.cognition.knowledge, entry]),
+    }),
+  })
+}
+
+function applyMessageSent(
+  aggregate: WorldAggregate,
+  event: LedgerEvent<WorldDomainEventKind>,
+): WorldAggregate {
+  requireBootstrap(aggregate)
+  const payload = event.payload as unknown as WorldDomainEventPayloadMap['message.sent']
+  const data: MessageCreationData = payload.message
+  if (aggregate.cognition.messages.some(item => item.id === data.id)) {
+    throw new Error('world-reducer-message-duplicate')
+  }
+  const message: Message = Object.freeze({
+    ...data,
+    channel: data.channel,
+    contentRefs: Object.freeze(data.contentRefs.map(ref => Object.freeze({ ...ref }))),
+    parentMessage: Object.freeze({ ...data.parentMessage }),
+    sentAt: Object.freeze({ ...event.committedAt }),
+    deliveredAt: field.notApplicable,
+    readAt: field.notApplicable,
+    understoodAt: field.notApplicable,
+    repliedAt: field.notApplicable,
+    failure: field.notApplicable,
+  })
+  const issues = validateMessage(message, cognitionReferences(aggregate, event))
+  if (issues.length > 0) throw new Error(`world-reducer-message-invalid:${issues.join(',')}`)
+  return Object.freeze({
+    ...aggregate,
+    ...withEventCursor(aggregate, event),
+    cognition: Object.freeze({
+      ...aggregate.cognition,
+      messages: Object.freeze([...aggregate.cognition.messages, message]),
+    }),
+  })
+}
+
+function applyMessageStageRecorded(
+  aggregate: WorldAggregate,
+  event: LedgerEvent<WorldDomainEventKind>,
+): WorldAggregate {
+  requireBootstrap(aggregate)
+  const payload = event.payload as unknown as WorldDomainEventPayloadMap['message.stage.recorded']
+  const messageIndex = aggregate.cognition.messages.findIndex(item => item.id === payload.messageId)
+  if (messageIndex < 0) throw new Error('world-reducer-message-stage-message-missing')
+  const current = aggregate.cognition.messages[messageIndex]!
+  const stage = payload.stage as MessageStage
+  const previousStage = stage === 'delivered' ? null
+    : stage === 'read' ? 'deliveredAt'
+      : stage === 'understood' ? 'readAt' : 'understoodAt'
+  const currentStage = stage === 'delivered' ? 'deliveredAt'
+    : stage === 'read' ? 'readAt'
+      : stage === 'understood' ? 'understoodAt' : 'repliedAt'
+  if (current.failure.kind === 'value' || current[currentStage].kind === 'value'
+    || (previousStage !== null && current[previousStage].kind !== 'value')) {
+    throw new Error('world-reducer-message-stage-prerequisite')
+  }
+  const updated: Message = Object.freeze({
+    ...current,
+    [currentStage]: Object.freeze({ kind: 'value' as const, value: Object.freeze({ ...event.committedAt }) }),
+  })
+  const messages = aggregate.cognition.messages.map((item, index) => index === messageIndex ? updated : item)
+  const issues = validateMessage(updated, cognitionReferences(aggregate, event))
+  if (issues.length > 0) throw new Error(`world-reducer-message-stage-invalid:${issues.join(',')}`)
+  return Object.freeze({
+    ...aggregate,
+    ...withEventCursor(aggregate, event),
+    cognition: Object.freeze({ ...aggregate.cognition, messages: Object.freeze(messages) }),
+  })
+}
+
 /** Apply one schema-validated event to the read-only world projection. */
 export function reduceWorldDomainEvent(
   aggregate: WorldAggregate,
@@ -401,6 +523,12 @@ export function reduceWorldDomainEvent(
       return applyRelationClaimRecorded(aggregate, event)
     case 'relation.evidence.recorded':
       return applyRelationEvidenceRecorded(aggregate, event)
+    case 'knowledge.recorded':
+      return applyKnowledgeRecorded(aggregate, event)
+    case 'message.sent':
+      return applyMessageSent(aggregate, event)
+    case 'message.stage.recorded':
+      return applyMessageStageRecorded(aggregate, event)
     default: {
       const unreachable: never = event.kind
       throw new Error(`world-reducer-unhandled-event:${String(unreachable)}`)
