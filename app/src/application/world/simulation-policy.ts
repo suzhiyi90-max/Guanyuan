@@ -41,7 +41,7 @@ export interface WorldSimulationPolicyCandidate {
 export type WorldSimulationPolicyDecision =
   | { readonly candidateId: string; readonly status: 'accepted'; readonly policyId: string; readonly priority: number }
   | { readonly candidateId: string; readonly status: 'deferred'; readonly policyId: string; readonly reason: 'lod-not-enabled' }
-  | { readonly candidateId: string; readonly status: 'rejected'; readonly reason: 'unknown-level' | 'unknown-source' | 'unknown-lod' | 'unsupported-intent' | 'policy-disabled' | 'candidate-identity-conflict' }
+  | { readonly candidateId: string; readonly status: 'rejected'; readonly reason: 'invalid-candidate-id' | 'unknown-level' | 'unknown-source' | 'unknown-lod' | 'unsupported-intent' | 'policy-disabled' | 'candidate-identity-conflict' }
 
 export type WorldSimulationPolicyResolution =
   | { readonly status: 'valid'; readonly rulesetId: string; readonly revision: string; readonly maxEvents: number; readonly decisions: readonly WorldSimulationPolicyDecision[] }
@@ -69,7 +69,7 @@ export function validateWorldSimulationRuleset(ruleset: WorldSimulationRuleset):
   if (!Array.isArray(ruleset?.rules)) issues.push('policy-rules-invalid')
   const selectors = new Set<string>()
   const ids = new Set<string>()
-  for (const rule of ruleset?.rules ?? []) {
+  const configuredRules = Array.isArray(ruleset?.rules) ? ruleset.rules : []\n  for (const rule of configuredRules) {
     if (!rule || !nonEmpty(rule.policyId) || ids.has(rule.policyId)) issues.push('policy-id-invalid-or-duplicate')
     else ids.add(rule.policyId)
     if (!levels.has(rule?.level)) issues.push('policy-level-unsupported')
@@ -114,7 +114,7 @@ export function resolveWorldSimulationPolicies(
 
   const decisions = candidates.map((candidate): WorldSimulationPolicyDecision => {
     const candidateId = nonEmpty(candidate?.candidateId) ? candidate.candidateId : 'invalid-candidate'
-    if (duplicates.has(candidateId)) return { candidateId, status: 'rejected', reason: 'candidate-identity-conflict' }
+    if (!nonEmpty(candidate?.candidateId)) return { candidateId, status: 'rejected', reason: 'invalid-candidate-id' }\n    if (duplicates.has(candidateId)) return { candidateId, status: 'rejected', reason: 'candidate-identity-conflict' }
     if (!levels.has(candidate?.level)) return { candidateId, status: 'rejected', reason: 'unknown-level' }
     if (!sources.has(candidate?.source)) return { candidateId, status: 'rejected', reason: 'unknown-source' }
     if (!lods.has(candidate?.lod)) return { candidateId, status: 'rejected', reason: 'unknown-lod' }
@@ -129,7 +129,7 @@ export function resolveWorldSimulationPolicies(
       return { candidateId, status: 'deferred', policyId: rule.policyId, reason: 'lod-not-enabled' }
     }
     return { candidateId, status: 'accepted', policyId: rule.policyId, priority: rule.priority }
-  }).sort((left, right) => left.candidateId.localeCompare(right.candidateId))
+  }).sort((left, right) => left.candidateId < right.candidateId ? -1 : left.candidateId > right.candidateId ? 1 : 0)
 
   return Object.freeze({
     status: 'valid',
