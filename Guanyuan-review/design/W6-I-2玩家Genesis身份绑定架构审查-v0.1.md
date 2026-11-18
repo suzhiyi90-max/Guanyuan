@@ -243,3 +243,33 @@ PR #90 后续增加：
 补强提交：`0b473a1b5a5f42379b73e6b4789ab4138133dca4`。其对应最新 G1.7 run `44335272863` 尚在执行，最终验收以该 head 的完整工作流结果为准。
 
 该互斥仅解决本地身份首次初始化，不承担 Owner/World 多记录事务、世界所有权竞争或 Genesis 幂等；这些仍属于下一阶段独立事务边界。
+
+
+## 14. Owner/World 与 Genesis 下一阶段施工前置核查
+
+基于 PR #89 候选代码（`cc53f6b`）复核：
+
+1. `WorldApplicationPorts` 目前包含 commands、projector、queries、observerQueries、snapshots、simulation、candidates；没有 Owner 身份持久化、Owner/World 所有权登记或 Genesis reservation 端口。
+2. `initializeWorldThroughPorts` 负责 `world.initialized` 和种群候选的幂等提交；它不是玩家 Genesis 服务，不得直接扩展成可由 UI 传入任意 player payload 的入口。
+3. `person.created` reducer 已识别 `{ kind: 'player-character' }`，在同一 WorldAggregate 内拒绝第二名玩家人物并写入 `playerPersonId`。该事实仍必须经注册事件、命令授权和账本重放生成。
+4. 当前 W6 `createInMemoryWorldAdapter` 的账本、聚合和命令队列均为进程内状态，不能承担跨重启的 Owner/World reservation 或 Genesis 恢复。
+5. W5 `indexeddb-save-repository.ts` 是既有 SavePackage/PreviewRuntime 保存边界，不是 W6 Owner registry，也不能直接当作 W6 事务数据库复用。
+
+### 14.1 下一工作包边界：W6-I-3 Owner/World Reservation
+
+下一阶段先定义独立于 W5 的 W6 持久化事务边界，不立即把 player UI 接入。必须覆盖：
+
+- Owner→World 的唯一性约束与事务性 reserve；同一 Owner 的相同 clientRequestId 幂等返回同一 reservation，不同请求不得悄悄生成第二个初始世界。
+- WorldId 由可信应用服务分配，不能接受 UI 任意指定已有 WorldId 来认领。
+- reservation 状态必须可恢复，并区分 reserved、Genesis event committed、owner-person binding finalized；不得把 localStorage 单键写入描述成多记录事务。
+- Genesis service 只接受有限、版本化的角色创建输入；服务端/应用端生成 PersonId、CapabilityRef、state domain refs、LifeHistoryRef 和稳定 clientRequestId。
+- 唯一的玩家人物事实仍由 `person.created` + `PersonOrigin { kind: 'player-character' }` 进入账本；禁止新增 Character 表或第二份 player truth。
+- 事件提交后、Owner→PersonId 绑定前崩溃时，恢复流程必须从 canonical ledger replay 识别已提交的 playerPersonId 并完成绑定；不能重复 append 第二个人物。
+- 事务与事件提交之间的边界要明确：若不能原子提交，使用 durable reservation + idempotent event append + replay-based repair；不能假装跨 IndexedDB object store / 内存 ledger 已经原子化。
+- W6 必须有自己的 durable event ledger / transactional adapter 决策；在其边界明确前，不得声称当前 in-memory command adapter 已满足正式持久化。
+
+### 14.2 验收门槛
+
+unauthenticated owner、同 Owner 并发不同 request、同 request 重试、WorldId 冲突/冒领、reservation 写入中断、Genesis append 前中断、append 成功但绑定失败、第二玩家人物、恢复后重复提交、Owner/World/Person 不匹配、保存恢复与 genesis replay 一致性，全部需要独立契约测试。
+
+该工作包不修改 W5 runtime-save-orchestrator / IndexedDB SavePackage，不接入 UI，不改视觉、交互或美术资产。待 W6 持久化边界和故障恢复模型完成审查后，再开始实现。
