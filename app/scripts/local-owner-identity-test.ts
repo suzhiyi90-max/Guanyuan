@@ -3,6 +3,7 @@ import {
   createLocalOwnerIdentityPort,
   LOCAL_OWNER_IDENTITY_STORAGE_KEY,
   type OwnerIdentityStoragePort,
+  type OwnerIdentityInitializationLockPort,
 } from '../src/infrastructure/local-owner-identity'
 
 // The application OwnerId stays provider-neutral; only this adapter accepts the local UUID namespace.
@@ -15,6 +16,17 @@ function check(name: string, condition: boolean): void {
     console.error(`FAIL ${name}`)
   }
 }
+class SerialLock implements OwnerIdentityInitializationLockPort {
+  private tail: Promise<void> = Promise.resolve()
+  async runExclusive<T>(_name: string, operation: () => Promise<T>): Promise<T> {
+    const previous = this.tail
+    let release!: () => void
+    this.tail = new Promise<void>(resolve => { release = resolve })
+    await previous
+    try { return await operation() } finally { release() }
+  }
+}
+
 class MemoryStorage implements OwnerIdentityStoragePort {
   readonly values = new Map<string, string>()
   failRead = false
@@ -46,6 +58,7 @@ async function main(): Promise<void> {
   let allocations = 0
   const first = createLocalOwnerIdentityPort({
     storage,
+    initializationLock: new SerialLock(),
     allocateUuid: () => { allocations += 1; return uuidA },
   })
   const firstId = await first.resolve()
@@ -62,6 +75,25 @@ async function main(): Promise<void> {
   check('a new adapter instance recovers the same OwnerId after restart without reallocating',
     restartedId === firstId && allocations === 1)
 
+  const concurrentStorage = new MemoryStorage()
+  const concurrentLock = new SerialLock()
+  let concurrentAllocations = 0
+  const concurrentA = createLocalOwnerIdentityPort({
+    storage: concurrentStorage,
+    initializationLock: concurrentLock,
+    allocateUuid: () => { concurrentAllocations += 1; return uuidA },
+  })
+  const concurrentB = createLocalOwnerIdentityPort({
+    storage: concurrentStorage,
+    initializationLock: concurrentLock,
+    allocateUuid: () => { concurrentAllocations += 1; return uuidB },
+  })
+  const [concurrentIdA, concurrentIdB] = await Promise.all([concurrentA.resolve(), concurrentB.resolve()])
+  check('concurrent first-time resolutions serialize and return one stable OwnerId',
+    concurrentIdA === concurrentIdB
+    && concurrentAllocations === 1
+    && concurrentStorage.values.get(LOCAL_OWNER_IDENTITY_STORAGE_KEY) === concurrentIdA)
+
   const corruptStorage = new MemoryStorage()
   corruptStorage.values.set(LOCAL_OWNER_IDENTITY_STORAGE_KEY, 'owner:local:tampered')
   let corruptAllocation = 0
@@ -69,6 +101,7 @@ async function main(): Promise<void> {
   try {
     await createLocalOwnerIdentityPort({
       storage: corruptStorage,
+      initializationLock: new SerialLock(),
       allocateUuid: () => { corruptAllocation += 1; return uuidA },
     }).resolve()
   } catch (error) {
@@ -81,7 +114,7 @@ async function main(): Promise<void> {
   readFailure.failRead = true
   let readRejected = false
   try {
-    await createLocalOwnerIdentityPort({ storage: readFailure, allocateUuid: () => uuidA }).resolve()
+    await createLocalOwnerIdentityPort({ storage: readFailure, initializationLock: new SerialLock(), allocateUuid: () => uuidA }).resolve()
   } catch (error) {
     readRejected = error instanceof Error && error.message === 'owner-identity-storage-read-failed'
   }
@@ -91,7 +124,7 @@ async function main(): Promise<void> {
   writeFailure.failWrite = true
   let writeRejected = false
   try {
-    await createLocalOwnerIdentityPort({ storage: writeFailure, allocateUuid: () => uuidA }).resolve()
+    await createLocalOwnerIdentityPort({ storage: writeFailure, initializationLock: new SerialLock(), allocateUuid: () => uuidA }).resolve()
   } catch (error) {
     writeRejected = error instanceof Error && error.message === 'owner-identity-storage-write-failed'
   }
@@ -101,7 +134,7 @@ async function main(): Promise<void> {
   unconfirmedStorage.ignoreWrite = true
   let unconfirmedRejected = false
   try {
-    await createLocalOwnerIdentityPort({ storage: unconfirmedStorage, allocateUuid: () => uuidA }).resolve()
+    await createLocalOwnerIdentityPort({ storage: unconfirmedStorage, initializationLock: new SerialLock(), allocateUuid: () => uuidA }).resolve()
   } catch (error) {
     unconfirmedRejected = error instanceof Error && error.message === 'owner-identity-storage-write-failed'
   }
@@ -111,6 +144,7 @@ async function main(): Promise<void> {
   try {
     await createLocalOwnerIdentityPort({
       storage: new MemoryStorage(),
+      initializationLock: new SerialLock(),
       allocateUuid: () => 'not-a-uuid',
     }).resolve()
   } catch (error) {
