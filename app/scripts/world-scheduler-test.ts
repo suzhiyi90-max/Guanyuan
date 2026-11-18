@@ -413,10 +413,10 @@ async function main(): Promise<void> {
   const malformedCandidate = resolveWorldSimulationPolicies(policyRuleset, [
     { candidateId: ' ', level: 'L0', source: 'rule', intentKind: 'goal.create', lod: 'near-field', payload: {} },
   ])
+  const malformedDecision = malformedCandidate.status === 'valid' ? malformedCandidate.decisions[0] : undefined
   check('policy resolver rejects candidates without a stable identity',
-    malformedCandidate.status === 'valid'
-    && malformedCandidate.decisions[0]?.status === 'rejected'
-    && malformedCandidate.decisions[0]?.reason === 'invalid-candidate-id')
+    malformedDecision?.status === 'rejected'
+    && malformedDecision.reason === 'invalid-candidate-id')
 
   if (failed > 0) throw new Error(`Deterministic world scheduler tests failed: ${failed}/${passed + failed}`)
   console.log(`Deterministic world scheduler tests: ${passed}/${passed + failed} passed`)
