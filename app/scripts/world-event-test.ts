@@ -229,6 +229,22 @@ check('fixed historical name is accepted only when it matches the world allow-li
   aggregate.persons.some(item => item.id === historicalMinisterId)
   && aggregate.personOrigins.some(item => item.person === historicalMinisterId && item.origin.kind === 'historical-minister'))
 
+const reversedValidityPayload = {
+  ...descriptor,
+  historicalNameAllowList: [{
+    ...descriptor.historicalNameAllowList[0]!,
+    validFrom: { day: 3, period: '晨' },
+    validThrough: { day: 2, period: '夜' },
+  }],
+}
+const reversedValiditySchema = validateWorldDomainEventPayload(
+  registry,
+  'world.initialized',
+  reversedValidityPayload as never,
+)
+check('world initialization schema rejects reversed historical validity windows',
+  reversedValiditySchema.status === 'payload-invalid')
+
 const unlistedPerson: PersonCreationData = {
   ...historicalPerson,
   id: brandedId<'PersonId'>('person:historical:unlisted-002'),
