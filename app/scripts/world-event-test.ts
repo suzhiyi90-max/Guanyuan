@@ -314,6 +314,7 @@ check('knowledge is holder-scoped and records its own source event and acquisiti
   aggregate.cognition.knowledge.length === 1
   && aggregate.cognition.knowledge[0]?.holder === person.id
   && aggregate.cognition.knowledge[0]?.subject.kind === 'relation'
+  && aggregate.streamHead.kind === 'event'
   && aggregate.cognition.knowledge[0]?.sourceEvent === aggregate.streamHead.eventId
   && aggregate.cognition.knowledge[0]?.stance === 'suspected')
 
