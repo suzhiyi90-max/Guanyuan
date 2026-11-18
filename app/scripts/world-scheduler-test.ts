@@ -410,6 +410,14 @@ async function main(): Promise<void> {
     duplicateCandidates.status === 'valid'
     && duplicateCandidates.decisions.every(item => item.status === 'rejected' && item.reason === 'candidate-identity-conflict'))
 
+  const malformedCandidate = resolveWorldSimulationPolicies(policyRuleset, [
+    { candidateId: ' ', level: 'L0', source: 'rule', intentKind: 'goal.create', lod: 'near-field', payload: {} },
+  ])
+  check('policy resolver rejects candidates without a stable identity',
+    malformedCandidate.status === 'valid'
+    && malformedCandidate.decisions[0]?.status === 'rejected'
+    && malformedCandidate.decisions[0]?.reason === 'invalid-candidate-id')
+
   if (failed > 0) throw new Error(`Deterministic world scheduler tests failed: ${failed}/${passed + failed}`)
   console.log(`Deterministic world scheduler tests: ${passed}/${passed + failed} passed`)
 }
