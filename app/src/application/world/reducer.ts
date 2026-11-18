@@ -199,14 +199,15 @@ function applyAuthorizationGranted(
   if (!aggregate.persons.some(person => person.id === data.principal)) {
     throw new Error('world-reducer-authorization-principal-missing')
   }
-  if (data.scope.kind === 'institution'
-    && !aggregate.society.organizations.some(item => item.id === data.scope.institution)) {
+  const scope = data.scope
+  if (scope.kind === 'institution'
+    && !aggregate.society.organizations.some(item => item.id === scope.institution)) {
     throw new Error('world-reducer-authorization-institution-missing')
   }
-  if (data.scope.kind === 'person' && !aggregate.persons.some(item => item.id === data.scope.person)) {
+  if (scope.kind === 'person' && !aggregate.persons.some(item => item.id === scope.person)) {
     throw new Error('world-reducer-authorization-person-scope-missing')
   }
-  if (data.scope.kind === 'office' && !aggregate.identity.offices.some(item => item.id === data.scope.office)) {
+  if (scope.kind === 'office' && !aggregate.identity.offices.some(item => item.id === scope.office)) {
     throw new Error('world-reducer-authorization-office-scope-missing')
   }
   const authorization: Authorization = Object.freeze({
