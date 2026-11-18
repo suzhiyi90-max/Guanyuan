@@ -14,6 +14,7 @@ import type { EntityRef, FailureKind, KnowledgeEntry, Message, MessagePropagatio
 import type { Goal, ScheduleEntry, GoalStatus } from '../../domain/planning/model'
 import type { Debt, Asset, AssetRightKind, RightGrant } from '../../domain/economy/model'
 import type { WorldBootstrapMetadata } from '../../domain/world/metadata'
+import type { LifeStateFact } from '../../domain/life/state'
 import type { WorldBootstrapDescriptor } from './bootstrap'
 import {
   createEventRegistry,
@@ -30,6 +31,7 @@ import { compareWorldTime, isValidWorldTime } from '../../domain/shared/world-ti
 export type WorldDomainEventKind =
   | 'world.initialized'
   | 'world.time.advanced'
+  | 'life.state.fact.recorded'
   | 'person.created'
   | 'organization.registered'
   | 'identity.assignment.added'
@@ -78,10 +80,14 @@ export type DebtCreationData = Pick<Debt, 'id' | 'creditor' | 'debtor' | 'princi
 export type AssetCreationData = Pick<Asset, 'id' | 'kind' | 'quantity' | 'custody' | 'valuation'>
 export type AssetRightGrantData = Omit<RightGrant, 'grantedBy'>
 export type PersonExposureCreationData = Pick<PersonExposure, 'id' | 'observer' | 'subject' | 'kind'>
+export type LifeStateFactCreationData =
+  | Omit<Extract<LifeStateFact, { readonly domain: 'body' }>, 'sourceEvent' | 'at'>
+  | Omit<Extract<LifeStateFact, { readonly domain: 'mind' }>, 'sourceEvent' | 'at'>
 
 export interface WorldDomainEventPayloadMap {
   readonly 'world.initialized': WorldBootstrapMetadata
   readonly 'world.time.advanced': { readonly from: WorldTime; readonly to: WorldTime }
+  readonly 'life.state.fact.recorded': { readonly fact: LifeStateFactCreationData }
   readonly 'person.created': { readonly person: PersonCreationData; readonly origin: PersonOrigin }
   readonly 'organization.registered': { readonly organization: Organization }
   readonly 'identity.assignment.added': { readonly assignment: IdentityAssignmentCreationData }
@@ -450,6 +456,36 @@ function isPersonExposurePayload(payload: JsonValue): boolean {
     && ['heard-of', 'seen', 'met', 'conversed', 'corresponded'].includes(String(exposure.kind))
 }
 
+function isLifeStateValue(value: JsonValue): value is JsonValue {
+  if (!isRecord(value) || typeof value.kind !== 'string') return false
+  if (value.kind === 'qualitative') {
+    return hasExactKeys(value, ['kind', 'code']) && isNonEmptyString(value.code)
+  }
+  if (value.kind === 'classified') {
+    return hasExactKeys(value, ['kind', 'code', 'detail'])
+      && isNonEmptyString(value.code) && isField(value.detail, isNonEmptyString)
+  }
+  if (value.kind === 'quantitative') {
+    return hasExactKeys(value, ['kind', 'value', 'scale', 'unit'])
+      && typeof value.value === 'number' && Number.isFinite(value.value)
+      && isNonEmptyString(value.scale) && isField(value.unit, isNonEmptyString)
+  }
+  return false
+}
+
+function isLifeStateFactPayload(payload: JsonValue): boolean {
+  if (!isRecord(payload) || !hasExactKeys(payload, ['fact']) || !isRecord(payload.fact)) return false
+  const fact = payload.fact
+  return hasExactKeys(fact, [
+    'id', 'person', 'domain', 'scope', 'dimension', 'value', 'supersedes', 'visibility',
+  ])
+    && [fact.id, fact.person, fact.scope, fact.dimension].every(isNonEmptyString)
+    && (fact.domain === 'body' || fact.domain === 'mind')
+    && isField(fact.value, isLifeStateValue)
+    && isField(fact.supersedes, isNonEmptyString)
+    && isVisibility(fact.visibility)
+}
+
 function isWorldTimeAdvancedPayload(payload: JsonValue): boolean {
   if (!isRecord(payload) || !hasExactKeys(payload, ['from', 'to'])
     || !isWorldTimeValue(payload.from) || !isWorldTimeValue(payload.to)) return false
@@ -469,6 +505,7 @@ function isScheduleDeviationPayload(payload: JsonValue): boolean {
 const schemas: ReadonlyArray<{ readonly kind: WorldDomainEventKind; readonly validate: EventSchemaValidator }> = [
   { kind: 'world.initialized', validate: isBootstrapMetadata },
   { kind: 'world.time.advanced', validate: isWorldTimeAdvancedPayload },
+  { kind: 'life.state.fact.recorded', validate: isLifeStateFactPayload },
   { kind: 'person.created', validate: isPersonCreationPayload },
   { kind: 'organization.registered', validate: isOrganizationPayload },
   { kind: 'identity.assignment.added', validate: isIdentityAssignmentPayload },
@@ -498,7 +535,7 @@ const schemas: ReadonlyArray<{ readonly kind: WorldDomainEventKind; readonly val
 ]
 
 export function createWorldDomainEventRegistry(): EventRegistry<WorldDomainEventKind> {
-  let registry = createEventRegistry<WorldDomainEventKind>('guanyuan.world-domain', '1.1.0')
+  let registry = createEventRegistry<WorldDomainEventKind>('guanyuan.world-domain', '1.2.0')
   for (const schema of schemas) {
     const result = registerEventSchema(registry, {
       kind: schema.kind,
@@ -989,6 +1026,26 @@ export function createPersonExposureRecordedEventInput(
     requestWorldTime: options.requestWorldTime,
     clientRequestId: options.clientRequestId,
     payload: { exposure },
+  }
+}
+
+export function createLifeStateFactRecordedEventInput(
+  fact: LifeStateFactCreationData,
+  options: {
+    readonly actor: string
+    readonly source: Extract<LedgerSource, 'player-command' | 'rule'>
+    readonly requestWorldTime: WorldTime
+    readonly clientRequestId: string
+  },
+): WorldDomainEventInput<'life.state.fact.recorded'> {
+  return {
+    source: options.source,
+    kind: 'life.state.fact.recorded',
+    intentKind: 'life.state.fact.record',
+    actor: options.actor,
+    requestWorldTime: options.requestWorldTime,
+    clientRequestId: options.clientRequestId,
+    payload: { fact },
   }
 }
 
