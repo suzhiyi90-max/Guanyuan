@@ -8,7 +8,7 @@ import type { JsonValue, LedgerEventInput, LedgerSource } from '../../domain/eve
 import type { Person } from '../../domain/person/model'
 import type { PersonOrigin } from '../../domain/person/provenance'
 import type { IdentityAssignment, Authorization } from '../../domain/identity/model'
-import type { Organization, Relation, RelationClaim, RelationEvidence } from '../../domain/relations/model'
+import type { Organization, Relation, RelationClaim, RelationEvidence, Membership, RelationLifecycleStatus } from '../../domain/relations/model'
 import type { EntityRef, FailureKind, KnowledgeEntry, Message, MessagePropagation } from '../../domain/cognition/model'
 import type { WorldBootstrapMetadata } from '../../domain/world/metadata'
 import type { WorldBootstrapDescriptor } from './bootstrap'
@@ -38,6 +38,9 @@ export type WorldDomainEventKind =
   | 'message.stage.recorded'
   | 'message.failed'
   | 'message.propagated'
+  | 'organization.membership.added'
+  | 'organization.membership.ended'
+  | 'relation.lifecycle.changed'
 
 export type PersonCreationData = Omit<Person, 'lifeState' | 'archiveState' | 'death'>
 export type IdentityAssignmentCreationData = Omit<IdentityAssignment, 'validFrom' | 'validTo' | 'sourceEvent'>
@@ -50,6 +53,7 @@ export type KnowledgeCreationData = Omit<KnowledgeEntry, 'sourceEvent' | 'acquir
 export type MessageCreationData = Pick<Message, 'id' | 'sender' | 'recipient' | 'channel' | 'contentRefs' | 'parentMessage' | 'distortion'>
 export type MessageStage = 'delivered' | 'read' | 'understood' | 'replied'
 export type MessagePropagationCreationData = Omit<MessagePropagation, 'propagatedAt'>
+export type MembershipCreationData = Omit<Membership, 'validFrom' | 'validTo' | 'sourceEvent'>
 
 export interface WorldDomainEventPayloadMap {
   readonly 'world.initialized': WorldBootstrapMetadata
@@ -65,6 +69,9 @@ export interface WorldDomainEventPayloadMap {
   readonly 'message.stage.recorded': { readonly messageId: string; readonly stage: MessageStage }
   readonly 'message.failed': { readonly messageId: string; readonly failureCode: string }
   readonly 'message.propagated': { readonly propagation: MessagePropagationCreationData }
+  readonly 'organization.membership.added': { readonly membership: MembershipCreationData }
+  readonly 'organization.membership.ended': { readonly membershipId: string }
+  readonly 'relation.lifecycle.changed': { readonly relationId: string; readonly status: RelationLifecycleStatus }
 }
 
 export type WorldDomainEventInput<Kind extends WorldDomainEventKind = WorldDomainEventKind> =
@@ -316,6 +323,24 @@ function isMessagePropagationPayload(payload: JsonValue): boolean {
     && isStringArray(item.resultingKnowledge) && item.resultingKnowledge.length > 0
 }
 
+function isMembershipPayload(payload: JsonValue): boolean {
+  if (!isRecord(payload) || !hasExactKeys(payload, ['membership']) || !isRecord(payload.membership)) return false
+  const item = payload.membership
+  return hasExactKeys(item, ['id', 'organization', 'person', 'role', 'obligations'])
+    && [item.id, item.organization, item.person, item.role].every(isNonEmptyString)
+    && isStringArray(item.obligations)
+}
+
+function isMembershipEndPayload(payload: JsonValue): boolean {
+  return isRecord(payload) && hasExactKeys(payload, ['membershipId']) && isNonEmptyString(payload.membershipId)
+}
+
+function isRelationLifecyclePayload(payload: JsonValue): boolean {
+  return isRecord(payload) && hasExactKeys(payload, ['relationId', 'status'])
+    && isNonEmptyString(payload.relationId)
+    && ['active', 'dormant', 'severed'].includes(String(payload.status))
+}
+
 const schemas: ReadonlyArray<{ readonly kind: WorldDomainEventKind; readonly validate: EventSchemaValidator }> = [
   { kind: 'world.initialized', validate: isBootstrapMetadata },
   { kind: 'person.created', validate: isPersonCreationPayload },
@@ -330,6 +355,9 @@ const schemas: ReadonlyArray<{ readonly kind: WorldDomainEventKind; readonly val
   { kind: 'message.stage.recorded', validate: isMessageStagePayload },
   { kind: 'message.failed', validate: isMessageFailurePayload },
   { kind: 'message.propagated', validate: isMessagePropagationPayload },
+  { kind: 'organization.membership.added', validate: isMembershipPayload },
+  { kind: 'organization.membership.ended', validate: isMembershipEndPayload },
+  { kind: 'relation.lifecycle.changed', validate: isRelationLifecyclePayload },
 ]
 
 export function createWorldDomainEventRegistry(): EventRegistry<WorldDomainEventKind> {
@@ -560,6 +588,67 @@ export function createMessagePropagationRecordedEventInput(
     requestWorldTime: options.requestWorldTime,
     clientRequestId: options.clientRequestId,
     payload: { propagation },
+  }
+}
+
+export function createMembershipAddedEventInput(
+  membership: MembershipCreationData,
+  options: {
+    readonly actor: string
+    readonly source: Extract<LedgerSource, 'player-command' | 'rule'>
+    readonly requestWorldTime: WorldTime
+    readonly clientRequestId: string
+  },
+): WorldDomainEventInput<'organization.membership.added'> {
+  return {
+    source: options.source,
+    kind: 'organization.membership.added',
+    intentKind: 'organization.membership.add',
+    actor: options.actor,
+    requestWorldTime: options.requestWorldTime,
+    clientRequestId: options.clientRequestId,
+    payload: { membership },
+  }
+}
+
+export function createMembershipEndedEventInput(
+  membershipId: string,
+  options: {
+    readonly actor: string
+    readonly source: Extract<LedgerSource, 'player-command' | 'rule'>
+    readonly requestWorldTime: WorldTime
+    readonly clientRequestId: string
+  },
+): WorldDomainEventInput<'organization.membership.ended'> {
+  return {
+    source: options.source,
+    kind: 'organization.membership.ended',
+    intentKind: 'organization.membership.end',
+    actor: options.actor,
+    requestWorldTime: options.requestWorldTime,
+    clientRequestId: options.clientRequestId,
+    payload: { membershipId },
+  }
+}
+
+export function createRelationLifecycleChangedEventInput(
+  relationId: string,
+  status: RelationLifecycleStatus,
+  options: {
+    readonly actor: string
+    readonly source: Extract<LedgerSource, 'player-command' | 'rule'>
+    readonly requestWorldTime: WorldTime
+    readonly clientRequestId: string
+  },
+): WorldDomainEventInput<'relation.lifecycle.changed'> {
+  return {
+    source: options.source,
+    kind: 'relation.lifecycle.changed',
+    intentKind: 'relation.lifecycle.change',
+    actor: options.actor,
+    requestWorldTime: options.requestWorldTime,
+    clientRequestId: options.clientRequestId,
+    payload: { relationId, status },
   }
 }
 
