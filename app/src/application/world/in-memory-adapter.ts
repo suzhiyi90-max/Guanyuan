@@ -58,6 +58,7 @@ const intentKinds: Readonly<Record<string, WorldDomainEventKind>> = Object.freez
   'asset.register': 'asset.registered',
   'asset.right.grant': 'asset.right.granted',
   'asset.right.revoke': 'asset.right.revoked',
+  'person.exposure.record': 'person.exposure.recorded',
 })
 
 export interface InMemoryWorldAdapterOptions {
