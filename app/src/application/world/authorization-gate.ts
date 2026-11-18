@@ -131,6 +131,15 @@ export function createAuthorizationGatedWorldCommandPort(
         return rejected(command, null, 'world-command-authorization-query-failed')
       }
       if (!aggregate) return rejected(command, null, 'world-command-world-not-found')
+      let currentPrincipal: PersonId | null
+      try {
+        currentPrincipal = await options.principals.resolve()
+      } catch {
+        return rejected(command, aggregate, 'world-command-authorization-resolution-failed')
+      }
+      if (currentPrincipal !== principal) {
+        return rejected(command, aggregate, 'world-command-principal-changed')
+      }
       if (options.requireWorldPlayer && aggregate.playerPersonId !== principal) {
         return rejected(command, aggregate, 'world-command-principal-not-world-player')
       }
