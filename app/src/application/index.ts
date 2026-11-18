@@ -11,3 +11,4 @@ export * from './world/observer-view'
 export * from './world/scheduler'
 
 export * from './world/simulation-policy'
+export * from './world/authorization-gate'
