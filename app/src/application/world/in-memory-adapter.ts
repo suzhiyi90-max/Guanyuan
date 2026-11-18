@@ -48,6 +48,14 @@ const intentKinds: Readonly<Record<string, WorldDomainEventKind>> = Object.freez
   'organization.membership.add': 'organization.membership.added',
   'organization.membership.end': 'organization.membership.ended',
   'relation.lifecycle.change': 'relation.lifecycle.changed',
+  'goal.create': 'goal.created',
+  'goal.status.change': 'goal.status.changed',
+  'schedule.entry.plan': 'schedule.entry.planned',
+  'debt.record': 'debt.recorded',
+  'debt.settle': 'debt.settled',
+  'asset.register': 'asset.registered',
+  'asset.right.grant': 'asset.right.granted',
+  'asset.right.revoke': 'asset.right.revoked',
 })
 
 export interface InMemoryWorldAdapterOptions {
