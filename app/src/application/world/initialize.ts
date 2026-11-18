@@ -167,6 +167,7 @@ export async function initializeWorldThroughPorts(
         worldId: request.worldId,
         clientRequestId,
         actor: 'system',
+        source: 'rule',
         intentKind,
         requestedAt: descriptor.startedAt,
         expectedHead: streamHead,
