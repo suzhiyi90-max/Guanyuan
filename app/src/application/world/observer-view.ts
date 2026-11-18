@@ -31,6 +31,11 @@ import type { Goal, ScheduleEntry } from '../../domain/planning/model'
 
 export type WorldObserver = PersonId | 'player'
 
+export interface KnownPersonSummary {
+  readonly id: PersonId
+  readonly displayName: string
+}
+
 export interface WorldObserverSocialView {
   readonly worldId: WorldAggregate['worldId']
   readonly observer: WorldObserver
@@ -40,7 +45,7 @@ export interface WorldObserverSocialView {
   /** The observer's own person record, if the player character has been created. */
   readonly self: Person | null
   /** People explicitly known through visible records; never the global person table. */
-  readonly knownPersons: readonly Person[]
+  readonly knownPersons: readonly KnownPersonSummary[]
   readonly identityAssignments: readonly IdentityAssignment[]
   readonly relations: readonly Relation[]
   readonly claims: readonly RelationClaim[]
@@ -200,7 +205,9 @@ export function projectWorldForObserver(
   for (const item of goals) addPerson(item.person)
   for (const item of scheduleEntries) addPerson(item.person)
 
-  const knownPersons = aggregate.persons.filter(item => knownIds.has(item.id))
+  const knownPersons = aggregate.persons
+    .filter(item => knownIds.has(item.id))
+    .map(item => Object.freeze({ id: item.id, displayName: item.displayName }))
   const self = personId ? personMap.get(personId) ?? null : null
 
   return Object.freeze({
