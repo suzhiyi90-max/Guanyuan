@@ -51,10 +51,11 @@ async function main(): Promise<void> {
   check('in-memory command adapter executes bootstrap through canonical ledger and replay',
     initialized.status === 'ready'
     && aggregate?.bootstrap?.seed === request.seed
-    && aggregate.persons.length === 2
-    && aggregate.personOrigins.every(item => item.origin.kind === 'seeded-random')
-    && ledger.head === 3)
-  check('query subscribers are notified only after each valid committed event', notifications === 3)
+    && aggregate.persons.length === 3
+    && aggregate.personOrigins.filter(item => item.origin.kind === 'seeded-random').length === 2
+    && aggregate.personOrigins.some(item => item.origin.kind === 'historical-minister')
+    && ledger.head === 4)
+  check('query subscribers are notified only after each valid committed event', notifications === 4)
 
   const repeated = await initializeWorldThroughPorts(request, adapter)
   if (repeated.status !== 'ready' || repeated.createdPersonIds.length !== 0
@@ -70,8 +71,8 @@ async function main(): Promise<void> {
   check('repeated initialization observes the materialized world and appends no duplicate facts',
     repeated.status === 'ready'
     && repeated.createdPersonIds.length === 0
-    && repeated.existingPersonCount === 2
-    && adapter.readLedger().head === 3)
+    && repeated.existingPersonCount === 3
+    && adapter.readLedger().head === 4)
 
   const tail = ledger.events[ledger.events.length - 1]
   if (!tail) throw new Error('adapter-test-ledger-tail-missing')
@@ -116,8 +117,8 @@ async function main(): Promise<void> {
   })
   check('stale expected-head command is rejected without appending or notifying',
     conflict.status === 'conflict'
-    && adapter.readLedger().head === 3
-    && notifications === 3)
+    && adapter.readLedger().head === 4
+    && notifications === 4)
 
   const unsupported = await adapter.commands.submit({
     worldId,
@@ -137,8 +138,8 @@ async function main(): Promise<void> {
   })
   check('public projector port independently rebuilds and validates the same aggregate',
     rebuilt.status === 'valid'
-    && rebuilt.aggregate.persons.length === 2
-    && rebuilt.aggregate.streamHead.seq === 3)
+    && rebuilt.aggregate.persons.length === 3
+    && rebuilt.aggregate.streamHead.seq === 4)
 
   unsubscribe()
   if (failed > 0) throw new Error(`In-memory world adapter tests failed: ${failed}/${passed + failed}`)
