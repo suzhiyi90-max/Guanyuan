@@ -67,7 +67,7 @@ export function createScheduleTaskSource(
   resolver: WorldScheduledActionResolverPort,
 ): WorldSimulationTaskSourcePort {
   return Object.freeze({
-    listDueTasks(request, aggregate) {
+    listDueTasks(request: WorldSimulationRequest, aggregate: WorldAggregate) {
       return aggregate.planning.scheduleEntries.flatMap(entry => {
         const dueAt: WorldTime = { day: entry.day, period: entry.period }
         if (compareWorldTime(dueAt, request.from) < 0 || compareWorldTime(dueAt, request.to) > 0
