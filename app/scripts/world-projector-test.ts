@@ -27,6 +27,9 @@ import {
   createScheduleEntryPlannedEventInput,
   createDebtRecordedEventInput,
   createDebtSettledEventInput,
+  createAssetRegisteredEventInput,
+  createAssetRightGrantedEventInput,
+  createAssetRightRevokedEventInput,
   toLedgerEventInput,
 } from '../src/application'
 import type {
@@ -320,8 +323,32 @@ async function run(): Promise<void> {
   }, {
     actor: 'player', source: 'player-command', requestWorldTime: nextNoon, clientRequestId: 'projector-debt-recorded',
   }), nextNoon)
-  const finalEvent = appendAt(createDebtSettledEventInput(debtId, {
+  appendAt(createDebtSettledEventInput(debtId, {
     actor: 'player', source: 'player-command', requestWorldTime: nextEvening, clientRequestId: 'projector-debt-settled',
+  }), nextEvening)
+  const assetId = brandedId<'AssetId'>('asset:projector:field')
+  appendAt(createAssetRegisteredEventInput({
+    id: assetId,
+    kind: '田地',
+    quantity: 1,
+    custody: field.value(person.id),
+    valuation: field.value(300),
+  }, {
+    actor: 'player', source: 'player-command', requestWorldTime: nextEvening, clientRequestId: 'projector-asset-registered',
+  }), nextEvening)
+  const grantId = brandedId<'RightGrantId'>('right:projector:ownership')
+  appendAt(createAssetRightGrantedEventInput(assetId, 'ownership', {
+    id: grantId,
+    holder: person.id,
+    scope: 'asset:projector:field',
+    revocable: true,
+    transferable: true,
+    expires: field.notApplicable,
+  }, {
+    actor: 'player', source: 'player-command', requestWorldTime: nextEvening, clientRequestId: 'projector-asset-right-granted',
+  }), nextEvening)
+  const finalEvent = appendAt(createAssetRightRevokedEventInput(grantId, {
+    actor: 'player', source: 'player-command', requestWorldTime: nextEvening, clientRequestId: 'projector-asset-right-revoked',
   }), nextEvening)
 
   const projector = createWorldAggregateProjector({ registry, worldStartTime: start })
@@ -365,7 +392,11 @@ async function run(): Promise<void> {
     && complete.aggregate.planning.goalStatusTransitions.length === 1
     && complete.aggregate.planning.scheduleEntries.length === 1
     && complete.aggregate.economy.debts.length === 1
-    && complete.aggregate.economy.debts[0]?.status === 'settled')
+    && complete.aggregate.economy.debts[0]?.status === 'settled'
+    && complete.aggregate.economy.assets.length === 1
+    && complete.aggregate.economy.assets[0]?.owner.kind === 'n/a'
+    && complete.aggregate.economy.assets[0]?.rights.ownership.length === 1
+    && complete.aggregate.economy.rightRevocations.length === 1)
 
   const badAnchor = await projector.rebuild({
     ledger,
