@@ -10,7 +10,7 @@ import { compareWorldTime, isValidWorldTime } from '../../domain/shared/world-ti
 import type { LedgerEvent } from '../../domain/event-ledger'
 import type { EventRegistry } from '../../domain/event-registry'
 import type { Person } from '../../domain/person/model'
-import type { PersonOriginRecord } from '../../domain/person/provenance'
+import type { PersonOrigin, PersonOriginRecord } from '../../domain/person/provenance'
 import { validatePersonLifecycle } from '../../domain/person/lifecycle'
 import type { IdentityAssignment, Authorization } from '../../domain/identity/model'
 import {
@@ -115,7 +115,7 @@ function applyPersonCreated(
   if (payload.origin.kind === 'player-character' && aggregate.playerPersonId !== null) {
     throw new Error('world-reducer-player-character-already-exists')
   }
-  const origin = payload.origin.kind === 'historical-minister'
+  const origin: PersonOrigin = payload.origin.kind === 'historical-minister'
     ? Object.freeze({
         ...payload.origin,
         evidenceRefs: Object.freeze([...payload.origin.evidenceRefs]),
