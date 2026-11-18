@@ -97,7 +97,7 @@ let aggregate = createEmptyWorldAggregate(worldId, now)
 check('world domain event registry is frozen and versioned', registry.frozen
   && registry.registryId === 'guanyuan.world-domain'
   && registry.registryVersion === '1.1.0'
-  && registry.schemas.length === 27)
+  && registry.schemas.length === 28)
 
 function applyAt<K extends WorldDomainEventKind>(
   input: WorldDomainEventInput<K>,
