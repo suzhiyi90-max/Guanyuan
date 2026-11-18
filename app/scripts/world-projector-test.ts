@@ -39,6 +39,7 @@ async function run(): Promise<void> {
     scenarioPackId: 'scenario:ming-jiajing-02',
     rulesetVersion: 'ruleset-0.16',
     contentPackVersion: 'ming-content-0.1',
+    seed: 'world-projector-test-seed',
     seedFingerprint: '0a1b2c3d',
     locationCode: 'peixian',
     populationPolicyVersion: 'w6.1',
