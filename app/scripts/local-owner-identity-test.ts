@@ -69,6 +69,7 @@ async function main(): Promise<void> {
 
   const restarted = createLocalOwnerIdentityPort({
     storage,
+    initializationLock: new SerialLock(),
     allocateUuid: () => { allocations += 1; return uuidB },
   })
   const restartedId = await restarted.resolve()
