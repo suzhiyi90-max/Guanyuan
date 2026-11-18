@@ -53,6 +53,8 @@ export type WorldDomainEventKind =
   | 'asset.right.granted'
   | 'asset.right.revoked'
   | 'person.exposure.recorded'
+  | 'schedule.entry.execution.recorded'
+  | 'schedule.entry.deviation.recorded'
 
 export type PersonCreationData = Omit<Person, 'lifeState' | 'archiveState' | 'death'>
 export type IdentityAssignmentCreationData = Omit<IdentityAssignment, 'validFrom' | 'validTo' | 'sourceEvent'>
@@ -69,6 +71,8 @@ export type MembershipCreationData = Omit<Membership, 'validFrom' | 'validTo' | 
 export type GoalCreationData = Pick<Goal, 'id' | 'person' | 'statement' | 'priority' | 'visibility'>
 export type GoalTerminalStatus = Extract<GoalStatus, 'achieved' | 'abandoned' | 'failed'>
 export type ScheduleEntryCreationData = Pick<ScheduleEntry, 'id' | 'scope' | 'person' | 'day' | 'period' | 'action' | 'place' | 'visibility'>
+export type ScheduleExecutionData = { readonly scheduleId: ScheduleEntry['id']; readonly resultEventId: import('../../domain/shared/ids').EventId }
+export type ScheduleDeviationData = { readonly scheduleId: ScheduleEntry['id']; readonly reason: string }
 export type DebtCreationData = Pick<Debt, 'id' | 'creditor' | 'debtor' | 'principal' | 'kind'>
 export type AssetCreationData = Pick<Asset, 'id' | 'kind' | 'quantity' | 'custody' | 'valuation'>
 export type AssetRightGrantData = Omit<RightGrant, 'grantedBy'>
@@ -100,6 +104,8 @@ export interface WorldDomainEventPayloadMap {
   readonly 'asset.right.granted': { readonly assetId: string; readonly rightKind: AssetRightKind; readonly grant: AssetRightGrantData }
   readonly 'asset.right.revoked': { readonly grantId: string }
   readonly 'person.exposure.recorded': { readonly exposure: PersonExposureCreationData }
+  readonly 'schedule.entry.execution.recorded': ScheduleExecutionData
+  readonly 'schedule.entry.deviation.recorded': ScheduleDeviationData
 }
 
 export type WorldDomainEventInput<Kind extends WorldDomainEventKind = WorldDomainEventKind> =
@@ -442,6 +448,16 @@ function isPersonExposurePayload(payload: JsonValue): boolean {
     && ['heard-of', 'seen', 'met', 'conversed', 'corresponded'].includes(String(exposure.kind))
 }
 
+function isScheduleExecutionPayload(payload: JsonValue): boolean {
+  return isRecord(payload) && hasExactKeys(payload, ['scheduleId', 'resultEventId'])
+    && isNonEmptyString(payload.scheduleId) && isNonEmptyString(payload.resultEventId)
+}
+
+function isScheduleDeviationPayload(payload: JsonValue): boolean {
+  return isRecord(payload) && hasExactKeys(payload, ['scheduleId', 'reason'])
+    && isNonEmptyString(payload.scheduleId) && isNonEmptyString(payload.reason)
+}
+
 const schemas: ReadonlyArray<{ readonly kind: WorldDomainEventKind; readonly validate: EventSchemaValidator }> = [
   { kind: 'world.initialized', validate: isBootstrapMetadata },
   { kind: 'person.created', validate: isPersonCreationPayload },
@@ -468,6 +484,8 @@ const schemas: ReadonlyArray<{ readonly kind: WorldDomainEventKind; readonly val
   { kind: 'asset.right.granted', validate: isAssetRightGrantPayload },
   { kind: 'asset.right.revoked', validate: isAssetRightRevocationPayload },
   { kind: 'person.exposure.recorded', validate: isPersonExposurePayload },
+  { kind: 'schedule.entry.execution.recorded', validate: isScheduleExecutionPayload },
+  { kind: 'schedule.entry.deviation.recorded', validate: isScheduleDeviationPayload },
 ]
 
 export function createWorldDomainEventRegistry(): EventRegistry<WorldDomainEventKind> {
@@ -962,6 +980,48 @@ export function createPersonExposureRecordedEventInput(
     requestWorldTime: options.requestWorldTime,
     clientRequestId: options.clientRequestId,
     payload: { exposure },
+  }
+}
+
+export function createScheduleEntryExecutionRecordedEventInput(
+  scheduleId: ScheduleEntry['id'],
+  resultEventId: import('../../domain/shared/ids').EventId,
+  options: {
+    readonly actor: string
+    readonly source: Extract<LedgerSource, 'player-command' | 'rule' | 'schedule'>
+    readonly requestWorldTime: WorldTime
+    readonly clientRequestId: string
+  },
+): WorldDomainEventInput<'schedule.entry.execution.recorded'> {
+  return {
+    source: options.source,
+    kind: 'schedule.entry.execution.recorded',
+    intentKind: 'schedule.entry.execution',
+    actor: options.actor,
+    requestWorldTime: options.requestWorldTime,
+    clientRequestId: options.clientRequestId,
+    payload: { scheduleId, resultEventId },
+  }
+}
+
+export function createScheduleEntryDeviationRecordedEventInput(
+  scheduleId: ScheduleEntry['id'],
+  reason: string,
+  options: {
+    readonly actor: string
+    readonly source: Extract<LedgerSource, 'player-command' | 'rule' | 'schedule'>
+    readonly requestWorldTime: WorldTime
+    readonly clientRequestId: string
+  },
+): WorldDomainEventInput<'schedule.entry.deviation.recorded'> {
+  return {
+    source: options.source,
+    kind: 'schedule.entry.deviation.recorded',
+    intentKind: 'schedule.entry.deviation',
+    actor: options.actor,
+    requestWorldTime: options.requestWorldTime,
+    clientRequestId: options.clientRequestId,
+    payload: { scheduleId, reason },
   }
 }
 
