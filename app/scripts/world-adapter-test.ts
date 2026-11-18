@@ -359,6 +359,47 @@ async function main(): Promise<void> {
     && finalReplay.aggregate.economy.assets.find(item => item.id === assetId)?.owner.kind === 'n/a'
     && finalReplay.aggregate.society.exposures.length === 1)
 
+  const concurrentBase = (await adapter.queries.read(worldId))!
+  const concurrentGoalA = brandedId<'GoalId'>('goal:adapter:concurrent-a')
+  const concurrentGoalB = brandedId<'GoalId'>('goal:adapter:concurrent-b')
+  const concurrentInputA = toLedgerEventInput(createGoalCreatedEventInput({
+    id: concurrentGoalA,
+    person: actor.id,
+    statement: '并发命令甲',
+    priority: 1,
+    visibility: { observer: 'player', level: 'private' },
+  }, {
+    actor: 'system', source: 'rule', requestWorldTime: nextEvening, clientRequestId: 'adapter-concurrent-a',
+  }))
+  const concurrentInputB = toLedgerEventInput(createGoalCreatedEventInput({
+    id: concurrentGoalB,
+    person: actor.id,
+    statement: '并发命令乙',
+    priority: 1,
+    visibility: { observer: 'player', level: 'private' },
+  }, {
+    actor: 'system', source: 'rule', requestWorldTime: nextEvening, clientRequestId: 'adapter-concurrent-b',
+  }))
+  const concurrentReceipts = await Promise.all([concurrentInputA, concurrentInputB].map(input =>
+    adapter.commands.submit({
+      worldId,
+      clientRequestId: input.clientRequestId,
+      actor: input.actor,
+      source: input.source,
+      intentKind: input.intentKind,
+      requestedAt: input.requestWorldTime,
+      expectedHead: concurrentBase.streamHead,
+      payload: input.payload,
+    }),
+  ))
+  const concurrentAfter = (await adapter.queries.read(worldId))!
+  check('concurrent commands sharing one expected head serialize without losing a committed event',
+    concurrentReceipts.filter(receipt => receipt.status === 'committed').length === 1
+    && concurrentReceipts.filter(receipt => receipt.status === 'conflict').length === 1
+    && concurrentAfter.streamHead.seq === concurrentBase.streamHead.seq + 1
+    && [concurrentGoalA, concurrentGoalB].filter(id =>
+      concurrentAfter.planning.goals.some(goal => goal.id === id)).length === 1)
+
   unsubscribe()
   if (failed > 0) throw new Error(`In-memory world adapter tests failed: ${failed}/${passed + failed}`)
   console.log(`In-memory world adapter tests: ${passed}/${passed + failed} passed`)
