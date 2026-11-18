@@ -228,6 +228,44 @@ check('fixed historical name is accepted only when it matches the world allow-li
   aggregate.persons.some(item => item.id === historicalMinisterId)
   && aggregate.personOrigins.some(item => item.person === historicalMinisterId && item.origin.kind === 'historical-minister'))
 
+const unlistedPerson: PersonCreationData = {
+  ...historicalPerson,
+  id: brandedId<'PersonId'>('person:historical:unlisted-002'),
+  displayName: '未列入名臣',
+  capability: brandedId<'CapabilityRef'>('cap:historical:unlisted-002'),
+  stateDomains: {
+    ...historicalPerson.stateDomains,
+    body: brandedId<'BodyScopeRef'>('body:historical:unlisted-002'),
+    mind: brandedId<'MindScopeRef'>('mind:historical:unlisted-002'),
+    knowledge: brandedId<'KnowledgeScopeId'>('knowledge:historical:unlisted-002'),
+    scheduleScope: brandedId<'ScheduleScopeId'>('schedule:historical:unlisted-002'),
+    economy: brandedId<'EconomyScopeId'>('economy:historical:unlisted-002'),
+    location: brandedId<'LocationStateRef'>('location:historical:unlisted-002'),
+  },
+  history: brandedId<'LifeHistoryRef'>('history:historical:unlisted-002'),
+}
+const unlistedInput = createPersonCreatedEventInput(unlistedPerson, {
+  kind: 'historical-minister',
+  category: 'famous-minister',
+  evidenceRefs: ['source:unlisted:fake'],
+  validFrom: now,
+  validThrough: null,
+  scope: { kind: 'world' },
+}, {
+  actor: 'system',
+  source: 'rule',
+  requestWorldTime: now,
+  clientRequestId: 'historical-minister-unlisted-002',
+})
+const unlistedAppend = appendLedgerEvent(ledger, toLedgerEventInput(unlistedInput), now)
+if (unlistedAppend.status === 'appended') {
+  expectThrow('historical minister not in bootstrap allow-list is rejected',
+    () => reduceWorldDomainEvent(aggregate, unlistedAppend.event, registry),
+    'historical-person-not-allowlisted')
+} else {
+  check('unlisted historical minister event was appended for rejection test', false)
+}
+
 const finalValidation = validateWorldAggregate(aggregate, ledger)
 check('replayed world aggregate validates against the complete ledger', finalValidation.status === 'valid')
 
