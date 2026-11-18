@@ -262,14 +262,19 @@ export function validateWorldAggregate(
         addIssue(issues, 'person', 'person-historical-origin-location-mismatch', person.id)
       }
       const allowListEntry = aggregate.bootstrap?.historicalNameAllowList.find(item => item.personId === person.id)
-      const sameScope = allowListEntry?.scope.kind === origin.scope.kind
+      const sameScope = !!allowListEntry
+        && allowListEntry.scope.kind === origin.scope.kind
         && (origin.scope.kind === 'world'
           || (allowListEntry.scope.kind === 'location'
             && allowListEntry.scope.locationCode === origin.scope.locationCode))
       const sameValidity = !!allowListEntry
+        && isValidWorldTime(allowListEntry.validFrom)
+        && isValidWorldTime(origin.validFrom)
         && compareWorldTime(allowListEntry.validFrom, origin.validFrom) === 0
         && ((allowListEntry.validThrough === null && origin.validThrough === null)
           || (!!allowListEntry.validThrough && !!origin.validThrough
+            && isValidWorldTime(allowListEntry.validThrough)
+            && isValidWorldTime(origin.validThrough)
             && compareWorldTime(allowListEntry.validThrough, origin.validThrough) === 0))
       const sameEvidence = !!allowListEntry
         && allowListEntry.evidenceRefs.length === origin.evidenceRefs.length
