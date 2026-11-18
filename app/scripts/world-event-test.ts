@@ -191,6 +191,32 @@ const malformedPayload = validateWorldDomainEventPayload(registry, 'person.creat
   person: { id: 'incomplete' },
 })
 check('event registry rejects incomplete person creation payload', malformedPayload.status === 'payload-invalid')
+const fakeLocalOfficialOrigin = validateWorldDomainEventPayload(registry, 'person.created', {
+  person,
+  origin: {
+    kind: 'historical-minister',
+    category: 'local-official',
+    evidenceRefs: ['unverified-local-name'],
+    validFrom: now,
+    validThrough: null,
+    scope: { kind: 'world' },
+  },
+} as never)
+check('event registry rejects fixed-name local officials outside the minister exception',
+  fakeLocalOfficialOrigin.status === 'payload-invalid')
+const storedOrigin = aggregate.personOrigins[0]
+if (!storedOrigin || storedOrigin.origin.kind !== 'seeded-random') throw new Error('test-person-origin-missing')
+const mismatchedSeedAggregate = {
+  ...aggregate,
+  personOrigins: [{
+    ...storedOrigin,
+    origin: { ...storedOrigin.origin, seedFingerprint: 'ffffffff' },
+  }],
+}
+const mismatchedSeedResult = validateWorldAggregate(mismatchedSeedAggregate, ledger)
+check('aggregate rejects generated people whose provenance seed differs from world seed',
+  mismatchedSeedResult.status === 'rejected'
+  && mismatchedSeedResult.issues.some(issue => issue.code === 'person-random-origin-seed-mismatch'))
 
 const duplicateInit = createWorldInitializationEventInput(descriptor, 'world-init-duplicate')
 const duplicateAppend = appendLedgerEvent(ledger, toLedgerEventInput(duplicateInit), now)
