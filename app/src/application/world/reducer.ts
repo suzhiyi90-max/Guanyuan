@@ -19,6 +19,8 @@ import {
   validateAuthorization,
 } from '../../domain/identity/validation'
 import type { Organization, Relation, RelationClaim, RelationEvidence, Membership } from '../../domain/relations/model'
+import type { PersonExposure } from '../../domain/relations/exposure'
+import { validatePersonExposure } from '../../domain/relations/exposure'
 import type { FailureKind, KnowledgeEntry, Message, MessagePropagation } from '../../domain/cognition/model'
 import { validateOrganization, validateRelation, validateRelationClaim, validateRelationEvidence, validateMembership } from '../../domain/relations/validation'
 import { validateKnowledgeEntry, validateMessage, validateMessagePropagation } from '../../domain/cognition/validation'
@@ -52,6 +54,7 @@ import {
   type DebtCreationData,
   type AssetCreationData,
   type AssetRightGrantData,
+  type PersonExposureCreationData,
 } from './event-catalog'
 
 function assertNextEvent(
@@ -979,6 +982,37 @@ function applyAssetRightRevoked(
   })
 }
 
+function applyPersonExposureRecorded(
+  aggregate: WorldAggregate,
+  event: LedgerEvent<WorldDomainEventKind>,
+): WorldAggregate {
+  requireBootstrap(aggregate)
+  const payload = event.payload as unknown as WorldDomainEventPayloadMap['person.exposure.recorded']
+  const data: PersonExposureCreationData = payload.exposure
+  if (aggregate.society.exposures.some(item => item.id === data.id)) {
+    throw new Error('world-reducer-person-exposure-duplicate')
+  }
+  const exposure: PersonExposure = Object.freeze({
+    ...data,
+    sourceEvent: event.id,
+    occurredAt: Object.freeze({ ...event.committedAt }),
+  })
+  const issues = validatePersonExposure(exposure, {
+    persons: aggregate.persons.map(item => item.id),
+    events: [event.id],
+    eventTimes: new Map([[event.id, event.committedAt]]),
+  })
+  if (issues.length > 0) throw new Error(`world-reducer-person-exposure-invalid:${issues.join(',')}`)
+  return Object.freeze({
+    ...aggregate,
+    ...withEventCursor(aggregate, event),
+    society: Object.freeze({
+      ...aggregate.society,
+      exposures: Object.freeze([...aggregate.society.exposures, exposure]),
+    }),
+  })
+}
+
 /** Apply one schema-validated event to the read-only world projection. */
 export function reduceWorldDomainEvent(
   aggregate: WorldAggregate,
@@ -1041,6 +1075,8 @@ export function reduceWorldDomainEvent(
       return applyAssetRightGranted(aggregate, event, context)
     case 'asset.right.revoked':
       return applyAssetRightRevoked(aggregate, event, context)
+    case 'person.exposure.recorded':
+      return applyPersonExposureRecorded(aggregate, event)
     default: {
       const unreachable: never = event.kind
       throw new Error(`world-reducer-unhandled-event:${String(unreachable)}`)
