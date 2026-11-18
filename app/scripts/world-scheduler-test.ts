@@ -155,7 +155,7 @@ async function main(): Promise<void> {
   })
   check('LOD resolver can defer a local schedule without advancing or writing facts',
     deferredLod.status === 'unchanged'
-    && adapter.readLedger().head === planReceipt.streamHead.seq)
+    && adapter.readLedger().head === clockReceipt.streamHead.seq)
 
   const first = await scheduler.advance({
     worldId,
