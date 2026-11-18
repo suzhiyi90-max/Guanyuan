@@ -29,6 +29,7 @@ import { compareWorldTime, isValidWorldTime } from '../../domain/shared/world-ti
 
 export type WorldDomainEventKind =
   | 'world.initialized'
+  | 'world.time.advanced'
   | 'person.created'
   | 'organization.registered'
   | 'identity.assignment.added'
@@ -80,6 +81,7 @@ export type PersonExposureCreationData = Pick<PersonExposure, 'id' | 'observer' 
 
 export interface WorldDomainEventPayloadMap {
   readonly 'world.initialized': WorldBootstrapMetadata
+  readonly 'world.time.advanced': { readonly from: WorldTime; readonly to: WorldTime }
   readonly 'person.created': { readonly person: PersonCreationData; readonly origin: PersonOrigin }
   readonly 'organization.registered': { readonly organization: Organization }
   readonly 'identity.assignment.added': { readonly assignment: IdentityAssignmentCreationData }
@@ -448,6 +450,12 @@ function isPersonExposurePayload(payload: JsonValue): boolean {
     && ['heard-of', 'seen', 'met', 'conversed', 'corresponded'].includes(String(exposure.kind))
 }
 
+function isWorldTimeAdvancedPayload(payload: JsonValue): boolean {
+  if (!isRecord(payload) || !hasExactKeys(payload, ['from', 'to'])
+    || !isWorldTimeValue(payload.from) || !isWorldTimeValue(payload.to)) return false
+  return compareWorldTime(payload.to as unknown as WorldTime, payload.from as unknown as WorldTime) > 0
+}
+
 function isScheduleExecutionPayload(payload: JsonValue): boolean {
   return isRecord(payload) && hasExactKeys(payload, ['scheduleId', 'resultEventId'])
     && isNonEmptyString(payload.scheduleId) && isNonEmptyString(payload.resultEventId)
@@ -460,6 +468,7 @@ function isScheduleDeviationPayload(payload: JsonValue): boolean {
 
 const schemas: ReadonlyArray<{ readonly kind: WorldDomainEventKind; readonly validate: EventSchemaValidator }> = [
   { kind: 'world.initialized', validate: isBootstrapMetadata },
+  { kind: 'world.time.advanced', validate: isWorldTimeAdvancedPayload },
   { kind: 'person.created', validate: isPersonCreationPayload },
   { kind: 'organization.registered', validate: isOrganizationPayload },
   { kind: 'identity.assignment.added', validate: isIdentityAssignmentPayload },
@@ -980,6 +989,26 @@ export function createPersonExposureRecordedEventInput(
     requestWorldTime: options.requestWorldTime,
     clientRequestId: options.clientRequestId,
     payload: { exposure },
+  }
+}
+
+export function createWorldTimeAdvancedEventInput(
+  from: WorldTime,
+  to: WorldTime,
+  options: {
+    readonly actor: string
+    readonly requestWorldTime: WorldTime
+    readonly clientRequestId: string
+  },
+): WorldDomainEventInput<'world.time.advanced'> {
+  return {
+    source: 'rule',
+    kind: 'world.time.advanced',
+    intentKind: 'world.time.advance',
+    actor: options.actor,
+    requestWorldTime: options.requestWorldTime,
+    clientRequestId: options.clientRequestId,
+    payload: { from, to },
   }
 }
 
