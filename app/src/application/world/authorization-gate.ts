@@ -100,3 +100,84 @@ export function createAuthorizationGatedWorldCommandPort(
     },
   })
 }
+
+
+export interface WorldCommandAuthorizationPolicyRule {
+  readonly intentKind: string
+  readonly permission: string
+  readonly scope: AuthorizationRequest['scope']
+}
+
+export interface WorldCommandAuthorizationPolicy {
+  readonly schemaVersion: 'w6-command-authorization/1'
+  readonly policyId: string
+  readonly revision: string
+  readonly rules: readonly WorldCommandAuthorizationPolicyRule[]
+}
+
+function validAuthorizationScope(scope: AuthorizationRequest['scope']): boolean {
+  if (!scope || typeof scope !== 'object') return false
+  switch (scope.kind) {
+    case 'world':
+      return true
+    case 'institution':
+      return typeof scope.institution === 'string' && scope.institution.trim().length > 0
+    case 'office':
+      return typeof scope.office === 'string' && scope.office.trim().length > 0
+    case 'person':
+      return typeof scope.person === 'string' && scope.person.trim().length > 0
+    default:
+      return false
+  }
+}
+
+/** Exact, versioned command-intent mapping. No wildcard, rank, title or payload fallback exists. */
+export function validateWorldCommandAuthorizationPolicy(
+  policy: WorldCommandAuthorizationPolicy,
+): readonly string[] {
+  const issues: string[] = []
+  if (!policy || policy.schemaVersion !== 'w6-command-authorization/1') issues.push('authorization-policy-schema-unsupported')
+  if (typeof policy?.policyId !== 'string' || !policy.policyId.trim()) issues.push('authorization-policy-id-invalid')
+  if (typeof policy?.revision !== 'string' || !policy.revision.trim()) issues.push('authorization-policy-revision-invalid')
+  if (!Array.isArray(policy?.rules)) issues.push('authorization-policy-rules-invalid')
+  const intents = new Set<string>()
+  for (const rule of Array.isArray(policy?.rules) ? policy.rules : []) {
+    if (!rule || typeof rule.intentKind !== 'string' || !rule.intentKind.trim()) {
+      issues.push('authorization-policy-intent-invalid')
+      continue
+    }
+    if (intents.has(rule.intentKind)) issues.push('authorization-policy-intent-duplicate')
+    intents.add(rule.intentKind)
+    if (typeof rule.permission !== 'string' || !rule.permission.trim()) {
+      issues.push('authorization-policy-permission-invalid')
+    }
+    if (!validAuthorizationScope(rule.scope)) issues.push('authorization-policy-scope-invalid')
+  }
+  return Object.freeze([...new Set(issues)].sort())
+}
+
+/**
+ * Builds the requirement adapter consumed by the player command gate.
+ * The policy is trusted application configuration; an unmapped intent returns
+ * null and is denied by the gate. Scope is fixed by the exact rule, never read
+ * from untrusted request payload fields.
+ */
+export function createWorldCommandAuthorizationRequirementResolver(
+  policy: WorldCommandAuthorizationPolicy,
+): WorldCommandAuthorizationRequirementPort {
+  const issues = validateWorldCommandAuthorizationPolicy(policy)
+  if (issues.length > 0) {
+    throw new Error(`world-command-authorization-policy-invalid:${issues.join(',')}`)
+  }
+  const rules = new Map(policy.rules.map(rule => [rule.intentKind, rule] as const))
+  return Object.freeze({
+    resolve(request: WorldCommandRequest): WorldCommandAuthorizationRequirement | null {
+      const rule = rules.get(request.intentKind)
+      if (!rule) return null
+      return Object.freeze({
+        permission: rule.permission,
+        scope: Object.freeze({ ...rule.scope }),
+      })
+    },
+  })
+}
