@@ -428,6 +428,19 @@ export function validateWorldAggregate(
   addCodes(issues, 'planning', validateScheduleSet(
     aggregate.planning.scheduleScopes, aggregate.planning.scheduleEntries, aggregate.persons, eventIds,
   ))
+  for (const entry of aggregate.planning.scheduleEntries) {
+    if (entry.execution.kind === 'value' && entry.deviation.kind === 'value') {
+      addIssue(issues, 'planning', 'schedule-execution-and-deviation-both-set', entry.id)
+    }
+    if (entry.execution.kind === 'value') {
+      const resultTime = eventTimes.get(entry.execution.value)
+      const plannedAt: WorldTime = { day: entry.day, period: entry.period }
+      if (resultTime && isValidWorldTime(resultTime)
+        && compareWorldTime(resultTime, plannedAt) < 0) {
+        addIssue(issues, 'planning', 'schedule-execution-before-planned-time', entry.id)
+      }
+    }
+  }
   addCodes(issues, 'planning', validateGoalStatusHistory(
     aggregate.planning.goals,
     aggregate.planning.goalStatusTransitions,
