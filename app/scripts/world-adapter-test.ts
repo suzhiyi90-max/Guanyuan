@@ -3,14 +3,24 @@ import {
   field,
   type StreamCursor,
   type WorldId,
+  type WorldTime,
+  type JsonValue,
 } from '../src/domain'
 import {
   createInMemoryWorldAdapter,
   createPersonCreatedEventInput,
   initializeWorldThroughPorts,
   toLedgerEventInput,
+  createGoalCreatedEventInput,
+  createGoalStatusChangedEventInput,
+  createScheduleEntryPlannedEventInput,
+  createDebtRecordedEventInput,
+  createDebtSettledEventInput,
+  createAssetRegisteredEventInput,
+  createAssetRightGrantedEventInput,
+  createAssetRightRevokedEventInput,
 } from '../src/application'
-import type { PersonCreationData, WorldBootstrapRequest } from '../src/application'
+import type { PersonCreationData, WorldBootstrapRequest, WorldCommandRequest } from '../src/application'
 
 let passed = 0
 let failed = 0
@@ -149,6 +159,161 @@ async function main(): Promise<void> {
     rebuilt.status === 'valid'
     && rebuilt.aggregate.persons.length === 3
     && rebuilt.aggregate.streamHead.seq === 4)
+
+  async function submitInput(input: {
+    readonly source: WorldCommandRequest['source']
+    readonly clientRequestId: string
+    readonly actor: string
+    readonly intentKind: string
+    readonly requestWorldTime: WorldTime
+    readonly payload: JsonValue
+  }) {
+    const current = await adapter.queries.read(worldId)
+    if (!current) throw new Error('adapter-world-query-missing')
+    return adapter.commands.submit({
+      worldId,
+      clientRequestId: input.clientRequestId,
+      actor: input.actor,
+      source: input.source,
+      intentKind: input.intentKind,
+      requestedAt: input.requestWorldTime,
+      expectedHead: current.streamHead,
+      payload: input.payload,
+    })
+  }
+
+  const people = (await adapter.queries.read(worldId))!.persons
+  const actor = people[0]!
+  const counterpart = people[1]!
+  const goalId = brandedId<'GoalId'>('goal:adapter:independent-life')
+  const goalEvent = toLedgerEventInput(createGoalCreatedEventInput({
+    id: goalId,
+    person: actor.id,
+    statement: '积累足以安家的资财',
+    priority: 2,
+    visibility: { observer: 'player', level: 'private' },
+  }, {
+    actor: 'system', source: 'rule', requestWorldTime: worldTime, clientRequestId: 'adapter-goal-create',
+  }))
+  const goalReceipt = await submitInput({
+    source: 'rule', clientRequestId: goalEvent.clientRequestId, actor: goalEvent.actor,
+    intentKind: goalEvent.intentKind, requestWorldTime: goalEvent.requestWorldTime,
+    payload: goalEvent.payload,
+  })
+  const goalStatusEvent = toLedgerEventInput(createGoalStatusChangedEventInput(goalId, 'achieved', {
+    actor: 'system', source: 'rule', requestWorldTime: worldTime, clientRequestId: 'adapter-goal-achieve',
+  }))
+  const goalStatusReceipt = await submitInput({
+    source: 'rule', clientRequestId: goalStatusEvent.clientRequestId, actor: goalStatusEvent.actor,
+    intentKind: goalStatusEvent.intentKind, requestWorldTime: goalStatusEvent.requestWorldTime,
+    payload: goalStatusEvent.payload,
+  })
+
+  const scheduleEvent = toLedgerEventInput(createScheduleEntryPlannedEventInput({
+    id: brandedId<'ScheduleId'>('schedule:adapter:work-afternoon'),
+    scope: actor.stateDomains.scheduleScope,
+    person: actor.id,
+    day: 1,
+    period: '午',
+    action: brandedId<'ActionRef'>('action:adapter:work'),
+    place: brandedId<'PlaceId'>('place:adapter:county-office'),
+    visibility: { observer: 'player', level: 'private' },
+  }, {
+    actor: 'system', source: 'schedule', requestWorldTime: worldTime, clientRequestId: 'adapter-schedule-plan',
+  }))
+  const scheduleReceipt = await submitInput({
+    source: 'schedule', clientRequestId: scheduleEvent.clientRequestId, actor: scheduleEvent.actor,
+    intentKind: scheduleEvent.intentKind, requestWorldTime: scheduleEvent.requestWorldTime,
+    payload: scheduleEvent.payload,
+  })
+
+  const debtId = brandedId<'DebtId'>('debt:adapter:personal-loan')
+  const debtEvent = toLedgerEventInput(createDebtRecordedEventInput({
+    id: debtId,
+    creditor: actor.id,
+    debtor: counterpart.id,
+    principal: 20,
+    kind: 'personal-loan',
+  }, {
+    actor: 'system', source: 'rule', requestWorldTime: worldTime, clientRequestId: 'adapter-debt-record',
+  }))
+  const debtReceipt = await submitInput({
+    source: 'rule', clientRequestId: debtEvent.clientRequestId, actor: debtEvent.actor,
+    intentKind: debtEvent.intentKind, requestWorldTime: debtEvent.requestWorldTime,
+    payload: debtEvent.payload,
+  })
+  const debtSettleEvent = toLedgerEventInput(createDebtSettledEventInput(debtId, {
+    actor: 'system', source: 'rule', requestWorldTime: worldTime, clientRequestId: 'adapter-debt-settle',
+  }))
+  const debtSettleReceipt = await submitInput({
+    source: 'rule', clientRequestId: debtSettleEvent.clientRequestId, actor: debtSettleEvent.actor,
+    intentKind: debtSettleEvent.intentKind, requestWorldTime: debtSettleEvent.requestWorldTime,
+    payload: debtSettleEvent.payload,
+  })
+
+  const assetId = brandedId<'AssetId'>('asset:adapter:small-field')
+  const assetEvent = toLedgerEventInput(createAssetRegisteredEventInput({
+    id: assetId,
+    kind: '田地',
+    quantity: 1,
+    custody: field.value(actor.id),
+    valuation: field.value(100),
+  }, {
+    actor: 'system', source: 'rule', requestWorldTime: worldTime, clientRequestId: 'adapter-asset-register',
+  }))
+  const assetReceipt = await submitInput({
+    source: 'rule', clientRequestId: assetEvent.clientRequestId, actor: assetEvent.actor,
+    intentKind: assetEvent.intentKind, requestWorldTime: assetEvent.requestWorldTime,
+    payload: assetEvent.payload,
+  })
+  const grantId = brandedId<'RightGrantId'>('right:adapter:asset-owner')
+  const grantEvent = toLedgerEventInput(createAssetRightGrantedEventInput(assetId, 'ownership', {
+    id: grantId,
+    holder: actor.id,
+    scope: 'asset:adapter:small-field',
+    revocable: true,
+    transferable: true,
+    expires: field.notApplicable,
+  }, {
+    actor: 'system', source: 'rule', requestWorldTime: worldTime, clientRequestId: 'adapter-asset-right-grant',
+  }))
+  const grantReceipt = await submitInput({
+    source: 'rule', clientRequestId: grantEvent.clientRequestId, actor: grantEvent.actor,
+    intentKind: grantEvent.intentKind, requestWorldTime: grantEvent.requestWorldTime,
+    payload: grantEvent.payload,
+  })
+  const revokeEvent = toLedgerEventInput(createAssetRightRevokedEventInput(grantId, {
+    actor: 'system', source: 'rule', requestWorldTime: worldTime, clientRequestId: 'adapter-asset-right-revoke',
+  }))
+  const revokeReceipt = await submitInput({
+    source: 'rule', clientRequestId: revokeEvent.clientRequestId, actor: revokeEvent.actor,
+    intentKind: revokeEvent.intentKind, requestWorldTime: revokeEvent.requestWorldTime,
+    payload: revokeEvent.payload,
+  })
+
+  const fullyUpdated = await adapter.queries.read(worldId)
+  check('adapter command map executes goal, schedule, debt and asset-right intents through replay',
+    [goalReceipt, goalStatusReceipt, scheduleReceipt, debtReceipt, debtSettleReceipt, assetReceipt, grantReceipt, revokeReceipt]
+      .every(receipt => receipt.status === 'committed')
+    && fullyUpdated?.planning.goals.find(item => item.id === goalId)?.status === 'achieved'
+    && fullyUpdated.planning.scheduleEntries.length === 1
+    && fullyUpdated.economy.debts.find(item => item.id === debtId)?.status === 'settled'
+    && fullyUpdated.economy.assets.find(item => item.id === assetId)?.rights.ownership.length === 1
+    && fullyUpdated.economy.assets.find(item => item.id === assetId)?.owner.kind === 'n/a')
+  check('adapter publishes every newly committed command to subscribers',
+    notifications === 12
+    && adapter.readLedger().head === 12)
+
+  const finalReplay = await adapter.projector.rebuild({
+    ledger: adapter.readLedger(),
+    target: (await adapter.queries.read(worldId))!.streamHead,
+  })
+  check('new planning and economy commands survive an independent full replay',
+    finalReplay.status === 'valid'
+    && finalReplay.aggregate.planning.goals.find(item => item.id === goalId)?.status === 'achieved'
+    && finalReplay.aggregate.planning.scheduleEntries.length === 1
+    && finalReplay.aggregate.economy.debts.find(item => item.id === debtId)?.status === 'settled'
+    && finalReplay.aggregate.economy.assets.find(item => item.id === assetId)?.owner.kind === 'n/a')
 
   unsubscribe()
   if (failed > 0) throw new Error(`In-memory world adapter tests failed: ${failed}/${passed + failed}`)
