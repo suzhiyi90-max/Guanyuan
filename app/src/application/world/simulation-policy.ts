@@ -143,3 +143,61 @@ export function resolveWorldSimulationPolicies(
     decisions: Object.freeze(decisions),
   })
 }
+
+
+import type { WorldAggregate } from '../../domain/world/aggregate'
+import type { WorldSimulationRequest } from './ports'
+import type { WorldSimulationTask, WorldSimulationTaskSourcePort } from './scheduler'
+
+export interface WorldSimulationPolicyLevelResolverPort {
+  /** L0–L3 classification is supplied by an explicit rules/domain adapter; no level is inferred here. */
+  resolve(input: {
+    readonly task: WorldSimulationTask
+    readonly request: WorldSimulationRequest
+    readonly aggregate: WorldAggregate
+  }): WorldSimulationPolicyLevel | string
+}
+
+/**
+ * Applies validated policy decisions to an existing deterministic task source.
+ * It preserves task identity and payload, applies the declared rule priority,
+ * defers tasks outside the declared LOD set, and fails closed on rejected input.
+ */
+export function createPolicyGatedWorldSimulationTaskSource(
+  source: WorldSimulationTaskSourcePort,
+  ruleset: WorldSimulationRuleset,
+  levels: WorldSimulationPolicyLevelResolverPort,
+): WorldSimulationTaskSourcePort {
+  return Object.freeze({
+    async listDueTasks(request: WorldSimulationRequest, aggregate: WorldAggregate) {
+      if (request.maxEvents > ruleset.maxEvents) {
+        throw new Error('world-simulation-policy-event-budget-exceeded')
+      }
+      const tasks = await source.listDueTasks(request, aggregate)
+      if (!Array.isArray(tasks)) throw new Error('world-simulation-policy-task-source-invalid')
+      const candidates = tasks.map(task => ({
+        candidateId: task.taskId,
+        level: levels.resolve({ task, request, aggregate }),
+        source: task.source,
+        intentKind: task.intentKind,
+        lod: request.lod,
+        payload: task.payload,
+      }))
+      const resolution = resolveWorldSimulationPolicies(ruleset, candidates)
+      if (resolution.status !== 'valid') {
+        throw new Error('world-simulation-policy-ruleset-invalid')
+      }
+      const decisions = new Map(resolution.decisions.map(decision => [decision.candidateId, decision]))
+      const accepted: WorldSimulationTask[] = []
+      for (const task of tasks) {
+        const decision = decisions.get(task.taskId)
+        if (!decision || decision.status === 'rejected') {
+          throw new Error('world-simulation-policy-candidate-rejected')
+        }
+        if (decision.status === 'deferred') continue
+        accepted.push(Object.freeze({ ...task, priority: decision.priority }))
+      }
+      return Object.freeze(accepted)
+    },
+  })
+}
