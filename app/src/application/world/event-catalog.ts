@@ -10,6 +10,8 @@ import type { PersonOrigin } from '../../domain/person/provenance'
 import type { IdentityAssignment, Authorization } from '../../domain/identity/model'
 import type { Organization, Relation, RelationClaim, RelationEvidence, Membership, RelationLifecycleStatus } from '../../domain/relations/model'
 import type { EntityRef, FailureKind, KnowledgeEntry, Message, MessagePropagation } from '../../domain/cognition/model'
+import type { Goal, ScheduleEntry, GoalStatus } from '../../domain/planning/model'
+import type { Debt } from '../../domain/economy/model'
 import type { WorldBootstrapMetadata } from '../../domain/world/metadata'
 import type { WorldBootstrapDescriptor } from './bootstrap'
 import {
@@ -41,6 +43,11 @@ export type WorldDomainEventKind =
   | 'organization.membership.added'
   | 'organization.membership.ended'
   | 'relation.lifecycle.changed'
+  | 'goal.created'
+  | 'goal.status.changed'
+  | 'schedule.entry.planned'
+  | 'debt.recorded'
+  | 'debt.settled'
 
 export type PersonCreationData = Omit<Person, 'lifeState' | 'archiveState' | 'death'>
 export type IdentityAssignmentCreationData = Omit<IdentityAssignment, 'validFrom' | 'validTo' | 'sourceEvent'>
@@ -54,6 +61,10 @@ export type MessageCreationData = Pick<Message, 'id' | 'sender' | 'recipient' | 
 export type MessageStage = 'delivered' | 'read' | 'understood' | 'replied'
 export type MessagePropagationCreationData = Omit<MessagePropagation, 'propagatedAt'>
 export type MembershipCreationData = Omit<Membership, 'validFrom' | 'validTo' | 'sourceEvent'>
+export type GoalCreationData = Pick<Goal, 'id' | 'person' | 'statement' | 'priority' | 'visibility'>
+export type GoalTerminalStatus = Extract<GoalStatus, 'achieved' | 'abandoned' | 'failed'>
+export type ScheduleEntryCreationData = Pick<ScheduleEntry, 'id' | 'scope' | 'person' | 'day' | 'period' | 'action' | 'place' | 'visibility'>
+export type DebtCreationData = Pick<Debt, 'id' | 'creditor' | 'debtor' | 'principal' | 'kind'>
 
 export interface WorldDomainEventPayloadMap {
   readonly 'world.initialized': WorldBootstrapMetadata
@@ -72,6 +83,11 @@ export interface WorldDomainEventPayloadMap {
   readonly 'organization.membership.added': { readonly membership: MembershipCreationData }
   readonly 'organization.membership.ended': { readonly membershipId: string }
   readonly 'relation.lifecycle.changed': { readonly relationId: string; readonly status: RelationLifecycleStatus }
+  readonly 'goal.created': { readonly goal: GoalCreationData }
+  readonly 'goal.status.changed': { readonly goalId: string; readonly status: GoalTerminalStatus }
+  readonly 'schedule.entry.planned': { readonly entry: ScheduleEntryCreationData }
+  readonly 'debt.recorded': { readonly debt: DebtCreationData }
+  readonly 'debt.settled': { readonly debtId: string }
 }
 
 export type WorldDomainEventInput<Kind extends WorldDomainEventKind = WorldDomainEventKind> =
@@ -341,6 +357,43 @@ function isRelationLifecyclePayload(payload: JsonValue): boolean {
     && ['active', 'dormant', 'severed'].includes(String(payload.status))
 }
 
+function isGoalPayload(payload: JsonValue): boolean {
+  if (!isRecord(payload) || !hasExactKeys(payload, ['goal']) || !isRecord(payload.goal)) return false
+  const goal = payload.goal
+  return hasExactKeys(goal, ['id', 'person', 'statement', 'priority', 'visibility'])
+    && [goal.id, goal.person, goal.statement].every(isNonEmptyString)
+    && typeof goal.priority === 'number' && Number.isFinite(goal.priority) && goal.priority >= 0
+    && isVisibility(goal.visibility)
+}
+
+function isGoalStatusPayload(payload: JsonValue): boolean {
+  return isRecord(payload) && hasExactKeys(payload, ['goalId', 'status'])
+    && isNonEmptyString(payload.goalId)
+    && ['achieved', 'abandoned', 'failed'].includes(String(payload.status))
+}
+
+function isScheduleEntryPayload(payload: JsonValue): boolean {
+  if (!isRecord(payload) || !hasExactKeys(payload, ['entry']) || !isRecord(payload.entry)) return false
+  const entry = payload.entry
+  return hasExactKeys(entry, ['id', 'scope', 'person', 'day', 'period', 'action', 'place', 'visibility'])
+    && [entry.id, entry.scope, entry.person, entry.action, entry.place].every(isNonEmptyString)
+    && Number.isInteger(entry.day) && Number(entry.day) >= 1
+    && ['晨', '午', '暮', '夜'].includes(String(entry.period))
+    && isVisibility(entry.visibility)
+}
+
+function isDebtPayload(payload: JsonValue): boolean {
+  if (!isRecord(payload) || !hasExactKeys(payload, ['debt']) || !isRecord(payload.debt)) return false
+  const debt = payload.debt
+  return hasExactKeys(debt, ['id', 'creditor', 'debtor', 'principal', 'kind'])
+    && [debt.id, debt.creditor, debt.debtor, debt.kind].every(isNonEmptyString)
+    && typeof debt.principal === 'number' && Number.isFinite(debt.principal) && debt.principal > 0
+}
+
+function isDebtSettlementPayload(payload: JsonValue): boolean {
+  return isRecord(payload) && hasExactKeys(payload, ['debtId']) && isNonEmptyString(payload.debtId)
+}
+
 const schemas: ReadonlyArray<{ readonly kind: WorldDomainEventKind; readonly validate: EventSchemaValidator }> = [
   { kind: 'world.initialized', validate: isBootstrapMetadata },
   { kind: 'person.created', validate: isPersonCreationPayload },
@@ -358,6 +411,11 @@ const schemas: ReadonlyArray<{ readonly kind: WorldDomainEventKind; readonly val
   { kind: 'organization.membership.added', validate: isMembershipPayload },
   { kind: 'organization.membership.ended', validate: isMembershipEndPayload },
   { kind: 'relation.lifecycle.changed', validate: isRelationLifecyclePayload },
+  { kind: 'goal.created', validate: isGoalPayload },
+  { kind: 'goal.status.changed', validate: isGoalStatusPayload },
+  { kind: 'schedule.entry.planned', validate: isScheduleEntryPayload },
+  { kind: 'debt.recorded', validate: isDebtPayload },
+  { kind: 'debt.settled', validate: isDebtSettlementPayload },
 ]
 
 export function createWorldDomainEventRegistry(): EventRegistry<WorldDomainEventKind> {
@@ -669,6 +727,107 @@ export function createRelationLifecycleChangedEventInput(
     requestWorldTime: options.requestWorldTime,
     clientRequestId: options.clientRequestId,
     payload: { relationId, status },
+  }
+}
+
+export function createGoalCreatedEventInput(
+  goal: GoalCreationData,
+  options: {
+    readonly actor: string
+    readonly source: Extract<LedgerSource, 'player-command' | 'rule'>
+    readonly requestWorldTime: WorldTime
+    readonly clientRequestId: string
+  },
+): WorldDomainEventInput<'goal.created'> {
+  return {
+    source: options.source,
+    kind: 'goal.created',
+    intentKind: 'goal.create',
+    actor: options.actor,
+    requestWorldTime: options.requestWorldTime,
+    clientRequestId: options.clientRequestId,
+    payload: { goal },
+  }
+}
+
+export function createGoalStatusChangedEventInput(
+  goalId: string,
+  status: GoalTerminalStatus,
+  options: {
+    readonly actor: string
+    readonly source: Extract<LedgerSource, 'player-command' | 'rule'>
+    readonly requestWorldTime: WorldTime
+    readonly clientRequestId: string
+  },
+): WorldDomainEventInput<'goal.status.changed'> {
+  return {
+    source: options.source,
+    kind: 'goal.status.changed',
+    intentKind: 'goal.status.change',
+    actor: options.actor,
+    requestWorldTime: options.requestWorldTime,
+    clientRequestId: options.clientRequestId,
+    payload: { goalId, status },
+  }
+}
+
+export function createScheduleEntryPlannedEventInput(
+  entry: ScheduleEntryCreationData,
+  options: {
+    readonly actor: string
+    readonly source: Extract<LedgerSource, 'player-command' | 'rule' | 'schedule'>
+    readonly requestWorldTime: WorldTime
+    readonly clientRequestId: string
+  },
+): WorldDomainEventInput<'schedule.entry.planned'> {
+  return {
+    source: options.source,
+    kind: 'schedule.entry.planned',
+    intentKind: 'schedule.entry.plan',
+    actor: options.actor,
+    requestWorldTime: options.requestWorldTime,
+    clientRequestId: options.clientRequestId,
+    payload: { entry },
+  }
+}
+
+export function createDebtRecordedEventInput(
+  debt: DebtCreationData,
+  options: {
+    readonly actor: string
+    readonly source: Extract<LedgerSource, 'player-command' | 'rule'>
+    readonly requestWorldTime: WorldTime
+    readonly clientRequestId: string
+  },
+): WorldDomainEventInput<'debt.recorded'> {
+  return {
+    source: options.source,
+    kind: 'debt.recorded',
+    intentKind: 'debt.record',
+    actor: options.actor,
+    requestWorldTime: options.requestWorldTime,
+    clientRequestId: options.clientRequestId,
+    payload: { debt },
+  }
+}
+
+export function createDebtSettledEventInput(
+  debtId: string,
+  options: {
+    readonly actor: string
+    readonly source: Extract<LedgerSource, 'player-command' | 'rule'>
+    readonly requestWorldTime: WorldTime
+    readonly clientRequestId: string
+  },
+): WorldDomainEventInput<'debt.settled'> {
+  return {
+    source: options.source,
+    kind: 'debt.settled',
+    intentKind: 'debt.settle',
+    actor: options.actor,
+    requestWorldTime: options.requestWorldTime,
+    clientRequestId: options.clientRequestId,
+    payload: { debtId },
   }
 }
 
