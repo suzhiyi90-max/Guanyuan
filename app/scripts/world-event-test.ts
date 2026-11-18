@@ -26,6 +26,9 @@ import {
   createScheduleEntryPlannedEventInput,
   createDebtRecordedEventInput,
   createDebtSettledEventInput,
+  createAssetRegisteredEventInput,
+  createAssetRightGrantedEventInput,
+  createAssetRightRevokedEventInput,
   reduceWorldDomainEvent,
   toLedgerEventInput,
   validateWorldDomainEventPayload,
@@ -90,7 +93,7 @@ let aggregate = createEmptyWorldAggregate(worldId, now)
 check('world domain event registry is frozen and versioned', registry.frozen
   && registry.registryId === 'guanyuan.world-domain'
   && registry.registryVersion === '1.0.0'
-  && registry.schemas.length === 21)
+  && registry.schemas.length === 24)
 
 function applyAt<K extends WorldDomainEventKind>(
   input: WorldDomainEventInput<K>,
@@ -614,6 +617,40 @@ check('debt settlement is an explicit event reference and terminal status',
   aggregate.economy.debts[0]?.status === 'settled'
   && aggregate.economy.debts[0]?.settlements.length === 1
   && aggregate.economy.debts[0]?.settlements[0] === aggregate.streamHead.eventId)
+
+const assetId = brandedId<'AssetId'>('asset:person:small-field')
+applyAt(createAssetRegisteredEventInput({
+  id: assetId,
+  kind: '田地',
+  quantity: 1,
+  custody: field.value(person.id),
+  valuation: field.value(500),
+}, {
+  actor: 'player', source: 'player-command', requestWorldTime: nextEvening, clientRequestId: 'asset-register-001',
+}), nextEvening)
+const ownershipGrantId = brandedId<'RightGrantId'>('right:asset:ownership:001')
+applyAt(createAssetRightGrantedEventInput(assetId, 'ownership', {
+  id: ownershipGrantId,
+  holder: person.id,
+  scope: 'asset:small-field',
+  revocable: true,
+  transferable: true,
+  expires: field.notApplicable,
+}, {
+  actor: 'player', source: 'player-command', requestWorldTime: nextEvening, clientRequestId: 'asset-owner-grant-001',
+}), nextEvening)
+check('asset ownership summary derives only from effective ownership rights',
+  aggregate.economy.assets[0]?.owner.kind === 'value'
+  && aggregate.economy.assets[0]?.owner.value === person.id
+  && aggregate.economy.assets[0]?.rights.ownership.length === 1)
+
+applyAt(createAssetRightRevokedEventInput(ownershipGrantId, {
+  actor: 'player', source: 'player-command', requestWorldTime: nextEvening, clientRequestId: 'asset-owner-revoke-001',
+}), nextEvening)
+check('right revocation is explicit and recomputes derived ownership without deleting the grant',
+  aggregate.economy.assets[0]?.owner.kind === 'n/a'
+  && aggregate.economy.assets[0]?.rights.ownership.length === 1
+  && aggregate.economy.rightRevocations.length === 1)
 
 const finalValidation = validateWorldAggregate(aggregate, ledger)
 if (finalValidation.status === 'rejected') {
