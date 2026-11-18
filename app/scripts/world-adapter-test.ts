@@ -181,7 +181,7 @@ async function main(): Promise<void> {
       worldId,
       clientRequestId: input.clientRequestId,
       actor: input.actor,
-      source: input.source,
+      source: 'rule',
       intentKind: input.intentKind,
       requestedAt: input.requestWorldTime,
       expectedHead: current.streamHead,
