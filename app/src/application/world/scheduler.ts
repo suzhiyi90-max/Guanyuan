@@ -46,6 +46,50 @@ export interface DeterministicWorldSchedulerOptions {
   readonly tasks: WorldSimulationTaskSourcePort
 }
 
+export interface ScheduledActionCommand {
+  readonly actor: string
+  readonly intentKind: string
+  readonly payload: JsonValue
+  readonly priority: number
+}
+
+/** Maps a planned action to a trusted domain command; null means this LOD defers it. */
+export interface WorldScheduledActionResolverPort {
+  resolve(
+    entry: WorldAggregate['planning']['scheduleEntries'][number],
+    aggregate: WorldAggregate,
+    lod: WorldSimulationRequest['lod'],
+  ): ScheduledActionCommand | null
+}
+
+/** Concrete schedule-backed queue. Stable IDs make interrupted action/settlement pairs resumable. */
+export function createScheduleTaskSource(
+  resolver: WorldScheduledActionResolverPort,
+): WorldSimulationTaskSourcePort {
+  return Object.freeze({
+    listDueTasks(request, aggregate) {
+      return aggregate.planning.scheduleEntries.flatMap(entry => {
+        const dueAt: WorldTime = { day: entry.day, period: entry.period }
+        if (compareWorldTime(dueAt, request.from) < 0 || compareWorldTime(dueAt, request.to) > 0
+          || entry.execution.kind === 'value' || entry.deviation.kind === 'value') return []
+        const action = resolver.resolve(entry, aggregate, request.lod)
+        if (!action) return []
+        return [Object.freeze({
+          taskId: `schedule:${entry.id}`,
+          requestId: `w6-simulation:${request.worldId}:schedule:${entry.id}:action`,
+          dueAt,
+          priority: action.priority,
+          actor: action.actor,
+          source: 'schedule' as const,
+          intentKind: action.intentKind,
+          payload: action.payload,
+          scheduleId: entry.id,
+        })]
+      })
+    },
+  })
+}
+
 const genesis = Object.freeze({ kind: 'genesis' as const, seq: 0 })
 
 function sameTime(left: WorldTime, right: WorldTime): boolean {
