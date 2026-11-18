@@ -20,6 +20,8 @@ import type { IdentityAssignment, Office, Appointment, Authorization } from '../
 import { validateIdentityAssignment, validateAppointment, validateOfficeAppointments, validateOfficeAuthorizationReferences, validateAuthorizationSet } from '../identity/validation'
 
 import type { Relation, RelationClaim, RelationEvidence, Organization, Membership } from '../relations/model'
+import type { PersonExposure } from '../relations/exposure'
+import { validatePersonExposureSet } from '../relations/exposure'
 import { validateRelationSet, validateRelationClaimSet, validateRelationEvidenceSet, validateOrganizationSet, validateMembershipSet } from '../relations/validation'
 
 import type { KnowledgeEntry, Message, MessagePropagation } from '../cognition/model'
@@ -55,6 +57,7 @@ export interface WorldAggregate {
     readonly authorizations: readonly Authorization[]
   }
   readonly society: {
+    readonly exposures: readonly PersonExposure[]
     readonly relations: readonly Relation[]
     readonly claims: readonly RelationClaim[]
     readonly evidence: readonly RelationEvidence[]
@@ -149,7 +152,7 @@ export function createEmptyWorldAggregate(
     playerPersonId: null,
     personOrigins: empty,
     identity: Object.freeze({ assignments: empty, offices: empty, appointments: empty, authorizations: empty }),
-    society: Object.freeze({ relations: empty, claims: empty, evidence: empty, organizations: empty, memberships: empty }),
+    society: Object.freeze({ exposures: empty, relations: empty, claims: empty, evidence: empty, organizations: empty, memberships: empty }),
     cognition: Object.freeze({ knowledge: empty, messages: empty, propagations: empty }),
     planning: Object.freeze({
       goals: empty, goalStatusTransitions: empty, goalDeathDispositions: empty,
@@ -367,6 +370,11 @@ export function validateWorldAggregate(
     if (grant.scope.kind === 'institution' && !orgSet.has(grant.scope.institution)) addIssue(issues, 'identity', 'authorization-scope-institution-missing', grant.id)
   }
 
+  addCodes(issues, 'society', validatePersonExposureSet(aggregate.society.exposures, {
+    persons: personIds,
+    events: eventIds,
+    eventTimes,
+  }))
   addCodes(issues, 'society', validateOrganizationSet(aggregate.society.organizations))
   addCodes(issues, 'society', validateRelationSet(aggregate.society.relations, personIds))
   addCodes(issues, 'society', validateRelationClaimSet(aggregate.society.claims, relationIds, personIds))
