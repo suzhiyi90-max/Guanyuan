@@ -788,6 +788,26 @@ check('asset custody transfer changes physical custodian without changing owners
   && aggregate.economy.assets[0]?.owner.kind === 'n/a'
   && aggregate.economy.assets[0]?.rights.ownership.length === 1)
 
+const staleCustodyInput = toLedgerEventInput(createAssetCustodyTransferredEventInput(
+  assetId, person.id, historicalMinisterId, {
+    actor: 'player',
+    source: 'player-command',
+    requestWorldTime: nextEvening,
+    clientRequestId: 'asset-custody-transfer-stale-source',
+  },
+))
+const staleCustodyAppend = appendLedgerEvent(ledger, staleCustodyInput, nextEvening)
+if (staleCustodyAppend.status === 'appended') {
+  expectThrow('custody transfer rejects a stale source custodian',
+    () => reduceWorldDomainEvent(aggregate, staleCustodyAppend.event, registry, {
+      eventIds: [...ledger.events.map(item => item.id), staleCustodyAppend.event.id],
+      eventTimes: new Map([...ledger.events, staleCustodyAppend.event].map(item => [item.id, item.committedAt] as const)),
+    }),
+    'world-reducer-asset-custody-source-mismatch')
+} else {
+  check('stale custody transfer is prepared for reducer rejection', false)
+}
+
 const finalValidation = validateWorldAggregate(aggregate, ledger)
 if (finalValidation.status === 'rejected') {
   console.error('World aggregate validation issues:', JSON.stringify(finalValidation.issues))
