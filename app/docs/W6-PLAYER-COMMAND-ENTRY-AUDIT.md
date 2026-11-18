@@ -1,7 +1,7 @@
 # W6 玩家命令入口与授权接线审计 v0.1
 
 - 审计日期：2026-11-18
-- 对照基线：`work/w6-world-aggregate-application-ports@7ae9fc8902a8f468e6542f93d849493b0f13d55a`
+- 对照基线：`work/w6-world-aggregate-application-ports@a8d7a865318edcdf5142db8dba5effe823c9f721`
 - 目标：核对当前 App 玩家命令入口、W6 命令端口、授权门和领域 intent 的实际连接关系。
 - 性质：代码审查与接线施工单；不修改代码、Schema、账本、存档或前端。
 - 结论：W6 授权门已有实现与独立契约测试，但尚未接入当前 App 的玩家命令链。这与 W6 架构文档规定的 W6-I 前端迁移阶段一致，不是 W5 预览运行时回归；在 W6-I 完成前，不得宣称当前 App 已由 W6 授权门统一保护。
@@ -142,7 +142,7 @@ App.tsx
 - 重复映射策略拒绝；
 - 活动策略不受源对象后续 mutation 影响。
 
-初始审计 head 7ae9fc8 的 PR 事件流水线已通过授权门控测试和身份授权测试；后续修补 head a8d7a865 的 Push 流水线授权门控专项测试已通过，最新 PR 事件全量流水线仍在执行。
+最新 head `a8d7a865` 的 Push 与 Pull Request 两条完整流水线均已完成并通过；授权门控、身份/授权契约、Production build、Playwright smoke and archive regression、smoke screenshot upload 全部为 success。
 
 ### 4.3 尚未证明的事项
 
@@ -172,7 +172,9 @@ W6 架构文档 `app/docs/W6-WORLD-AGGREGATE-ARCHITECTURE.md` 已将 W6-I 定义
 
 ## 6. W6-I 接线施工单
 
-### W6-I-0：建立完整映射登记（本审计已完成第一轮盘点）
+### W6-I-0：建立完整映射登记（第一轮登记已完成）
+
+详细登记见 `app/docs/W6-I-0-PLAYER-ACTION-INVENTORY.md`。该表按 `useGame.ts` 实际暴露的 12 类玩家世界动作逐项登记旧 intent、演示行为、迁移判定和前置契约；同时将 W6 intent 分为可信初始化/内部流程与潜在玩家命令。当前 12 类动作均未获准直接映射。
 
 对每个当前 UI action 登记：
 
@@ -258,7 +260,7 @@ W6 架构文档 `app/docs/W6-WORLD-AGGREGATE-ARCHITECTURE.md` 已将 W6-I 定义
 - 增加延迟授权查询测试：在异步查询期间修改原始嵌套对象，底层 command port 仍收到调用时的原始值；
 - 同时验证快照的嵌套对象和数组被冻结。
 
-修补提交：`4d9e2f5`、`9217a52`、`b9e1d0b`、`3695ea7`、`ffb247c`、`a8d7a86`。中间出现过类型收窄与测试 deferred fixture 编译失败，已修正；最新 head 的授权门专项测试已通过，整条 CI 尚待结束。本项不改变授权策略语义，不修改 W5 账本或存档。
+修补提交：`4d9e2f5`、`9217a52`、`b9e1d0b`、`3695ea7`、`ffb247c`、`a8d7a86`。中间出现过类型收窄与测试 deferred fixture 编译失败，均已修正；最新 head 的两条完整 CI 均通过。本项不改变授权策略语义，不修改 W5 账本或存档。
 
 ## 8. 验收结论
 
@@ -267,11 +269,13 @@ W6 架构文档 `app/docs/W6-WORLD-AGGREGATE-ARCHITECTURE.md` 已将 W6-I 定义
 - [x] W6 授权 gate 与独立测试覆盖已核对。
 - [x] 确认当前 App 未接入 W6 gate；该迁移属于 W6-I 后续阶段。
 - [x] 明确不得强行建立旧 preview intent 与新领域 intent 的假映射。
-- [ ] 完整 UI action → domain intent → permission/scope → event/schema 映射表（后续 W6-I-0 完成）。
+- [x] 第一轮 UI action → 旧 intent → 迁移判定 → 前置契约登记（详见 `W6-I-0-PLAYER-ACTION-INVENTORY.md`）。
+- [ ] 领域规范裁决后的正式 domain intent → permission/scope → event/schema 映射表。
 - [ ] 生产组合根接线（W6-I-1）。
 - [ ] 全部玩家命令统一授权验收（W6-I-3）。
 - [ ] 1440/1024/390 视觉和交互回归（W6-I-4）。
 
 ## 9. 变更记录
 
-- v0.1：基于 W6 最新 head 进行静态代码审计，未修改代码。
+- v0.1：基于 W6 分支进行静态代码审计，未修改代码。
+- v0.2：更新到 W6 head `a8d7a865`；补记双流水线完整通过；关联 W6-I-0 玩家动作全量登记。
