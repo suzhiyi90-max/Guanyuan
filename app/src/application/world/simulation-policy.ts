@@ -230,6 +230,10 @@ export type PolicyConfiguredWorldSimulationResult = WorldSimulationResult & {
   readonly policy: { readonly rulesetId: string; readonly revision: string }
 }
 
+export interface PolicyConfiguredWorldSimulationPort extends WorldSimulationPort {
+  advance(request: WorldSimulationRequest): Promise<PolicyConfiguredWorldSimulationResult>
+}
+
 /**
  * The production composition seam: resolve the active ruleset for each tick,
  * gate deterministic tasks, then delegate all execution to the canonical
@@ -238,9 +242,7 @@ export type PolicyConfiguredWorldSimulationResult = WorldSimulationResult & {
  */
 export function createPolicyConfiguredWorldSimulationPort(
   options: PolicyConfiguredWorldSimulationOptions,
-): WorldSimulationPort & {
-  advance(request: WorldSimulationRequest): Promise<PolicyConfiguredWorldSimulationResult>
-} {
+): PolicyConfiguredWorldSimulationPort {
   return Object.freeze({
     async advance(request: WorldSimulationRequest): Promise<PolicyConfiguredWorldSimulationResult> {
       let ruleset: WorldSimulationRuleset
