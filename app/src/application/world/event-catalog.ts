@@ -9,7 +9,7 @@ import type { Person } from '../../domain/person/model'
 import type { PersonOrigin } from '../../domain/person/provenance'
 import type { IdentityAssignment, Authorization } from '../../domain/identity/model'
 import type { Organization, Relation, RelationClaim, RelationEvidence } from '../../domain/relations/model'
-import type { EntityRef, KnowledgeEntry, Message } from '../../domain/cognition/model'
+import type { EntityRef, FailureKind, KnowledgeEntry, Message, MessagePropagation } from '../../domain/cognition/model'
 import type { WorldBootstrapMetadata } from '../../domain/world/metadata'
 import type { WorldBootstrapDescriptor } from './bootstrap'
 import {
@@ -36,6 +36,8 @@ export type WorldDomainEventKind =
   | 'knowledge.recorded'
   | 'message.sent'
   | 'message.stage.recorded'
+  | 'message.failed'
+  | 'message.propagated'
 
 export type PersonCreationData = Omit<Person, 'lifeState' | 'archiveState' | 'death'>
 export type IdentityAssignmentCreationData = Omit<IdentityAssignment, 'validFrom' | 'validTo' | 'sourceEvent'>
@@ -47,6 +49,7 @@ export type RelationEvidenceCreationData = Omit<RelationEvidence, 'sourceEvent'>
 export type KnowledgeCreationData = Omit<KnowledgeEntry, 'sourceEvent' | 'acquiredAt'>
 export type MessageCreationData = Pick<Message, 'id' | 'sender' | 'recipient' | 'channel' | 'contentRefs' | 'parentMessage' | 'distortion'>
 export type MessageStage = 'delivered' | 'read' | 'understood' | 'replied'
+export type MessagePropagationCreationData = Omit<MessagePropagation, 'propagatedAt'>
 
 export interface WorldDomainEventPayloadMap {
   readonly 'world.initialized': WorldBootstrapMetadata
@@ -60,6 +63,8 @@ export interface WorldDomainEventPayloadMap {
   readonly 'knowledge.recorded': { readonly entry: KnowledgeCreationData }
   readonly 'message.sent': { readonly message: MessageCreationData }
   readonly 'message.stage.recorded': { readonly messageId: string; readonly stage: MessageStage }
+  readonly 'message.failed': { readonly messageId: string; readonly failureCode: string }
+  readonly 'message.propagated': { readonly propagation: MessagePropagationCreationData }
 }
 
 export type WorldDomainEventInput<Kind extends WorldDomainEventKind = WorldDomainEventKind> =
@@ -295,6 +300,22 @@ function isMessageStagePayload(payload: JsonValue): boolean {
     && ['delivered', 'read', 'understood', 'replied'].includes(String(payload.stage))
 }
 
+function isMessageFailurePayload(payload: JsonValue): boolean {
+  return isRecord(payload) && hasExactKeys(payload, ['messageId', 'failureCode'])
+    && isNonEmptyString(payload.messageId) && isNonEmptyString(payload.failureCode)
+}
+
+function isMessagePropagationPayload(payload: JsonValue): boolean {
+  if (!isRecord(payload) || !hasExactKeys(payload, ['propagation']) || !isRecord(payload.propagation)) return false
+  const item = payload.propagation
+  return hasExactKeys(item, [
+    'id', 'message', 'fromHolder', 'toHolder', 'sourceKnowledge', 'resultingKnowledge',
+  ])
+    && [item.id, item.message, item.fromHolder, item.toHolder].every(isNonEmptyString)
+    && isStringArray(item.sourceKnowledge) && item.sourceKnowledge.length > 0
+    && isStringArray(item.resultingKnowledge) && item.resultingKnowledge.length > 0
+}
+
 const schemas: ReadonlyArray<{ readonly kind: WorldDomainEventKind; readonly validate: EventSchemaValidator }> = [
   { kind: 'world.initialized', validate: isBootstrapMetadata },
   { kind: 'person.created', validate: isPersonCreationPayload },
@@ -307,6 +328,8 @@ const schemas: ReadonlyArray<{ readonly kind: WorldDomainEventKind; readonly val
   { kind: 'knowledge.recorded', validate: isKnowledgePayload },
   { kind: 'message.sent', validate: isMessagePayload },
   { kind: 'message.stage.recorded', validate: isMessageStagePayload },
+  { kind: 'message.failed', validate: isMessageFailurePayload },
+  { kind: 'message.propagated', validate: isMessagePropagationPayload },
 ]
 
 export function createWorldDomainEventRegistry(): EventRegistry<WorldDomainEventKind> {
@@ -496,6 +519,47 @@ export function createMessageStageRecordedEventInput(
     requestWorldTime: options.requestWorldTime,
     clientRequestId: options.clientRequestId,
     payload: { messageId, stage },
+  }
+}
+
+export function createMessageFailureRecordedEventInput(
+  messageId: string,
+  failureCode: FailureKind,
+  options: {
+    readonly actor: string
+    readonly source: Extract<LedgerSource, 'player-command' | 'rule'>
+    readonly requestWorldTime: WorldTime
+    readonly clientRequestId: string
+  },
+): WorldDomainEventInput<'message.failed'> {
+  return {
+    source: options.source,
+    kind: 'message.failed',
+    intentKind: 'message.fail',
+    actor: options.actor,
+    requestWorldTime: options.requestWorldTime,
+    clientRequestId: options.clientRequestId,
+    payload: { messageId, failureCode },
+  }
+}
+
+export function createMessagePropagationRecordedEventInput(
+  propagation: MessagePropagationCreationData,
+  options: {
+    readonly actor: string
+    readonly source: Extract<LedgerSource, 'player-command' | 'rule'>
+    readonly requestWorldTime: WorldTime
+    readonly clientRequestId: string
+  },
+): WorldDomainEventInput<'message.propagated'> {
+  return {
+    source: options.source,
+    kind: 'message.propagated',
+    intentKind: 'message.propagate',
+    actor: options.actor,
+    requestWorldTime: options.requestWorldTime,
+    clientRequestId: options.clientRequestId,
+    payload: { propagation },
   }
 }
 
