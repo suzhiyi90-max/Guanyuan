@@ -9,6 +9,7 @@
 import { brandedId, type PersonId } from '../../domain/shared/ids'
 import { compareWorldTime, isValidWorldTime, type WorldTime } from '../../domain/shared/world-time'
 import type { WorldId } from '../../domain/event-ledger'
+import type { WorldBootstrapMetadata } from '../../domain/world/metadata'
 
 export type PopulationTier = 'county' | 'grassroots' | 'other'
 
@@ -72,15 +73,9 @@ export interface FixedHistoricalPersonCandidate {
   readonly provenance: 'verified-historical-exception'
 }
 
-export interface WorldBootstrapDescriptor {
+export interface WorldBootstrapDescriptor extends WorldBootstrapMetadata {
   readonly worldId: WorldId
-  readonly seedFingerprint: string
-  readonly scenarioPackId: string
-  readonly rulesetVersion: string
-  readonly contentPackVersion: string
   readonly startedAt: WorldTime
-  readonly locationCode: string
-  readonly populationPolicyVersion: 'w6.1'
 }
 
 export type WorldBootstrapIssue =
