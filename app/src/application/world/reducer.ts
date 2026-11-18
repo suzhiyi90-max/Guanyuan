@@ -25,8 +25,8 @@ import { validateKnowledgeEntry, validateMessage, validateMessagePropagation } f
 import type { Goal, GoalStatusTransition, ScheduleEntry } from '../../domain/planning/model'
 import { validateGoal, validateScheduleEntries } from '../../domain/planning/validation'
 import { validateGoalStatusHistory } from '../../domain/planning/status-history'
-import type { Debt } from '../../domain/economy/model'
-import { validateDebt, validateDebtSet } from '../../domain/economy/validation'
+import type { Debt, Asset, RightGrant, RightRevocation, AssetRightKind } from '../../domain/economy/model'
+import { deriveAssetOwner, validateAssetSet, validateDebt, validateDebtSet } from '../../domain/economy/validation'
 import type { LifeHistory } from '../../domain/life/model'
 import { validateLifeHistory } from '../../domain/life/validation'
 import type { WorldBootstrapMetadata } from '../../domain/world/metadata'
@@ -50,6 +50,8 @@ import {
   type GoalTerminalStatus,
   type ScheduleEntryCreationData,
   type DebtCreationData,
+  type AssetCreationData,
+  type AssetRightGrantData,
 } from './event-catalog'
 
 function assertNextEvent(
@@ -859,6 +861,124 @@ function applyDebtSettled(
   })
 }
 
+function economyReferences(
+  aggregate: WorldAggregate,
+  event: LedgerEvent<WorldDomainEventKind>,
+  context?: WorldEventContext,
+) {
+  const refs = eventReferences(event, context)
+  return {
+    persons: aggregate.persons.map(item => item.id),
+    organizations: aggregate.society.organizations.map(item => item.id),
+    events: refs.events,
+    eventTimes: refs.eventTimes,
+    revocations: aggregate.economy.rightRevocations,
+  }
+}
+
+function recomputeAssetOwner(
+  asset: Asset,
+  at: WorldTime,
+  refs: ReturnType<typeof economyReferences>,
+): Asset {
+  return Object.freeze({
+    ...asset,
+    owner: deriveAssetOwner(asset.rights.ownership, at, refs),
+  })
+}
+
+function applyAssetRegistered(
+  aggregate: WorldAggregate,
+  event: LedgerEvent<WorldDomainEventKind>,
+  context?: WorldEventContext,
+): WorldAggregate {
+  requireBootstrap(aggregate)
+  const payload = event.payload as unknown as WorldDomainEventPayloadMap['asset.registered']
+  const data: AssetCreationData = payload.asset
+  if (aggregate.economy.assets.some(item => item.id === data.id)) {
+    throw new Error('world-reducer-asset-duplicate')
+  }
+  const asset: Asset = Object.freeze({
+    ...data,
+    rights: Object.freeze({ ownership: Object.freeze([]), control: Object.freeze([]), handling: Object.freeze([]), disposal: Object.freeze([]) }),
+    owner: field.notApplicable,
+  })
+  const assets = [...aggregate.economy.assets, asset]
+  const refs = economyReferences(aggregate, event, context)
+  const issues = validateAssetSet(assets, refs, event.committedAt)
+  if (issues.length > 0) throw new Error(`world-reducer-asset-invalid:${issues.join(',')}`)
+  return Object.freeze({
+    ...aggregate,
+    ...withEventCursor(aggregate, event),
+    economy: Object.freeze({ ...aggregate.economy, assets: Object.freeze(assets) }),
+  })
+}
+
+function applyAssetRightGranted(
+  aggregate: WorldAggregate,
+  event: LedgerEvent<WorldDomainEventKind>,
+  context?: WorldEventContext,
+): WorldAggregate {
+  requireBootstrap(aggregate)
+  const payload = event.payload as unknown as WorldDomainEventPayloadMap['asset.right.granted']
+  const assetIndex = aggregate.economy.assets.findIndex(item => item.id === payload.assetId)
+  if (assetIndex < 0) throw new Error('world-reducer-asset-right-asset-missing')
+  const data: AssetRightGrantData = payload.grant
+  if (aggregate.economy.assets.some(asset =>
+    (['ownership', 'control', 'handling', 'disposal'] as const)
+      .some(kind => asset.rights[kind].some(grant => grant.id === data.id)))) {
+    throw new Error('world-reducer-asset-right-grant-duplicate')
+  }
+  const grant: RightGrant = Object.freeze({ ...data, grantedBy: event.id })
+  const current = aggregate.economy.assets[assetIndex]!
+  const rights = Object.freeze({
+    ...current.rights,
+    [payload.rightKind as AssetRightKind]: Object.freeze([...current.rights[payload.rightKind as AssetRightKind], grant]),
+  })
+  const refs = economyReferences(aggregate, event, context)
+  const updated = recomputeAssetOwner(Object.freeze({ ...current, rights }), event.committedAt, refs)
+  const assets = aggregate.economy.assets.map((item, index) => index === assetIndex ? updated : item)
+  const issues = validateAssetSet(assets, refs, event.committedAt)
+  if (issues.length > 0) throw new Error(`world-reducer-asset-right-grant-invalid:${issues.join(',')}`)
+  return Object.freeze({
+    ...aggregate,
+    ...withEventCursor(aggregate, event),
+    economy: Object.freeze({ ...aggregate.economy, assets: Object.freeze(assets) }),
+  })
+}
+
+function applyAssetRightRevoked(
+  aggregate: WorldAggregate,
+  event: LedgerEvent<WorldDomainEventKind>,
+  context?: WorldEventContext,
+): WorldAggregate {
+  requireBootstrap(aggregate)
+  const payload = event.payload as unknown as WorldDomainEventPayloadMap['asset.right.revoked']
+  const grant = aggregate.economy.assets.flatMap(asset =>
+    (['ownership', 'control', 'handling', 'disposal'] as const).flatMap(kind => asset.rights[kind]),
+  ).find(item => item.id === payload.grantId)
+  if (!grant) throw new Error('world-reducer-asset-right-revocation-grant-missing')
+  if (!grant.revocable) throw new Error('world-reducer-asset-right-revocation-not-permitted')
+  if (aggregate.economy.rightRevocations.some(item => item.grant === grant.id)) {
+    throw new Error('world-reducer-asset-right-revocation-duplicate')
+  }
+  const revocation: RightRevocation = Object.freeze({ grant: grant.id, revokedBy: event.id })
+  const rightRevocations = [...aggregate.economy.rightRevocations, revocation]
+  const refs = { ...economyReferences(aggregate, event, context), revocations: rightRevocations }
+  const assets = aggregate.economy.assets.map(asset => recomputeAssetOwner(asset, event.committedAt, refs))
+  const issues = validateAssetSet(assets, refs, event.committedAt)
+  if (issues.length > 0) throw new Error(`world-reducer-asset-right-revocation-invalid:${issues.join(',')}`)
+  return Object.freeze({
+    ...aggregate,
+    ...withEventCursor(aggregate, event),
+    economy: Object.freeze({
+      ...aggregate.economy,
+      assets: Object.freeze(assets),
+      rightRevocations: Object.freeze(rightRevocations),
+    }),
+  })
+}
+
 /** Apply one schema-validated event to the read-only world projection. */
 export function reduceWorldDomainEvent(
   aggregate: WorldAggregate,
@@ -915,6 +1035,12 @@ export function reduceWorldDomainEvent(
       return applyDebtRecorded(aggregate, event, context)
     case 'debt.settled':
       return applyDebtSettled(aggregate, event, context)
+    case 'asset.registered':
+      return applyAssetRegistered(aggregate, event, context)
+    case 'asset.right.granted':
+      return applyAssetRightGranted(aggregate, event, context)
+    case 'asset.right.revoked':
+      return applyAssetRightRevoked(aggregate, event, context)
     default: {
       const unreachable: never = event.kind
       throw new Error(`world-reducer-unhandled-event:${String(unreachable)}`)
