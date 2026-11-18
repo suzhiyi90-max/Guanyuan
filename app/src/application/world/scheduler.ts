@@ -188,6 +188,10 @@ export function createDeterministicWorldScheduler(
             reason: 'world-simulation-command-port-failed',
           }
         }
+        if (!isFailure(action.receipt)
+          && (action.receipt.status === 'committed' || action.receipt.status === 'duplicate')) {
+          emittedEventIds.push(action.receipt.eventId)
+        }
         if (isFailure(action.receipt) || !action.aggregate) {
           pendingTaskIds.unshift(...selected.slice(index).map(item => item.taskId))
           const reason = isFailure(action.receipt) ? action.receipt.reason : 'world-simulation-query-refresh-failed'
@@ -202,9 +206,6 @@ export function createDeterministicWorldScheduler(
             streamHead: latest.streamHead,
             reason,
           }
-        }
-        if (action.receipt.status === 'committed' || action.receipt.status === 'duplicate') {
-          emittedEventIds.push(action.receipt.eventId)
         }
         latest = action.aggregate
 
@@ -242,6 +243,10 @@ export function createDeterministicWorldScheduler(
               reason: 'world-simulation-schedule-settlement-port-failed',
             }
           }
+          if (!isFailure(settlement.receipt)
+            && (settlement.receipt.status === 'committed' || settlement.receipt.status === 'duplicate')) {
+            emittedEventIds.push(settlement.receipt.eventId)
+          }
           if (isFailure(settlement.receipt) || !settlement.aggregate) {
             pendingTaskIds.unshift(...selected.slice(index).map(item => item.taskId))
             const reason = isFailure(settlement.receipt) ? settlement.receipt.reason : 'world-simulation-query-refresh-failed'
@@ -255,9 +260,6 @@ export function createDeterministicWorldScheduler(
               streamHead: latest.streamHead,
               reason,
             }
-          }
-          if (settlement.receipt.status === 'committed' || settlement.receipt.status === 'duplicate') {
-            emittedEventIds.push(settlement.receipt.eventId)
           }
           latest = settlement.aggregate
         }
