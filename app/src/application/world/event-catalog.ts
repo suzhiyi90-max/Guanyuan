@@ -11,7 +11,7 @@ import type { IdentityAssignment, Authorization } from '../../domain/identity/mo
 import type { Organization, Relation, RelationClaim, RelationEvidence, Membership, RelationLifecycleStatus } from '../../domain/relations/model'
 import type { EntityRef, FailureKind, KnowledgeEntry, Message, MessagePropagation } from '../../domain/cognition/model'
 import type { Goal, ScheduleEntry, GoalStatus } from '../../domain/planning/model'
-import type { Debt } from '../../domain/economy/model'
+import type { Debt, Asset, AssetRightKind, RightGrant } from '../../domain/economy/model'
 import type { WorldBootstrapMetadata } from '../../domain/world/metadata'
 import type { WorldBootstrapDescriptor } from './bootstrap'
 import {
@@ -48,6 +48,9 @@ export type WorldDomainEventKind =
   | 'schedule.entry.planned'
   | 'debt.recorded'
   | 'debt.settled'
+  | 'asset.registered'
+  | 'asset.right.granted'
+  | 'asset.right.revoked'
 
 export type PersonCreationData = Omit<Person, 'lifeState' | 'archiveState' | 'death'>
 export type IdentityAssignmentCreationData = Omit<IdentityAssignment, 'validFrom' | 'validTo' | 'sourceEvent'>
@@ -65,6 +68,8 @@ export type GoalCreationData = Pick<Goal, 'id' | 'person' | 'statement' | 'prior
 export type GoalTerminalStatus = Extract<GoalStatus, 'achieved' | 'abandoned' | 'failed'>
 export type ScheduleEntryCreationData = Pick<ScheduleEntry, 'id' | 'scope' | 'person' | 'day' | 'period' | 'action' | 'place' | 'visibility'>
 export type DebtCreationData = Pick<Debt, 'id' | 'creditor' | 'debtor' | 'principal' | 'kind'>
+export type AssetCreationData = Pick<Asset, 'id' | 'kind' | 'quantity' | 'custody' | 'valuation'>
+export type AssetRightGrantData = Omit<RightGrant, 'grantedBy'>
 
 export interface WorldDomainEventPayloadMap {
   readonly 'world.initialized': WorldBootstrapMetadata
@@ -88,6 +93,9 @@ export interface WorldDomainEventPayloadMap {
   readonly 'schedule.entry.planned': { readonly entry: ScheduleEntryCreationData }
   readonly 'debt.recorded': { readonly debt: DebtCreationData }
   readonly 'debt.settled': { readonly debtId: string }
+  readonly 'asset.registered': { readonly asset: AssetCreationData }
+  readonly 'asset.right.granted': { readonly assetId: string; readonly rightKind: AssetRightKind; readonly grant: AssetRightGrantData }
+  readonly 'asset.right.revoked': { readonly grantId: string }
 }
 
 export type WorldDomainEventInput<Kind extends WorldDomainEventKind = WorldDomainEventKind> =
@@ -394,6 +402,32 @@ function isDebtSettlementPayload(payload: JsonValue): boolean {
   return isRecord(payload) && hasExactKeys(payload, ['debtId']) && isNonEmptyString(payload.debtId)
 }
 
+function isAssetPayload(payload: JsonValue): boolean {
+  if (!isRecord(payload) || !hasExactKeys(payload, ['asset']) || !isRecord(payload.asset)) return false
+  const asset = payload.asset
+  return hasExactKeys(asset, ['id', 'kind', 'quantity', 'custody', 'valuation'])
+    && [asset.id, asset.kind].every(isNonEmptyString)
+    && typeof asset.quantity === 'number' && Number.isFinite(asset.quantity) && asset.quantity > 0
+    && isField(asset.custody, isNonEmptyString)
+    && isField(asset.valuation, value => typeof value === 'number' && Number.isFinite(value))
+}
+
+function isAssetRightGrantPayload(payload: JsonValue): boolean {
+  if (!isRecord(payload) || !hasExactKeys(payload, ['assetId', 'rightKind', 'grant']) || !isRecord(payload.grant)) return false
+  const grant = payload.grant
+  return isNonEmptyString(payload.assetId)
+    && ['ownership', 'control', 'handling', 'disposal'].includes(String(payload.rightKind))
+    && hasExactKeys(grant, ['id', 'holder', 'scope', 'revocable', 'transferable', 'expires'])
+    && [grant.id, grant.holder, grant.scope].every(isNonEmptyString)
+    && typeof grant.revocable === 'boolean'
+    && typeof grant.transferable === 'boolean'
+    && isField(grant.expires, isWorldTimeValue)
+}
+
+function isAssetRightRevocationPayload(payload: JsonValue): boolean {
+  return isRecord(payload) && hasExactKeys(payload, ['grantId']) && isNonEmptyString(payload.grantId)
+}
+
 const schemas: ReadonlyArray<{ readonly kind: WorldDomainEventKind; readonly validate: EventSchemaValidator }> = [
   { kind: 'world.initialized', validate: isBootstrapMetadata },
   { kind: 'person.created', validate: isPersonCreationPayload },
@@ -416,6 +450,9 @@ const schemas: ReadonlyArray<{ readonly kind: WorldDomainEventKind; readonly val
   { kind: 'schedule.entry.planned', validate: isScheduleEntryPayload },
   { kind: 'debt.recorded', validate: isDebtPayload },
   { kind: 'debt.settled', validate: isDebtSettlementPayload },
+  { kind: 'asset.registered', validate: isAssetPayload },
+  { kind: 'asset.right.granted', validate: isAssetRightGrantPayload },
+  { kind: 'asset.right.revoked', validate: isAssetRightRevocationPayload },
 ]
 
 export function createWorldDomainEventRegistry(): EventRegistry<WorldDomainEventKind> {
@@ -828,6 +865,68 @@ export function createDebtSettledEventInput(
     requestWorldTime: options.requestWorldTime,
     clientRequestId: options.clientRequestId,
     payload: { debtId },
+  }
+}
+
+export function createAssetRegisteredEventInput(
+  asset: AssetCreationData,
+  options: {
+    readonly actor: string
+    readonly source: Extract<LedgerSource, 'player-command' | 'rule'>
+    readonly requestWorldTime: WorldTime
+    readonly clientRequestId: string
+  },
+): WorldDomainEventInput<'asset.registered'> {
+  return {
+    source: options.source,
+    kind: 'asset.registered',
+    intentKind: 'asset.register',
+    actor: options.actor,
+    requestWorldTime: options.requestWorldTime,
+    clientRequestId: options.clientRequestId,
+    payload: { asset },
+  }
+}
+
+export function createAssetRightGrantedEventInput(
+  assetId: string,
+  rightKind: AssetRightKind,
+  grant: AssetRightGrantData,
+  options: {
+    readonly actor: string
+    readonly source: Extract<LedgerSource, 'player-command' | 'rule'>
+    readonly requestWorldTime: WorldTime
+    readonly clientRequestId: string
+  },
+): WorldDomainEventInput<'asset.right.granted'> {
+  return {
+    source: options.source,
+    kind: 'asset.right.granted',
+    intentKind: 'asset.right.grant',
+    actor: options.actor,
+    requestWorldTime: options.requestWorldTime,
+    clientRequestId: options.clientRequestId,
+    payload: { assetId, rightKind, grant },
+  }
+}
+
+export function createAssetRightRevokedEventInput(
+  grantId: string,
+  options: {
+    readonly actor: string
+    readonly source: Extract<LedgerSource, 'player-command' | 'rule'>
+    readonly requestWorldTime: WorldTime
+    readonly clientRequestId: string
+  },
+): WorldDomainEventInput<'asset.right.revoked'> {
+  return {
+    source: options.source,
+    kind: 'asset.right.revoked',
+    intentKind: 'asset.right.revoke',
+    actor: options.actor,
+    requestWorldTime: options.requestWorldTime,
+    clientRequestId: options.clientRequestId,
+    payload: { grantId },
   }
 }
 
