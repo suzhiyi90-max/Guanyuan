@@ -130,6 +130,9 @@ async function main(): Promise<void> {
     lod: 'near-field',
     maxEvents: 2,
   })
+  if (first.status !== 'partial') throw new Error('scheduler-test-expected-partial-result')
+  const firstActionEventId = first.emittedEventIds[0]
+  if (!firstActionEventId) throw new Error('scheduler-test-action-event-id-missing')
   const afterPartial = (await adapter.queries.read(worldId))!
   check('scheduler reports a resumable partial result when settlement fails after action commit',
     first.status === 'partial'
@@ -151,7 +154,7 @@ async function main(): Promise<void> {
     && resumed.emittedEventIds.length === 2
     && final.planning.goals.filter(item => item.id === goalId).length === 1
     && final.planning.scheduleEntries[0]?.execution.kind === 'value'
-    && final.planning.scheduleEntries[0]?.execution.value === first.emittedEventIds[0]
+    && final.planning.scheduleEntries[0]?.execution.value === firstActionEventId
     && adapter.readLedger().head === afterPartial.streamHead.seq + 1)
 
   const stale = await scheduler.advance({
