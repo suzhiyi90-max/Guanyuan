@@ -24,6 +24,7 @@ import type {
   WorldDomainEventKind,
 } from '../src/application'
 import type { WorldId } from '../src/domain'
+import type { RelationTypeCode } from '../src/domain'
 
 let passed = 0
 let failed = 0
@@ -241,7 +242,7 @@ apply(createRelationCreatedEventInput({
   id: relationId,
   from: person.id,
   to: historicalMinisterId,
-  type: 'teacher',
+  type: 'teacher' as RelationTypeCode,
   visibility: { observer: 'player', level: 'private' },
 }, {
   actor: 'system',
