@@ -69,6 +69,9 @@ check('historical exception carries validity and evidence into person provenance
   && first.historicalPeople[0] !== undefined
   && historicalCandidateOrigin(first.historicalPeople[0]).kind === 'historical-minister'
   && historicalCandidateOrigin(first.historicalPeople[0]).evidenceRefs.length === 1)
+check('world descriptor persists only the verified historical minister allow-list', first.status === 'ready'
+  && first.descriptor.historicalNameAllowList.length === 1
+  && first.descriptor.historicalNameAllowList[0]?.personId === historicalMinister.personId)
 check('bootstrap stores a seed fingerprint rather than a raw seed in descriptor', first.status === 'ready'
   && first.descriptor.seedFingerprint.length === 8
   && !('seed' in first.descriptor))
