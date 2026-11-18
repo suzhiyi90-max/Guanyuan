@@ -49,11 +49,11 @@ The aggregate is scoped by WorldId, positioned by WorldTime, and anchored by a S
 - Observer-owned exposures (heard-of / seen / met / conversed / corresponded), relations, claims, evidence, organizations and memberships.
 - Exposure is a contact/awareness record, not a relation: hearing of or meeting a person never automatically creates friendship, acquaintance, colleague status or any other social edge.
 - Holder-scoped knowledge, messages and propagation.
-- NPC goals, player aspiration, schedules and goal history.
+- NPC goals, player aspiration, schedules and goal history. Schedule intent is distinct from execution: execution confirmation references an already-committed action result event; deviation is an independent event with a reason; one planned entry can be settled only once.
 - Assets, debts, rights revocations and succession.
 - Life histories, body/mind hooks, life-state facts and life-stage facts.
 
-Each domain retains its own model and validator. The aggregate validator composes those validators and adds cross-domain reference checks; it does not duplicate their business rules.
+Each domain retains its own model and validator. The aggregate validator composes those validators and adds cross-domain reference checks; it does not duplicate their business rules. It also verifies schedule execution/deviation settlement provenance against the ledger, so a snapshot cannot claim a task was carried out merely by pointing at an arbitrary event.
 
 An empty aggregate is valid. A new world may exist before its first character, relation, office or goal is generated.
 
