@@ -57,6 +57,16 @@ async function main(): Promise<void> {
   check('query subscribers are notified only after each valid committed event', notifications === 3)
 
   const repeated = await initializeWorldThroughPorts(request, adapter)
+  if (repeated.status !== 'ready' || repeated.createdPersonIds.length !== 0
+    || repeated.existingPersonCount !== 2 || adapter.readLedger().head !== 3) {
+    console.error('Repeat initialization diagnostic:', JSON.stringify({
+      repeated,
+      bootstrap: aggregate?.bootstrap,
+      persons: aggregate?.persons.map(person => ({ id: person.id, name: person.displayName })),
+      origins: aggregate?.personOrigins,
+      ledgerHead: adapter.readLedger().head,
+    }))
+  }
   check('repeated initialization observes the materialized world and appends no duplicate facts',
     repeated.status === 'ready'
     && repeated.createdPersonIds.length === 0
