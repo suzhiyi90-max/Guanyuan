@@ -10,8 +10,9 @@ import { brandedId, type PersonId } from '../../domain/shared/ids'
 import { compareWorldTime, isValidWorldTime, type WorldTime } from '../../domain/shared/world-time'
 import type { WorldId } from '../../domain/event-ledger'
 import type { WorldBootstrapMetadata } from '../../domain/world/metadata'
+import type { HistoricalPersonScope, PersonOrigin, PersonPopulationTier } from '../../domain/person/provenance'
 
-export type PopulationTier = 'county' | 'grassroots' | 'other'
+export type PopulationTier = PersonPopulationTier
 
 export interface PopulationRoleSlot {
   readonly roleCode: string
@@ -25,21 +26,7 @@ export interface ScenarioNamePool {
   readonly givenNames: readonly string[]
 }
 
-export type HistoricalAppearanceScope =
-  | { readonly kind: 'world' }
-  | { readonly kind: 'location'; readonly locationCode: string }
-
-/** A fixed-name exception is intentionally not a generic historical NPC record. */
-export interface HistoricalMinisterException {
-  readonly personId: PersonId
-  readonly displayName: string
-  readonly category: 'famous-minister'
-  readonly evidenceStatus: 'verified' | 'unverified'
-  readonly evidenceRefs: readonly string[]
-  readonly validFrom: WorldTime
-  readonly validThrough: WorldTime | null
-  readonly scope: HistoricalAppearanceScope
-}
+export type HistoricalAppearanceScope = HistoricalPersonScope
 
 export interface WorldBootstrapRequest {
   readonly worldId: WorldId
@@ -70,6 +57,9 @@ export interface FixedHistoricalPersonCandidate {
   readonly displayName: string
   readonly category: 'famous-minister'
   readonly evidenceRefs: readonly string[]
+  readonly validFrom: WorldTime
+  readonly validThrough: WorldTime | null
+  readonly scope: HistoricalAppearanceScope
   readonly provenance: 'verified-historical-exception'
 }
 
@@ -228,6 +218,9 @@ export function bootstrapWorld(request: WorldBootstrapRequest): WorldBootstrapRe
     displayName: person.displayName,
     category: 'famous-minister' as const,
     evidenceRefs: Object.freeze([...person.evidenceRefs]),
+    validFrom: Object.freeze({ ...person.validFrom }),
+    validThrough: person.validThrough ? Object.freeze({ ...person.validThrough }) : null,
+    scope: Object.freeze({ ...person.scope }),
     provenance: 'verified-historical-exception' as const,
   }))
   const usedNames = new Set(historicalPeople.map(person => person.displayName))
@@ -288,4 +281,25 @@ export function bootstrapWorld(request: WorldBootstrapRequest): WorldBootstrapRe
     generatedPeople: Object.freeze(generatedPeople),
     historicalPeople: Object.freeze(historicalPeople),
   }
+}
+
+export function generatedCandidateOrigin(candidate: GeneratedPersonCandidate): PersonOrigin {
+  return Object.freeze({
+    kind: 'seeded-random',
+    candidateId: candidate.id,
+    seedFingerprint: candidate.seedFingerprint,
+    roleCode: candidate.roleCode,
+    populationTier: candidate.populationTier,
+  })
+}
+
+export function historicalCandidateOrigin(candidate: FixedHistoricalPersonCandidate): PersonOrigin {
+  return Object.freeze({
+    kind: 'historical-minister',
+    category: 'famous-minister',
+    evidenceRefs: Object.freeze([...candidate.evidenceRefs]),
+    validFrom: Object.freeze({ ...candidate.validFrom }),
+    validThrough: candidate.validThrough ? Object.freeze({ ...candidate.validThrough }) : null,
+    scope: Object.freeze({ ...candidate.scope }),
+  })
 }
