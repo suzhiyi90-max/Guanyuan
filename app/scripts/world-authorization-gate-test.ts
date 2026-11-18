@@ -88,14 +88,14 @@ const queries: WorldQueryPort = {
   subscribe(): () => void { return () => undefined },
 }
 const requirement: WorldCommandAuthorizationRequirement = {
-  principal: personId,
   permission: 'county.order.issue',
   scope: grant.scope,
 }
 const requirements = {
   resolve: (): WorldCommandAuthorizationRequirement => requirement,
 }
-const gated = createAuthorizationGatedWorldCommandPort({ commands, queries, requirements })
+const principals = { resolve: () => personId }
+const gated = createAuthorizationGatedWorldCommandPort({ commands, queries, requirements, principals })
 const request: WorldCommandRequest = {
   worldId,
   clientRequestId: 'authorization-gate-command',
@@ -128,11 +128,20 @@ async function main(): Promise<void> {
 
   currentAggregate = authorizedAggregate
   const missingRequirement = createAuthorizationGatedWorldCommandPort({
-    commands, queries, requirements: { resolve: () => null },
+    commands, queries, requirements: { resolve: () => null }, principals,
   })
   const unresolved = await missingRequirement.submit({ ...request, clientRequestId: 'authorization-gate-unresolved' })
   check('unmapped player command is denied rather than inheriting rank or actor text',
     unresolved.status === 'rejected' && submitted === 1)
+
+  const missingPrincipalGate = createAuthorizationGatedWorldCommandPort({
+    commands, queries, requirements, principals: { resolve: () => null },
+  })
+  const missingPrincipal = await missingPrincipalGate.submit({
+    ...request, clientRequestId: 'authorization-gate-missing-principal',
+  })
+  check('request actor text cannot substitute for a missing authenticated principal',
+    missingPrincipal.status === 'rejected' && submitted === 1)
 
   const trustedInternal = await gated.submit({
     ...request, source: 'rule', clientRequestId: 'authorization-gate-internal-rule',
@@ -145,7 +154,7 @@ async function main(): Promise<void> {
     subscribe() { return () => undefined },
   }
   const missingWorldGate = createAuthorizationGatedWorldCommandPort({
-    commands, queries: missingWorld, requirements,
+    commands, queries: missingWorld, requirements, principals,
   })
   const missing = await missingWorldGate.submit({ ...request, clientRequestId: 'authorization-gate-missing-world' })
   check('missing world projection is denied without command submission',
