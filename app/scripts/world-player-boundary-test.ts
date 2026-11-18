@@ -43,6 +43,7 @@ let observerUnsubscribed = 0
 let observerSubscribeCalls = 0
 let emitObserverView: ((view: WorldObserverSocialView) => void) | null = null
 let holdObserverRead = false
+let observerReadResult: WorldObserverSocialView | null = null
 let resolveObserverRead: ((view: WorldObserverSocialView | null) => void) | null = null
 let signalObserverReadStarted: (() => void) | null = null
 let observerReadStarted = Promise.resolve()
@@ -64,7 +65,7 @@ const rawQueries: WorldQueryPort = {
 const rawObserverQueries: WorldObserverQueryPort = {
   async read(_id, observer) {
     queriedObserver = observer
-    if (!holdObserverRead) return null
+    if (!holdObserverRead) return observerReadResult
     resolveObserverRead?.(null)
     signalObserverReadStarted?.()
     return new Promise(resolve => { resolveObserverRead = resolve })
@@ -121,6 +122,13 @@ async function main(): Promise<void> {
   const observerView = {
     worldId, observer: principalId, observerPersonId: principalId,
   } as WorldObserverSocialView
+  observerReadResult = observerView
+  const acceptedView = await boundary.queries.read(worldId)
+  check('player query accepts a projection only when world and observer identities match', acceptedView === observerView)
+  observerReadResult = { ...observerView, observerPersonId: otherPersonId }
+  const mismatchedView = await boundary.queries.read(worldId)
+  check('player query rejects a projection for another observer', mismatchedView === null)
+  observerReadResult = null
   holdObserverRead = true
   observerReadStarted = new Promise<void>(resolve => { signalObserverReadStarted = resolve })
   const pendingRead = boundary.queries.read(worldId)
