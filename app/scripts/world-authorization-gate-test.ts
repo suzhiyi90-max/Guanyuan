@@ -8,6 +8,7 @@ import {
 } from '../src/domain'
 import {
   createAuthorizationGatedWorldCommandPort,
+  createWorldCommandAuthorizationRequirementResolver,
   type WorldCommandAuthorizationRequirement,
 } from '../src/application'
 import type {
@@ -159,6 +160,42 @@ async function main(): Promise<void> {
   const missing = await missingWorldGate.submit({ ...request, clientRequestId: 'authorization-gate-missing-world' })
   check('missing world projection is denied without command submission',
     missing.status === 'rejected' && submitted === 1)
+
+
+  const authorizationPolicy = {
+    schemaVersion: 'w6-command-authorization/1' as const,
+    policyId: 'county-command-permissions',
+    revision: '1',
+    rules: [{
+      intentKind: 'county.order.issue',
+      permission: 'county.order.issue',
+      scope: grant.scope,
+    }],
+  }
+  const policyRequirements = createWorldCommandAuthorizationRequirementResolver(authorizationPolicy)
+  const exactRequirement = await policyRequirements.resolve(request)
+  check('versioned policy maps an exact command intent to its declared permission and scope',
+    exactRequirement?.permission === 'county.order.issue'
+    && exactRequirement.scope.kind === 'office'
+    && exactRequirement.scope.office === grant.scope.office)
+  const unmappedRequirement = await policyRequirements.resolve({
+    ...request,
+    intentKind: 'county.treasury.withdraw',
+    payload: { scope: { kind: 'world' } },
+  })
+  check('unmapped command and caller-supplied payload scope cannot widen authorization',
+    unmappedRequirement === null)
+  let duplicatePolicyRejected = false
+  try {
+    createWorldCommandAuthorizationRequirementResolver({
+      ...authorizationPolicy,
+      rules: [...authorizationPolicy.rules, ...authorizationPolicy.rules],
+    })
+  } catch {
+    duplicatePolicyRejected = true
+  }
+  check('duplicate intent mappings invalidate the policy instead of selecting an arbitrary grant',
+    duplicatePolicyRejected)
 
   if (failed > 0) throw new Error(`World authorization gate tests failed: ${failed}/${passed + failed}`)
   console.log(`World authorization gate tests: ${passed}/${passed + failed} passed`)
