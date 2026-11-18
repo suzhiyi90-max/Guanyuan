@@ -4,8 +4,8 @@
  * Reducers are deterministic and side-effect free. They do not append events,
  * call AI, mutate the ledger or repair invalid records.
  */
-import { brandedId, field } from '../../domain/shared/field'
-import type { EventId } from '../../domain/shared/ids'
+import { field } from '../../domain/shared/field'
+import { brandedId, type EventId } from '../../domain/shared/ids'
 import { compareWorldTime, isValidWorldTime } from '../../domain/shared/world-time'
 import type { LedgerEvent } from '../../domain/event-ledger'
 import type { EventRegistry } from '../../domain/event-registry'
@@ -57,7 +57,7 @@ function withEventCursor(
 ): Pick<WorldAggregate, 'worldTime' | 'streamHead'> {
   return {
     worldTime: Object.freeze({ ...event.committedAt }),
-    streamHead: Object.freeze({ kind: 'event', seq: event.seq, eventId: event.id }),
+    streamHead: Object.freeze({ kind: 'event' as const, seq: event.seq, eventId: event.id }),
   }
 }
 
@@ -188,6 +188,9 @@ function applyAuthorizationGranted(
   }
   if (data.scope.kind === 'person' && !aggregate.persons.some(item => item.id === data.scope.person)) {
     throw new Error('world-reducer-authorization-person-scope-missing')
+  }
+  if (data.scope.kind === 'office' && !aggregate.identity.offices.some(item => item.id === data.scope.office)) {
+    throw new Error('world-reducer-authorization-office-scope-missing')
   }
   const authorization: Authorization = Object.freeze({
     ...data,
