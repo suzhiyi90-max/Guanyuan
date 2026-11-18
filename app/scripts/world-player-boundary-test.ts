@@ -65,8 +65,9 @@ const rawObserverQueries: WorldObserverQueryPort = {
   async read(_id, observer) {
     queriedObserver = observer
     if (!holdObserverRead) return null
-    observerReadStarted = new Promise<void>(resolve => { signalObserverReadStarted = resolve })
-    return new Promise(resolve => { resolveObserverRead = resolve; signalObserverReadStarted?.() })
+    resolveObserverRead?.(null)
+    signalObserverReadStarted?.()
+    return new Promise(resolve => { resolveObserverRead = resolve })
   },
   subscribe(_id, observer) {
     observerSubscribeCalls += 1
@@ -121,6 +122,7 @@ async function main(): Promise<void> {
     worldId, observer: principalId, observerPersonId: principalId,
   } as WorldObserverSocialView
   holdObserverRead = true
+  observerReadStarted = new Promise<void>(resolve => { signalObserverReadStarted = resolve })
   const pendingRead = boundary.queries.read(worldId)
   await observerReadStarted
   authenticated = otherPersonId
