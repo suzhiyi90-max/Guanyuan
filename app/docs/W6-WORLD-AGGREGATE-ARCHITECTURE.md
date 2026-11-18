@@ -36,7 +36,7 @@ W6 adds that boundary without changing W3/W4/W5 event, replay, snapshot, save or
            |
            +------> WorldSnapshotPort ---> Existing W4/W5 save adapters
 
-The aggregate is derived state. It is never an alternative fact store and must never be written directly by UI, AI or narrative code.
+The aggregate is derived state. It is never an alternative fact store and must never be written directly by UI, AI or narrative code. Every person also has persisted creation provenance: seeded-random, verified famous-minister exception, or player-character. County and grassroots roles cannot use a fixed-name origin; generated origins must match the world's seed fingerprint.
 
 ## 3. Aggregate composition
 
@@ -81,15 +81,17 @@ The application layer depends on interfaces, not React, IndexedDB, Tauri, a mode
 
 ## 6. Integration sequence
 
-1. W6-A: canonical aggregate envelope, cross-domain validator and application ports. (This change.)
-2. W6-B: typed world bootstrap and deterministic seed/fixture boundary; separate historical named-person allow-list from generated population.
-3. W6-C: event-to-domain projection registry and aggregate rebuild contract, using existing replay without changing its protocol.
-4. W6-D: command application handlers for person, identity, relation, cognition, planning and economy actions.
-5. W6-E: L0–L3 simulation scheduler and candidate-provider adapter; deterministic fallback when AI is absent.
-6. W6-F: UI query adapters and migration from preview-only selectors, without making the current preview's hard-coded seven-person fixture authoritative.
-7. W6-G: persistence integration and full-world acceptance, reusing existing save-package and restore machinery.
+1. W6-A: canonical aggregate envelope, cross-domain validator and application ports. Implemented.
+2. W6-B: typed world bootstrap, deterministic population generation and explicit person-origin policy. Implemented.
+3. W6-C: versioned world-domain event registry, pure person/organization/identity/authorization reducers, and W3 replay-backed aggregate projector. Implemented as the first production event slice.
+4. W6-D: extend event schemas and reducers to relations, cognition, planning, economy, life-state facts and death/succession records.
+5. W6-E: materialize generated population candidates into complete person records, including calendar-aware age, capabilities and body/mind state seeds.
+6. W6-F: deterministic L0–L3 simulation scheduler, decay/maintenance and candidate-provider adapter; deterministic fallback when AI is absent.
+7. W6-G: command handlers for scene interaction, office/governance actions, communication, goals and economy.
+8. W6-H: UI query adapters and migration from preview-only selectors, without making the current hard-coded fixture authoritative.
+9. W6-I: persistence integration and full-world acceptance, reusing existing save-package and restore machinery.
 
-Each step is separately testable. No UI migration or broad data rewrite is bundled into W6-A.
+Each step is separately testable. No UI migration or broad data rewrite is bundled into W6-A/B/C.
 
 ## 7. Explicitly out of scope
 
