@@ -25,7 +25,7 @@ export interface WorldCommandPrincipalPort {
 
 /** Maps a command to its exact permission and scope; no rank/title inference. */
 export interface WorldCommandAuthorizationRequirementPort {
-  resolve(request: WorldCommandRequest): Promise<WorldCommandAuthorizationRequirement | null> | WorldCommandAuthorizationRequirement | null
+  resolve(intentKind: string): Promise<WorldCommandAuthorizationRequirement | null> | WorldCommandAuthorizationRequirement | null
 }
 
 export interface AuthorizationGatedWorldCommandOptions {
@@ -75,7 +75,7 @@ export function createAuthorizationGatedWorldCommandPort(
       try {
         [principal, requirement] = await Promise.all([
           options.principals.resolve(),
-          options.requirements.resolve(command),
+          options.requirements.resolve(command.intentKind),
         ])
       } catch {
         return rejected(command, null, 'world-command-authorization-resolution-failed')
@@ -184,8 +184,8 @@ export function createWorldCommandAuthorizationRequirementResolver(
     scope: Object.freeze({ ...rule.scope }),
   })] as const))
   return Object.freeze({
-    resolve(request: WorldCommandRequest): WorldCommandAuthorizationRequirement | null {
-      const rule = rules.get(request.intentKind)
+    resolve(intentKind: string): WorldCommandAuthorizationRequirement | null {
+      const rule = rules.get(intentKind)
       if (!rule) return null
       return Object.freeze({
         permission: rule.permission,
