@@ -107,7 +107,7 @@ function isHistoricalMinisterAllowListEntry(value: JsonValue): boolean {
 
 function isBootstrapMetadata(value: JsonValue): value is JsonValue {
   if (!isRecord(value) || !hasExactKeys(value, [
-    'scenarioPackId', 'rulesetVersion', 'contentPackVersion',
+    'scenarioPackId', 'rulesetVersion', 'contentPackVersion', 'seed',
     'seedFingerprint', 'locationCode', 'populationPolicyVersion', 'historicalNameAllowList',
   ])) return false
   if (![value.scenarioPackId, value.rulesetVersion, value.contentPackVersion,
@@ -251,6 +251,7 @@ export function createWorldInitializationEventInput(
       scenarioPackId: descriptor.scenarioPackId,
       rulesetVersion: descriptor.rulesetVersion,
       contentPackVersion: descriptor.contentPackVersion,
+      seed: descriptor.seed,
       seedFingerprint: descriptor.seedFingerprint,
       locationCode: descriptor.locationCode,
       populationPolicyVersion: descriptor.populationPolicyVersion,
