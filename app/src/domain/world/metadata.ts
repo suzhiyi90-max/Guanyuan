@@ -17,6 +17,7 @@ export interface WorldBootstrapMetadata {
   readonly scenarioPackId: string
   readonly rulesetVersion: string
   readonly contentPackVersion: string
+  readonly seed: string
   readonly seedFingerprint: string
   readonly locationCode: string
   readonly populationPolicyVersion: string
