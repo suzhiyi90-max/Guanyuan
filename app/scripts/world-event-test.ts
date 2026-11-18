@@ -96,8 +96,8 @@ let aggregate = createEmptyWorldAggregate(worldId, now)
 
 check('world domain event registry is frozen and versioned', registry.frozen
   && registry.registryId === 'guanyuan.world-domain'
-  && registry.registryVersion === '1.1.0'
-  && registry.schemas.length === 28)
+  && registry.registryVersion === '1.2.0'
+  && registry.schemas.length === 29)
 
 function applyAt<K extends WorldDomainEventKind>(
   input: WorldDomainEventInput<K>,
@@ -166,6 +166,35 @@ check('person-created event creates active person and life-history projection',
   && aggregate.planning.scheduleScopes.length === 1
   && aggregate.planning.scheduleScopes[0]?.id === person.stateDomains.scheduleScope
   && aggregate.planning.scheduleScopes[0]?.person === person.id)
+
+apply(createLifeStateFactRecordedEventInput({
+  id: brandedId<'LifeStateFactId'>('life-state:body:stamina:001'),
+  person: person.id,
+  domain: 'body',
+  scope: person.stateDomains.body,
+  dimension: 'stamina',
+  value: field.value({
+    kind: 'quantitative',
+    value: 80,
+    scale: 'test-normalized-0-100',
+    unit: field.notApplicable,
+  }),
+  supersedes: field.notApplicable,
+  visibility: { observer: 'player', level: 'private' },
+}, {
+  actor: 'system',
+  source: 'rule',
+  requestWorldTime: now,
+  clientRequestId: 'life-state-fact-body-stamina-001',
+}))
+check('body and mind state changes are immutable event-backed life facts',
+  aggregate.life.stateFacts.length === 1
+  && aggregate.life.stateFacts[0]?.person === person.id
+  && aggregate.life.stateFacts[0]?.domain === 'body'
+  && aggregate.life.stateFacts[0]?.dimension === 'stamina'
+  && aggregate.life.stateFacts[0]?.sourceEvent === currentEventId()
+  && aggregate.life.stateFacts[0]?.at.day === now.day
+  && aggregate.life.stateFacts[0]?.at.period === now.period)
 
 const organizationId = brandedId<'OrgId'>('org:county-office')
 const organizationInput: WorldDomainEventInput<'organization.registered'> = {
