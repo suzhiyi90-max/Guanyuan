@@ -39,6 +39,9 @@ let rawAggregateReads = 0
 let queriedObserver: string | null = null
 let subscribedObserver: string | null = null
 let observerUnsubscribed = 0
+let observerSubscribeCalls = 0
+let resolveObserverSubscribed: () => void = () => undefined
+const observerSubscribed = new Promise<void>(resolve => { resolveObserverSubscribed = resolve })
 const rawCommands: WorldCommandPort = {
   async submit(): Promise<WorldCommandReceipt> {
     rawSubmissions += 1
@@ -58,7 +61,9 @@ const rawObserverQueries: WorldObserverQueryPort = {
     return null
   },
   subscribe(_id, observer) {
+    observerSubscribeCalls += 1
     subscribedObserver = observer
+    resolveObserverSubscribed()
     return () => { observerUnsubscribed += 1 }
   },
 }
@@ -112,8 +117,7 @@ async function main(): Promise<void> {
 
   let notified = false
   const unsubscribe = boundary.queries.subscribe(worldId, () => { notified = true })
-  await Promise.resolve()
-  await Promise.resolve()
+  await observerSubscribed
   check('player subscription binds the observer to the trusted authenticated principal',
     subscribedObserver === principalId && !notified)
   unsubscribe()
@@ -139,6 +143,7 @@ async function main(): Promise<void> {
     anonymousView === null
     && queriedObserver === null
     && subscribedObserver === principalId
+    && observerSubscribeCalls === 1
     && !anonymousSubscriptionCalled)
   stopAnonymous()
 
