@@ -185,7 +185,8 @@ function validateRequest(request: WorldBootstrapRequest): WorldBootstrapIssue[] 
       addIssue(issues, 'bootstrap-historical-person-evidence-missing')
     }
     if (!isValidWorldTime(person.validFrom)
-      || (person.validThrough !== null && !isValidWorldTime(person.validThrough))) {
+      || (person.validThrough !== null && !isValidWorldTime(person.validThrough))
+      || (person.validThrough !== null && compareWorldTime(person.validThrough, person.validFrom) < 0)) {
       addIssue(issues, 'bootstrap-historical-person-time-invalid')
     } else if (isValidWorldTime(request.worldTime)) {
       if (compareWorldTime(request.worldTime, person.validFrom) < 0) {
