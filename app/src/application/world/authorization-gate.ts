@@ -169,7 +169,13 @@ export function createWorldCommandAuthorizationRequirementResolver(
   if (issues.length > 0) {
     throw new Error(`world-command-authorization-policy-invalid:${issues.join(',')}`)
   }
-  const rules = new Map(policy.rules.map(rule => [rule.intentKind, rule] as const))
+  // Snapshot trusted configuration at composition time. Later mutation of the
+  // provider's source object must not silently change active authorization.
+  const rules = new Map(policy.rules.map(rule => [rule.intentKind, Object.freeze({
+    intentKind: rule.intentKind,
+    permission: rule.permission,
+    scope: Object.freeze({ ...rule.scope }),
+  })] as const))
   return Object.freeze({
     resolve(request: WorldCommandRequest): WorldCommandAuthorizationRequirement | null {
       const rule = rules.get(request.intentKind)
