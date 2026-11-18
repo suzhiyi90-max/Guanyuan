@@ -377,7 +377,7 @@ function isScheduleEntryPayload(payload: JsonValue): boolean {
   const entry = payload.entry
   return hasExactKeys(entry, ['id', 'scope', 'person', 'day', 'period', 'action', 'place', 'visibility'])
     && [entry.id, entry.scope, entry.person, entry.action, entry.place].every(isNonEmptyString)
-    && Number.isInteger(entry.day) && Number(entry.day) >= 1
+    && typeof entry.day === 'number' && Number.isInteger(entry.day) && entry.day >= 1
     && ['晨', '午', '暮', '夜'].includes(String(entry.period))
     && isVisibility(entry.visibility)
 }
