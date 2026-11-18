@@ -73,6 +73,12 @@ async function run(): Promise<void> {
     history: brandedId<'LifeHistoryRef'>('history:projector:001'),
   }
   const personEvent = append(createPersonCreatedEventInput(person, {
+  kind: 'seeded-random',
+  candidateId: person.id,
+  seedFingerprint: '0a1b2c3d',
+  roleCode: 'grassroots-runner',
+  populationTier: 'grassroots',
+}, {
     actor: 'system',
     source: 'rule',
     requestWorldTime: start,
