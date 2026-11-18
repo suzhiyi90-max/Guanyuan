@@ -10,12 +10,12 @@ import type { EventLedger, WorldId } from '../event-ledger'
 import type { StreamCursor } from '../event-replay'
 import type { WorldTime } from '../shared/world-time'
 import { compareWorldTime, isValidWorldTime } from '../shared/world-time'
-import type { EventId, PersonId } from '../shared/ids'
+import type { EventId } from '../shared/ids'
 import type { Person } from '../person/model'
-import { validatePersonLifecycle } from '../person/lifecycle'
+import { validatePersonLifecycle, validateDeathSettlementReferences } from '../person/lifecycle'
 
 import type { IdentityAssignment, Office, Appointment, Authorization } from '../identity/model'
-import { validateIdentityAssignment, validateOfficeAppointments, validateOfficeAuthorizationReferences, validateAuthorizationSet } from '../identity/validation'
+import { validateIdentityAssignment, validateAppointment, validateOfficeAppointments, validateOfficeAuthorizationReferences, validateAuthorizationSet } from '../identity/validation'
 
 import type { Relation, RelationClaim, RelationEvidence, Organization, Membership } from '../relations/model'
 import { validateRelationSet, validateRelationClaimSet, validateRelationEvidenceSet, validateOrganizationSet, validateMembershipSet } from '../relations/validation'
@@ -200,6 +200,9 @@ export function validateWorldAggregate(
   if (!uniqueIds(aggregate.persons, item => item.id)) addIssue(issues, 'person', 'person-id-duplicate')
   for (const person of aggregate.persons) {
     addCodes(issues, 'person', validatePersonLifecycle(person, aggregate.worldTime), person.id)
+    if (person.death.kind === 'value') {
+      addCodes(issues, 'person', validateDeathSettlementReferences(person, { events: eventIds, eventTimes }), person.id)
+    }
   }
 
   const personSet = new Set<string>(personIds)
@@ -234,6 +237,7 @@ export function validateWorldAggregate(
   }
   if (!uniqueIds(aggregate.identity.appointments, item => item.id)) addIssue(issues, 'identity', 'appointment-id-duplicate')
   for (const appointment of aggregate.identity.appointments) {
+    addCodes(issues, 'identity', validateAppointment(appointment), appointment.id)
     if (!officeSet.has(appointment.office)) addIssue(issues, 'identity', 'appointment-office-missing', appointment.id)
     if (!personSet.has(appointment.person)) addIssue(issues, 'identity', 'appointment-person-missing', appointment.id)
   }
