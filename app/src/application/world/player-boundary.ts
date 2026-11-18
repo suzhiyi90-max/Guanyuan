@@ -66,6 +66,8 @@ export function createWorldPlayerBoundary(
       try {
         const principal = await options.principals.resolve()
         if (!principal) return null
+        const aggregate = await options.queries.read(worldId)
+        if (!aggregate || aggregate.playerPersonId !== principal) return null
         return await options.observerQueries.read(worldId, principal)
       } catch {
         return null
@@ -79,6 +81,8 @@ export function createWorldPlayerBoundary(
         .then(() => options.principals.resolve())
         .then(principal => {
           if (!active || !principal) return
+          const aggregate = await options.queries.read(worldId)
+          if (!active || !aggregate || aggregate.playerPersonId !== principal) return
           unsubscribe = options.observerQueries.subscribe(worldId, principal, view => {
             if (active) listener(view)
           })
