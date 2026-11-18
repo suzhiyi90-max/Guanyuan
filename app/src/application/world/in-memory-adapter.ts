@@ -24,11 +24,13 @@ import {
   type WorldDomainEventKind,
 } from './event-catalog'
 import { createWorldAggregateProjector } from './projector'
+import { projectWorldForObserver } from './observer-view'
 import type {
   WorldCommandPort,
   WorldCommandReceipt,
   WorldProjectionPort,
   WorldQueryPort,
+  WorldObserverQueryPort,
 } from './ports'
 
 const intentKinds: Readonly<Record<string, WorldDomainEventKind>> = Object.freeze({
@@ -67,6 +69,7 @@ export interface InMemoryWorldAdapterOptions {
 export interface InMemoryWorldAdapter {
   readonly commands: WorldCommandPort
   readonly queries: WorldQueryPort
+  readonly observerQueries: WorldObserverQueryPort
   readonly projector: WorldProjectionPort<WorldDomainEventKind>
   /** Read-only ledger snapshot for adapter diagnostics and test assertions. */
   readLedger(): EventLedger<WorldDomainEventKind>
@@ -207,9 +210,22 @@ export function createInMemoryWorldAdapter(options: InMemoryWorldAdapterOptions)
     },
   }
 
+  const observerQueries: WorldObserverQueryPort = {
+    async read(worldId, observer) {
+      return worldId === options.worldId ? projectWorldForObserver(aggregate, observer) : null
+    },
+    subscribe(worldId, observer, listener) {
+      if (worldId !== options.worldId) return () => undefined
+      const project = (value: WorldAggregate) => listener(projectWorldForObserver(value, observer))
+      listeners.add(project)
+      return () => { listeners.delete(project) }
+    },
+  }
+
   return Object.freeze({
     commands,
     queries,
+    observerQueries,
     projector,
     readLedger: () => ledger,
   })
