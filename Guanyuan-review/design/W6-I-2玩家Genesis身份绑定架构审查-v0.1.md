@@ -176,4 +176,31 @@ Ledger 提交与账号所有权存储可能不是同一事务，不能假定二�
 
 ## 10. PR #89 当前候选提交验收状态
 
-候选 head：`ab36a78a3a0e2623284a87d86353e47a840e8970`；对应 G1.7 run：`44328904673`。2026-11-18 最新复查时工作流仍在运行，已完成 39/65 步，正在执行 `Death settlement evidence envelope contracts`，此前步骤未报告失败。必须等待后续全量回归、生产构建、Playwright 烟测和存档回归结束，不能沿用较早 head 的成功记录作为当前候选提交的最终验收。
+候选 head：`ab36a78a3a0e2623284a87d86353e47a840e8970`；对应 G1.7 run：`44328904673`。2026-11-18 复查结果：
+
+- Workflow：`success`。
+- Job：`frontend`，66/66 steps completed。
+- `Production build`：success。
+- `Start Vite`：success。
+- `Playwright smoke and archive regression`：success。
+- `Upload smoke screenshots`：success。
+- 无失败步骤。
+
+本结果验收 PR #89 候选代码和 G1.7 自动化流程，不等于 PR 已合并，不等于 W6 已接管 App，也不等于真人视觉眼审完成。PR #89 仍保持 Draft/Open；不因 CI 通过而自动合并。
+
+## 11. 本地身份适配器实施前核查
+
+对 PR #89 的代码与其父分支进行核查后，确认：
+
+- W6 application 层已有 `WorldCommandPrincipalPort`，其当前身份类型为游戏内 `PersonId`，不能直接复用为账号所有者身份。
+- `WorldApplicationPorts` 暂无 Owner 身份或 Owner/World 持久绑定端口。
+- W6 当前可见的 `in-memory-adapter.ts` 明确只服务预览、集成测试和本地组合，不提供跨重启持久性。
+- `app/src/main.tsx` 当前仍挂载既有 W5 Preview App；不能将 W6 本地身份适配器直接接入现有 App，也不能借此迁移或改造 W5 存档。
+- W6 application/domain 目录尚无独立 infrastructure adapter 层；后续若新增，应保持适配器位于应用边界之外，不能把浏览器存储 API 引入 domain。
+- 当前仓库可确认 Vite 构建，但不能仅凭 `import.meta.env.DEV` 的开发期标志推断所有发布渠道均安全。生产禁用必须同时由适配器运行时 fail-closed 和生产构建验收覆盖。
+
+### 11.1 下一施工边界
+
+下一工作包仅建立 W6 本地开发 Owner 身份端口及其浏览器本地适配器，包含稳定 ID、跨重启恢复、存储损坏/不可用时拒绝、开发环境启用与生产环境禁用测试。它不接入 App，不创建 World，不提交人物事件，不触碰 W5 存档，也不改视觉、美术或交互。
+
+Owner/World 原子预留、Genesis reservation 与事件提交恢复属于后续独立工作包；不得用 localStorage 的单键写入冒充多记录事务或并发原子锁。
