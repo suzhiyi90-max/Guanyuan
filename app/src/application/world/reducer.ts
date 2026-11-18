@@ -37,6 +37,7 @@ function assertNextEvent(
   event: LedgerEvent<WorldDomainEventKind>,
 ): void {
   if (event.worldId !== aggregate.worldId) throw new Error('world-reducer-world-id-mismatch')
+  if (event.source === 'ai-candidate') throw new Error('world-reducer-ai-candidate-cannot-write-facts')
   const expectedSeq = aggregate.streamHead.kind === 'genesis' ? 1 : aggregate.streamHead.seq + 1
   if (!Number.isSafeInteger(event.seq) || event.seq !== expectedSeq) {
     throw new Error('world-reducer-event-sequence-mismatch')
