@@ -9,6 +9,7 @@ import type { Person } from '../../domain/person/model'
 import type { PersonOrigin } from '../../domain/person/provenance'
 import type { IdentityAssignment, Authorization } from '../../domain/identity/model'
 import type { Organization, Relation, RelationClaim, RelationEvidence, Membership, RelationLifecycleStatus } from '../../domain/relations/model'
+import type { PersonExposure, ExposureKind } from '../../domain/relations/exposure'
 import type { EntityRef, FailureKind, KnowledgeEntry, Message, MessagePropagation } from '../../domain/cognition/model'
 import type { Goal, ScheduleEntry, GoalStatus } from '../../domain/planning/model'
 import type { Debt, Asset, AssetRightKind, RightGrant } from '../../domain/economy/model'
@@ -51,6 +52,7 @@ export type WorldDomainEventKind =
   | 'asset.registered'
   | 'asset.right.granted'
   | 'asset.right.revoked'
+  | 'person.exposure.recorded'
 
 export type PersonCreationData = Omit<Person, 'lifeState' | 'archiveState' | 'death'>
 export type IdentityAssignmentCreationData = Omit<IdentityAssignment, 'validFrom' | 'validTo' | 'sourceEvent'>
@@ -70,6 +72,7 @@ export type ScheduleEntryCreationData = Pick<ScheduleEntry, 'id' | 'scope' | 'pe
 export type DebtCreationData = Pick<Debt, 'id' | 'creditor' | 'debtor' | 'principal' | 'kind'>
 export type AssetCreationData = Pick<Asset, 'id' | 'kind' | 'quantity' | 'custody' | 'valuation'>
 export type AssetRightGrantData = Omit<RightGrant, 'grantedBy'>
+export type PersonExposureCreationData = Pick<PersonExposure, 'id' | 'observer' | 'subject' | 'kind'>
 
 export interface WorldDomainEventPayloadMap {
   readonly 'world.initialized': WorldBootstrapMetadata
@@ -96,6 +99,7 @@ export interface WorldDomainEventPayloadMap {
   readonly 'asset.registered': { readonly asset: AssetCreationData }
   readonly 'asset.right.granted': { readonly assetId: string; readonly rightKind: AssetRightKind; readonly grant: AssetRightGrantData }
   readonly 'asset.right.revoked': { readonly grantId: string }
+  readonly 'person.exposure.recorded': { readonly exposure: PersonExposureCreationData }
 }
 
 export type WorldDomainEventInput<Kind extends WorldDomainEventKind = WorldDomainEventKind> =
@@ -428,6 +432,16 @@ function isAssetRightRevocationPayload(payload: JsonValue): boolean {
   return isRecord(payload) && hasExactKeys(payload, ['grantId']) && isNonEmptyString(payload.grantId)
 }
 
+function isPersonExposurePayload(payload: JsonValue): boolean {
+  if (!isRecord(payload) || !hasExactKeys(payload, ['exposure']) || !isRecord(payload.exposure)) return false
+  const exposure = payload.exposure
+  return hasExactKeys(exposure, ['id', 'observer', 'subject', 'kind'])
+    && isNonEmptyString(exposure.id)
+    && (exposure.observer === 'player' || isNonEmptyString(exposure.observer))
+    && isNonEmptyString(exposure.subject)
+    && ['heard-of', 'seen', 'met', 'conversed', 'corresponded'].includes(String(exposure.kind))
+}
+
 const schemas: ReadonlyArray<{ readonly kind: WorldDomainEventKind; readonly validate: EventSchemaValidator }> = [
   { kind: 'world.initialized', validate: isBootstrapMetadata },
   { kind: 'person.created', validate: isPersonCreationPayload },
@@ -453,6 +467,7 @@ const schemas: ReadonlyArray<{ readonly kind: WorldDomainEventKind; readonly val
   { kind: 'asset.registered', validate: isAssetPayload },
   { kind: 'asset.right.granted', validate: isAssetRightGrantPayload },
   { kind: 'asset.right.revoked', validate: isAssetRightRevocationPayload },
+  { kind: 'person.exposure.recorded', validate: isPersonExposurePayload },
 ]
 
 export function createWorldDomainEventRegistry(): EventRegistry<WorldDomainEventKind> {
@@ -927,6 +942,26 @@ export function createAssetRightRevokedEventInput(
     requestWorldTime: options.requestWorldTime,
     clientRequestId: options.clientRequestId,
     payload: { grantId },
+  }
+}
+
+export function createPersonExposureRecordedEventInput(
+  exposure: PersonExposureCreationData,
+  options: {
+    readonly actor: string
+    readonly source: Extract<LedgerSource, 'player-command' | 'rule'>
+    readonly requestWorldTime: WorldTime
+    readonly clientRequestId: string
+  },
+): WorldDomainEventInput<'person.exposure.recorded'> {
+  return {
+    source: options.source,
+    kind: 'person.exposure.recorded',
+    intentKind: 'person.exposure.record',
+    actor: options.actor,
+    requestWorldTime: options.requestWorldTime,
+    clientRequestId: options.clientRequestId,
+    payload: { exposure },
   }
 }
 
