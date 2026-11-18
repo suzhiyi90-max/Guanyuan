@@ -239,5 +239,15 @@ expectThrow('world reducer rejects skipped event sequence',
   () => reduceWorldDomainEvent(aggregate, skippedEvent, registry),
   'event-sequence-mismatch')
 
+const aiSourcedEvent = {
+  ...lastEvent,
+  source: 'ai-candidate' as const,
+  seq: ledger.head + 1,
+  id: brandedId<'EventId'>(`evt:${worldId}:${ledger.head + 1}`),
+}
+expectThrow('AI candidate proposals cannot directly write world facts',
+  () => reduceWorldDomainEvent(aggregate, aiSourcedEvent, registry),
+  'ai-candidate-cannot-write-facts')
+
 if (failed > 0) throw new Error(`World event tests failed: ${failed}/${passed + failed}`)
 console.log(`World event contract tests: ${passed}/${passed + failed} passed`)
