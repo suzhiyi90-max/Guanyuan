@@ -9,7 +9,7 @@ import type { JsonValue, WorldId } from '../../domain/event-ledger'
 import type { EventId, ScheduleId } from '../../domain/shared/ids'
 import { compareWorldTime, isValidWorldTime, type WorldTime } from '../../domain/shared/world-time'
 import type { WorldAggregate } from '../../domain/world/aggregate'
-import { createScheduleEntryExecutionRecordedEventInput, toLedgerEventInput } from './event-catalog'
+import { createScheduleEntryExecutionRecordedEventInput, createWorldTimeAdvancedEventInput, toLedgerEventInput } from './event-catalog'
 import type {
   WorldCommandPort,
   WorldCommandReceipt,
@@ -184,15 +184,17 @@ export function createDeterministicWorldScheduler(
           }
         }
       }
-      if (ordered.length === 0) {
+      const clockRequired = compareWorldTime(request.to, request.from) > 0
+      if (ordered.length === 0 && !clockRequired) {
         return { status: 'unchanged', worldId: request.worldId, streamHead: initial.streamHead }
       }
 
       let selectedCount = 0
       let budgetUsed = 0
+      const clockCost = clockRequired ? 1 : 0
       for (const task of ordered) {
         const eventCost = task.scheduleId === undefined ? 1 : 2
-        if (budgetUsed + eventCost > request.maxEvents) break
+        if (budgetUsed + eventCost + clockCost > request.maxEvents) break
         budgetUsed += eventCost
         selectedCount += 1
       }
@@ -221,6 +223,49 @@ export function createDeterministicWorldScheduler(
         })
         const refreshed = await options.queries.read(request.worldId)
         return { receipt, aggregate: refreshed }
+      }
+
+      const advanceClock = async (): Promise<{ readonly receipt: WorldCommandReceipt; readonly aggregate: WorldAggregate | null }> => {
+        const input = toLedgerEventInput(createWorldTimeAdvancedEventInput(
+          request.from,
+          request.to,
+          {
+            actor: 'system',
+            requestWorldTime: request.to,
+            clientRequestId: `w6-simulation:${request.worldId}:clock:${request.from.day}-${request.from.period}:${request.to.day}-${request.to.period}`,
+          },
+        ))
+        return submit(
+          input.clientRequestId,
+          input.actor,
+          'rule',
+          input.intentKind,
+          request.to,
+          input.payload,
+        )
+      }
+
+      if (selected.length === 0 && clockRequired) {
+        try {
+          const clock = await advanceClock()
+          if (isFailure(clock.receipt) || !clock.aggregate) {
+            const reason = isFailure(clock.receipt) ? clock.receipt.reason : 'world-simulation-clock-query-refresh-failed'
+            return rejected(request, latest.streamHead, reason)
+          }
+          if (clock.receipt.status === 'committed' || clock.receipt.status === 'duplicate') {
+            emittedEventIds.push(clock.receipt.eventId)
+          }
+          return {
+            status: 'advanced',
+            worldId: request.worldId,
+            from: request.from,
+            to: clock.aggregate.worldTime,
+            emittedEventIds: Object.freeze(emittedEventIds),
+            streamHead: clock.aggregate.streamHead,
+          }
+        } catch {
+          return rejected(request, latest.streamHead, 'world-simulation-clock-command-failed')
+        }
       }
 
       for (let index = 0; index < selected.length; index += 1) {
@@ -328,6 +373,39 @@ export function createDeterministicWorldScheduler(
           pendingTaskIds: Object.freeze(pendingTaskIds),
           streamHead: latest.streamHead,
           reason: 'world-simulation-event-budget-exhausted',
+        }
+      }
+      if (clockRequired) {
+        try {
+          const clock = await advanceClock()
+          if (!isFailure(clock.receipt)
+            && (clock.receipt.status === 'committed' || clock.receipt.status === 'duplicate')) {
+            emittedEventIds.push(clock.receipt.eventId)
+          }
+          if (isFailure(clock.receipt) || !clock.aggregate) {
+            return {
+              status: 'partial',
+              worldId: request.worldId,
+              from: request.from,
+              to: latest.worldTime,
+              emittedEventIds: Object.freeze(emittedEventIds),
+              pendingTaskIds: Object.freeze([]),
+              streamHead: latest.streamHead,
+              reason: isFailure(clock.receipt) ? clock.receipt.reason : 'world-simulation-clock-query-refresh-failed',
+            }
+          }
+          latest = clock.aggregate
+        } catch {
+          return {
+            status: 'partial',
+            worldId: request.worldId,
+            from: request.from,
+            to: latest.worldTime,
+            emittedEventIds: Object.freeze(emittedEventIds),
+            pendingTaskIds: Object.freeze([]),
+            streamHead: latest.streamHead,
+            reason: 'world-simulation-clock-command-failed',
+          }
         }
       }
       if (emittedEventIds.length === 0) {
