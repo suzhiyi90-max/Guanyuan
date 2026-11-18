@@ -22,6 +22,11 @@ import {
   createMessageStageRecordedEventInput,
   createMessageFailureRecordedEventInput,
   createMessagePropagationRecordedEventInput,
+  createGoalCreatedEventInput,
+  createGoalStatusChangedEventInput,
+  createScheduleEntryPlannedEventInput,
+  createDebtRecordedEventInput,
+  createDebtSettledEventInput,
   toLedgerEventInput,
 } from '../src/application'
 import type {
@@ -60,13 +65,18 @@ async function run(): Promise<void> {
   const registry = createWorldDomainEventRegistry()
   let ledger = createEventLedger<WorldDomainEventKind>(worldId)
 
-  function append<K extends WorldDomainEventKind>(
+  function appendAt<K extends WorldDomainEventKind>(
     input: WorldDomainEventInput<K>,
+    committedAt: WorldTime,
   ) {
-    const result = appendLedgerEvent(ledger, toLedgerEventInput(input), start)
+    const result = appendLedgerEvent(ledger, toLedgerEventInput(input), committedAt)
     if (result.status !== 'appended') throw new Error(`projector-test-append-failed:${result.status}`)
     ledger = result.ledger
     return result.event
+  }
+
+  function append<K extends WorldDomainEventKind>(input: WorldDomainEventInput<K>) {
+    return appendAt(input, start)
   }
 
   const initEvent = append(createWorldInitializationEventInput(descriptor, 'projector-world-init'))
@@ -269,9 +279,50 @@ async function run(): Promise<void> {
   }, {
     actor: 'player', source: 'player-command', requestWorldTime: start, clientRequestId: 'projector-failed-message-sent',
   }))
-  const finalEvent = append(createMessageFailureRecordedEventInput(failedMessageId, 'courier-lost' as FailureKind, {
+  append(createMessageFailureRecordedEventInput(failedMessageId, 'courier-lost' as FailureKind, {
     actor: 'system', source: 'rule', requestWorldTime: start, clientRequestId: 'projector-message-failed',
   }))
+  const nextMorning: WorldTime = { day: start.day + 1, period: '晨' }
+  const nextNoon: WorldTime = { day: start.day + 1, period: '午' }
+  const nextEvening: WorldTime = { day: start.day + 1, period: '暮' }
+  const goalId = brandedId<'GoalId'>('goal:projector:001')
+  append(createGoalCreatedEventInput({
+    id: goalId,
+    person: person.id,
+    statement: '完成县署差遣',
+    priority: 0.7,
+    visibility: { observer: 'player', level: 'private' },
+  }, {
+    actor: 'player', source: 'player-command', requestWorldTime: start, clientRequestId: 'projector-goal-created',
+  }))
+  appendAt(createGoalStatusChangedEventInput(goalId, 'achieved', {
+    actor: 'player', source: 'player-command', requestWorldTime: nextMorning, clientRequestId: 'projector-goal-achieved',
+  }), nextMorning)
+  appendAt(createScheduleEntryPlannedEventInput({
+    id: brandedId<'ScheduleId'>('schedule:projector:001'),
+    scope: person.stateDomains.scheduleScope,
+    person: person.id,
+    day: nextNoon.day,
+    period: nextNoon.period,
+    action: brandedId<'ActionRef'>('action:projector:review'),
+    place: brandedId<'PlaceId'>('place:projector:yamen'),
+    visibility: { observer: 'player', level: 'private' },
+  }, {
+    actor: 'player', source: 'player-command', requestWorldTime: nextMorning, clientRequestId: 'projector-schedule-planned',
+  }), nextMorning)
+  const debtId = brandedId<'DebtId'>('debt:projector:001')
+  appendAt(createDebtRecordedEventInput({
+    id: debtId,
+    creditor: person.id,
+    debtor: secondPerson.id,
+    principal: 60,
+    kind: '银两借贷',
+  }, {
+    actor: 'player', source: 'player-command', requestWorldTime: nextNoon, clientRequestId: 'projector-debt-recorded',
+  }), nextNoon)
+  const finalEvent = appendAt(createDebtSettledEventInput(debtId, {
+    actor: 'player', source: 'player-command', requestWorldTime: nextEvening, clientRequestId: 'projector-debt-settled',
+  }), nextEvening)
 
   const projector = createWorldAggregateProjector({ registry, worldStartTime: start })
   const genesis = await projector.rebuild({ ledger, target: { kind: 'genesis', seq: 0 } })
@@ -308,7 +359,13 @@ async function run(): Promise<void> {
     && complete.aggregate.cognition.propagations.length === 1
     && complete.aggregate.cognition.messages.length === 2
     && complete.aggregate.cognition.messages[0]?.repliedAt.kind === 'value'
-    && complete.aggregate.cognition.messages[1]?.failure.kind === 'value')
+    && complete.aggregate.cognition.messages[1]?.failure.kind === 'value'
+    && complete.aggregate.planning.goals.length === 1
+    && complete.aggregate.planning.goals[0]?.status === 'achieved'
+    && complete.aggregate.planning.goalStatusTransitions.length === 1
+    && complete.aggregate.planning.scheduleEntries.length === 1
+    && complete.aggregate.economy.debts.length === 1
+    && complete.aggregate.economy.debts[0]?.status === 'settled')
 
   const badAnchor = await projector.rebuild({
     ledger,
