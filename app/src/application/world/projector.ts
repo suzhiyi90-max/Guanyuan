@@ -21,10 +21,6 @@ function isRecord(value: JsonValue): value is JsonRecord {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
 
-function isStringArray(value: JsonValue | undefined): boolean {
-  return Array.isArray(value) && value.every(item => typeof item === 'string')
-}
-
 function isStringRecord(value: JsonValue | undefined): value is JsonRecord {
   return isRecord(value)
 }
