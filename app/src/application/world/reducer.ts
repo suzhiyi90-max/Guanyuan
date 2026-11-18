@@ -97,6 +97,32 @@ function applyPersonCreated(
   requireBootstrap(aggregate)
   const payload = event.payload as unknown as WorldDomainEventPayloadMap['person.created']
   const data: PersonCreationData = payload.person
+  if (payload.origin.kind === 'seeded-random'
+    && payload.origin.seedFingerprint !== aggregate.bootstrap?.seedFingerprint) {
+    throw new Error('world-reducer-random-person-seed-mismatch')
+  }
+  if (payload.origin.kind === 'historical-minister') {
+    const allowed = aggregate.bootstrap?.historicalNameAllowList.find(item => item.personId === data.id)
+    const sameScope = !!allowed && allowed.scope.kind === payload.origin.scope.kind
+      && (payload.origin.scope.kind === 'world'
+        || (allowed.scope.kind === 'location'
+          && allowed.scope.locationCode === payload.origin.scope.locationCode))
+    const sameValidity = !!allowed
+      && compareWorldTime(allowed.validFrom, payload.origin.validFrom) === 0
+      && ((allowed.validThrough === null && payload.origin.validThrough === null)
+        || (!!allowed.validThrough && !!payload.origin.validThrough
+          && compareWorldTime(allowed.validThrough, payload.origin.validThrough) === 0))
+    const sameEvidence = !!allowed
+      && allowed.evidenceRefs.length === payload.origin.evidenceRefs.length
+      && allowed.evidenceRefs.every((ref, index) => ref === payload.origin.evidenceRefs[index])
+    if (!allowed || allowed.displayName !== data.displayName || !sameScope || !sameValidity || !sameEvidence) {
+      throw new Error('world-reducer-historical-person-not-allowlisted')
+    }
+    if (compareWorldTime(payload.origin.validFrom, event.committedAt) > 0
+      || (payload.origin.validThrough && compareWorldTime(payload.origin.validThrough, event.committedAt) < 0)) {
+      throw new Error('world-reducer-historical-person-outside-validity')
+    }
+  }
   requireUniquePerson(aggregate, data.id, data.history)
   const person: Person = Object.freeze({
     ...data,
