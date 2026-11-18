@@ -24,6 +24,8 @@ import {
   createGoalCreatedEventInput,
   createGoalStatusChangedEventInput,
   createScheduleEntryPlannedEventInput,
+  createScheduleEntryExecutionRecordedEventInput,
+  createScheduleEntryDeviationRecordedEventInput,
   createDebtRecordedEventInput,
   createDebtSettledEventInput,
   createAssetRegisteredEventInput,
@@ -95,7 +97,7 @@ let aggregate = createEmptyWorldAggregate(worldId, now)
 check('world domain event registry is frozen and versioned', registry.frozen
   && registry.registryId === 'guanyuan.world-domain'
   && registry.registryVersion === '1.0.0'
-  && registry.schemas.length === 25)
+  && registry.schemas.length === 27)
 
 function applyAt<K extends WorldDomainEventKind>(
   input: WorldDomainEventInput<K>,
@@ -626,8 +628,9 @@ check('goal terminal status change records a separate event-backed transition',
   && aggregate.planning.goalStatusTransitions.length === 1
   && aggregate.planning.goalStatusTransitions[0]?.event === currentEventId())
 
+const scheduleId = brandedId<'ScheduleId'>('schedule:person:next-noon')
 applyAt(createScheduleEntryPlannedEventInput({
-  id: brandedId<'ScheduleId'>('schedule:person:next-noon'),
+  id: scheduleId,
   scope: person.stateDomains.scheduleScope,
   person: person.id,
   day: nextNoon.day,
@@ -653,10 +656,52 @@ applyAt(createDebtRecordedEventInput({
 }, {
   actor: 'player', source: 'player-command', requestWorldTime: nextNoon, clientRequestId: 'debt-record-001',
 }), nextNoon)
+const scheduledActionResultEvent = currentEventId()
+applyAt(createScheduleEntryExecutionRecordedEventInput(scheduleId, scheduledActionResultEvent, {
+  actor: 'system', source: 'schedule', requestWorldTime: nextEvening, clientRequestId: 'schedule-execution-001',
+}), nextEvening)
+check('schedule execution is linked to a distinct action result event after the planned time',
+  aggregate.planning.scheduleEntries[0]?.execution.kind === 'value'
+  && aggregate.planning.scheduleEntries[0]?.execution.value === scheduledActionResultEvent
+  && aggregate.planning.scheduleEntries[0]?.deviation.kind === 'n/a')
+const deferredScheduleId = brandedId<'ScheduleId'>('schedule:person:deferred')
+applyAt(createScheduleEntryPlannedEventInput({
+  id: deferredScheduleId,
+  scope: person.stateDomains.scheduleScope,
+  person: person.id,
+  day: nextNoon.day + 1,
+  period: '晨',
+  action: brandedId<'ActionRef'>('action:attend-county-hearing'),
+  place: brandedId<'PlaceId'>('place:county-yamen'),
+  visibility: { observer: 'player', level: 'private' },
+}, {
+  actor: 'player', source: 'player-command', requestWorldTime: nextEvening, clientRequestId: 'schedule-deferred-plan',
+}), nextEvening)
+applyAt(createScheduleEntryDeviationRecordedEventInput(deferredScheduleId, '目标人物未到场，改日再议', {
+  actor: 'system', source: 'schedule', requestWorldTime: nextEvening, clientRequestId: 'schedule-deviation-001',
+}), nextEvening)
+check('schedule deviation records its own event and reason without inventing an execution',
+  aggregate.planning.scheduleEntries.find(item => item.id === deferredScheduleId)?.execution.kind === 'n/a'
+  && aggregate.planning.scheduleEntries.find(item => item.id === deferredScheduleId)?.deviation.kind === 'value')
 check('debt creation records creditor, debtor, principal and source event',
   aggregate.economy.debts[0]?.status === 'open'
   && aggregate.economy.debts[0]?.sourceEvent === currentEventId())
 
+const duplicateScheduleExecution = appendLedgerEvent(ledger, toLedgerEventInput(
+  createScheduleEntryExecutionRecordedEventInput(deferredScheduleId, scheduledActionResultEvent, {
+    actor: 'system', source: 'schedule', requestWorldTime: nextEvening, clientRequestId: 'schedule-execution-after-deviation',
+  }),
+), nextEvening)
+if (duplicateScheduleExecution.status === 'appended') {
+  expectThrow('a deviated schedule cannot also be marked executed',
+    () => reduceWorldDomainEvent(aggregate, duplicateScheduleExecution.event, registry, {
+      eventIds: [...ledger.events.map(item => item.id), duplicateScheduleExecution.event.id],
+      eventTimes: new Map([...ledger.events, duplicateScheduleExecution.event].map(item => [item.id, item.committedAt] as const)),
+    }),
+    'schedule-already-settled')
+} else {
+  check('schedule execution after deviation is prepared for rejection', false)
+}
 applyAt(createDebtSettledEventInput(debtId, {
   actor: 'player', source: 'player-command', requestWorldTime: nextEvening, clientRequestId: 'debt-settle-001',
 }), nextEvening)
