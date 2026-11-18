@@ -16,6 +16,7 @@ import {
   createLifeStateMaintenanceTaskSource,
 } from '../src/application'
 import type { WorldBootstrapRequest, WorldCommandPort } from '../src/application'
+import { resolveWorldSimulationPolicies, validateWorldSimulationRuleset } from '../src/application'
 
 let passed = 0
 let failed = 0
@@ -349,6 +350,65 @@ async function main(): Promise<void> {
   }, afterMaintenance)
   check('life-state maintenance does not generate a second fact for an already-maintained tick',
     sameTickTasks.length === 0 && maintenanceResolverCalls === callsBeforeSameTickRetry)
+
+  const policyRuleset = {
+    schemaVersion: 'w6-simulation-policy/1' as const,
+    rulesetId: 'county-simulation',
+    revision: '2026-11-18.1',
+    maxEvents: 12,
+    rules: [
+      {
+        policyId: 'l0-nearfield-goal',
+        level: 'L0' as const,
+        source: 'rule' as const,
+        intentKind: 'goal.create',
+        priority: 8,
+        lods: ['near-field'] as const,
+        enabled: true,
+      },
+      {
+        policyId: 'l2-regional-schedule',
+        level: 'L2' as const,
+        source: 'schedule' as const,
+        intentKind: 'schedule.entry.execution',
+        priority: 3,
+        lods: ['regional'] as const,
+        enabled: true,
+      },
+    ],
+  }
+  check('versioned simulation ruleset accepts explicit selectors and resource budget',
+    validateWorldSimulationRuleset(policyRuleset).length === 0)
+  const policyResolution = resolveWorldSimulationPolicies(policyRuleset, [
+    { candidateId: 'candidate:near', level: 'L0', source: 'rule', intentKind: 'goal.create', lod: 'near-field', payload: {} },
+    { candidateId: 'candidate:defer', level: 'L0', source: 'rule', intentKind: 'goal.create', lod: 'remote-world', payload: {} },
+    { candidateId: 'candidate:unknown-level', level: 'L4', source: 'rule', intentKind: 'goal.create', lod: 'near-field', payload: {} },
+    { candidateId: 'candidate:unsupported', level: 'L1', source: 'rule', intentKind: 'unregistered.intent', lod: 'near-field', payload: {} },
+    { candidateId: 'candidate:unknown-source', level: 'L0', source: 'ai-candidate', intentKind: 'goal.create', lod: 'near-field', payload: {} },
+  ])
+  check('policy resolver accepts exact matches, defers disallowed LOD and rejects unknown/unsupported inputs',
+    policyResolution.status === 'valid'
+    && policyResolution.maxEvents === 12
+    && policyResolution.decisions.find(item => item.candidateId === 'candidate:near')?.status === 'accepted'
+    && policyResolution.decisions.find(item => item.candidateId === 'candidate:defer')?.status === 'deferred'
+    && policyResolution.decisions.find(item => item.candidateId === 'candidate:unknown-level')?.status === 'rejected'
+    && policyResolution.decisions.find(item => item.candidateId === 'candidate:unsupported')?.status === 'rejected'
+    && policyResolution.decisions.find(item => item.candidateId === 'candidate:unknown-source')?.status === 'rejected')
+  const conflictingRuleset = {
+    ...policyRuleset,
+    rules: [...policyRuleset.rules, { ...policyRuleset.rules[0]!, policyId: 'duplicate-selector' }],
+  }
+  const conflictResult = resolveWorldSimulationPolicies(conflictingRuleset, [])
+  check('conflicting policy selectors invalidate the whole ruleset instead of choosing by array order',
+    conflictResult.status === 'invalid-ruleset'
+    && conflictResult.issues.includes('policy-selector-conflict'))
+  const duplicateCandidates = resolveWorldSimulationPolicies(policyRuleset, [
+    { candidateId: 'same-id', level: 'L0', source: 'rule', intentKind: 'goal.create', lod: 'near-field', payload: {} },
+    { candidateId: 'same-id', level: 'L0', source: 'rule', intentKind: 'goal.create', lod: 'near-field', payload: {} },
+  ])
+  check('duplicate candidate identities are rejected rather than producing ambiguous task identity',
+    duplicateCandidates.status === 'valid'
+    && duplicateCandidates.decisions.every(item => item.status === 'rejected' && item.reason === 'candidate-identity-conflict'))
 
   if (failed > 0) throw new Error(`Deterministic world scheduler tests failed: ${failed}/${passed + failed}`)
   console.log(`Deterministic world scheduler tests: ${passed}/${passed + failed} passed`)
