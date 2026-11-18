@@ -92,7 +92,7 @@ async function main(): Promise<void> {
   let rejectFirstSettlement = true
   const commands: WorldCommandPort = {
     async submit(command) {
-      if (command.intentKind === 'schedule.entry.execution.recorded' && rejectFirstSettlement) {
+      if (command.intentKind === 'schedule.entry.execution' && rejectFirstSettlement) {
         rejectFirstSettlement = false
         const current = await adapter.queries.read(worldId)
         return {
