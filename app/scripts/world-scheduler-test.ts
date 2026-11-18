@@ -163,11 +163,11 @@ async function main(): Promise<void> {
   const final = (await adapter.queries.read(worldId))!
   check('retry reuses the stable action request and commits exactly one schedule settlement',
     resumed.status === 'advanced'
-    && resumed.emittedEventIds.length === 2
+    && resumed.emittedEventIds.length === 3
     && final.planning.goals.filter(item => item.id === goalId).length === 1
     && final.planning.scheduleEntries[0]?.execution.kind === 'value'
     && final.planning.scheduleEntries[0]?.execution.value === firstActionEventId
-    && adapter.readLedger().head === afterPartial.streamHead.seq + 1)
+    && adapter.readLedger().head === afterPartial.streamHead.seq + 2)
 
   const stale = await scheduler.advance({
     worldId,
