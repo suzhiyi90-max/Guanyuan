@@ -72,9 +72,9 @@ check('historical exception carries validity and evidence into person provenance
 check('world descriptor persists only the verified historical minister allow-list', first.status === 'ready'
   && first.descriptor.historicalNameAllowList.length === 1
   && first.descriptor.historicalNameAllowList[0]?.personId === historicalMinister.personId)
-check('bootstrap stores a seed fingerprint rather than a raw seed in descriptor', first.status === 'ready'
-  && first.descriptor.seedFingerprint.length === 8
-  && !('seed' in first.descriptor))
+check('bootstrap persists the seed and fingerprint for reproducible regeneration', first.status === 'ready'
+  && first.descriptor.seed === baseRequest.seed
+  && first.descriptor.seedFingerprint.length === 8)
 
 const changedSeed = bootstrapWorld({ ...baseRequest, seed: 'jiajing2-world-seed-002' })
 check('different seed changes deterministic population identity', first.status === 'ready'
