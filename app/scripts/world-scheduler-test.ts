@@ -136,7 +136,7 @@ async function main(): Promise<void> {
     lod: 'near-field',
     maxEvents: 2,
   })
-  if (first.status !== 'partial') throw new Error('scheduler-test-expected-partial-result')
+  if (first.status !== 'partial') throw new Error(`scheduler-test-expected-partial-result:${JSON.stringify(first)}`)
   const firstActionEventId = first.emittedEventIds[0]
   if (!firstActionEventId) throw new Error('scheduler-test-action-event-id-missing')
   const afterPartial = (await adapter.queries.read(worldId))!
