@@ -204,3 +204,27 @@ Ledger 提交与账号所有权存储可能不是同一事务，不能假定二�
 下一工作包仅建立 W6 本地开发 Owner 身份端口及其浏览器本地适配器，包含稳定 ID、跨重启恢复、存储损坏/不可用时拒绝、开发环境启用与生产环境禁用测试。它不接入 App，不创建 World，不提交人物事件，不触碰 W5 存档，也不改视觉、美术或交互。
 
 Owner/World 原子预留、Genesis reservation 与事件提交恢复属于后续独立工作包；不得用 localStorage 的单键写入冒充多记录事务或并发原子锁。
+
+
+## 12. 本地 Owner 身份适配器施工进度（PR #90）
+
+PR：[#90](https://github.com/suzhiyi90-max/Guanyuan/pull/90)，目标分支为 PR #89 已验收候选分支，保持 Draft/Open。
+
+当前 head：`6a90b7fa16ddc900c3228eaf0f1892a493eb62cb`。最新 G1.7 workflow run：`44332859747`，仍在执行中；此前运行的新增本地身份契约步骤已通过，但最终验收必须以最新 head 对应的完整工作流结论为准。
+
+已实现的首期边界：
+
+- 应用层 `OwnerId` 是 provider-neutral branded ID，与 `PersonId` 分离；只有可信身份适配器可以构造该值。
+- 本地适配器单独验证 `owner:local:<UUIDv4>` 格式，并从独立的 W6 local-owner storage key 读取/写入。
+- 首次创建后执行回读确认；存储损坏、读取失败、写入失败或写入未确认均 fail closed，不自动更换身份。
+- 浏览器组合工厂由 Vite `import.meta.env.DEV` 保护；生产构建下调用立即拒绝。
+- 测试覆盖跨适配器实例恢复、无效 UUID、损坏存储、存储故障、写入确认和 provider-neutral OwnerId 映射。
+
+当前明确未做：
+
+- 未接入 W5 Preview App / React UI。
+- 未读取或修改 W5 IndexedDB、SavePackage、runtime save/restore。
+- 未实现 Owner/World 原子预留、Genesis reservation、人物事件提交或 Owner→PersonId 绑定恢复。
+- 未修改页面、导航、布局、动效、交互或美术资源。
+
+**验收限制：** localStorage 只作为当前单机开发身份的持久化载体，不承担多记录事务、跨标签原子锁或世界所有权争抢。上述能力必须在后续 Owner/World reservation 工作包中由明确的事务适配器实现。
