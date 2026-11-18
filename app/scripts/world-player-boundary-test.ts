@@ -82,7 +82,7 @@ const policy = {
   schemaVersion: 'w6-command-authorization/1' as const,
   policyId: 'player-boundary-empty-policy',
   revision: '1',
-  rules: [],
+  rules: [{ intentKind: 'player.command.test', permission: 'world.command.test', scope: { kind: 'world' } }],
 }
 let authenticated: string | null = principalId
 const principals = {
@@ -174,6 +174,19 @@ async function main(): Promise<void> {
     && denied.reason === 'world-command-authorization-requirement-missing'
     && rawSubmissions === 0
     && rawAggregateReads === aggregateReadsBeforeDeniedCommand)
+
+  const playerCommandRequest: WorldCommandRequest = {
+    ...commandRequest,
+    clientRequestId: 'player-boundary-wrong-world-player',
+    intentKind: 'player.command.test',
+  }
+  worldAggregate = { ...worldAggregate, playerPersonId: otherPersonId }
+  const wrongPlayerCommand = await boundary.commands.submit(playerCommandRequest)
+  check('a different person cannot submit player commands even if the intent has a policy mapping',
+    wrongPlayerCommand.status === 'rejected'
+    && wrongPlayerCommand.reason === 'world-command-principal-not-world-player'
+    && rawSubmissions === 0)
+  worldAggregate = { ...worldAggregate, playerPersonId: principalId }
 
   authenticated = null
   queriedObserver = null
