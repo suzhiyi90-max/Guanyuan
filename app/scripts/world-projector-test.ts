@@ -335,7 +335,7 @@ async function run(): Promise<void> {
   }, {
     actor: 'player', source: 'player-command', requestWorldTime: nextNoon, clientRequestId: 'projector-debt-recorded',
   }), nextNoon)
-  const scheduleExecutionEvent = appendAt(createScheduleEntryExecutionRecordedEventInput(
+  appendAt(createScheduleEntryExecutionRecordedEventInput(
     projectorScheduleId,
     projectorDebtEvent.id,
     { actor: 'system', source: 'schedule', requestWorldTime: nextEvening, clientRequestId: 'projector-schedule-executed' },
