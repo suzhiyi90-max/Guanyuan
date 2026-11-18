@@ -17,7 +17,7 @@ function check(name: string, condition: boolean): void {
 function createHarness(worldId: WorldId) {
   let sequence = 0
   let head: StreamCursor = { kind: 'genesis', seq: 0 }
-  const receipts = new Map<string, WorldCommandReceipt>()
+  const receipts = new Map<string, Extract<WorldCommandReceipt, { readonly status: 'committed' | 'duplicate' }>>()
   const submitted: Array<{ intentKind: string; clientRequestId: string; payload: unknown }> = []
   let failRequestId: string | null = null
 
