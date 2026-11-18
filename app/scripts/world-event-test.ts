@@ -656,7 +656,8 @@ applyAt(createDebtRecordedEventInput({
 }, {
   actor: 'player', source: 'player-command', requestWorldTime: nextNoon, clientRequestId: 'debt-record-001',
 }), nextNoon)
-const scheduledActionResultEvent = currentEventId()
+const debtSourceEvent = currentEventId()
+const scheduledActionResultEvent = debtSourceEvent
 applyAt(createScheduleEntryExecutionRecordedEventInput(scheduleId, scheduledActionResultEvent, {
   actor: 'system', source: 'schedule', requestWorldTime: nextEvening, clientRequestId: 'schedule-execution-001',
 }), nextEvening)
@@ -685,7 +686,7 @@ check('schedule deviation records its own event and reason without inventing an 
   && aggregate.planning.scheduleEntries.find(item => item.id === deferredScheduleId)?.deviation.kind === 'value')
 check('debt creation records creditor, debtor, principal and source event',
   aggregate.economy.debts[0]?.status === 'open'
-  && aggregate.economy.debts[0]?.sourceEvent === currentEventId())
+  && aggregate.economy.debts[0]?.sourceEvent === debtSourceEvent)
 
 const duplicateScheduleExecution = appendLedgerEvent(ledger, toLedgerEventInput(
   createScheduleEntryExecutionRecordedEventInput(deferredScheduleId, scheduledActionResultEvent, {
