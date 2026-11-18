@@ -66,6 +66,8 @@ export interface CognitionReferences {
   events: readonly EventId[]
   knowledge: readonly KnowledgeId[]
   messages: readonly MessageId[]
+  /** Optional deterministic lookup for event IDs in a replayed stream. */
+  eventExists?: (id: EventId) => boolean
 }
 
 export function validateKnowledgeEntry(entry: KnowledgeEntry, refs: CognitionReferences): CognitionIssue[] {
