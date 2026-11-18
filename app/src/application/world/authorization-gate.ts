@@ -34,6 +34,8 @@ export interface AuthorizationGatedWorldCommandOptions {
   readonly queries: WorldQueryPort
   readonly requirements: WorldCommandAuthorizationRequirementPort
   readonly principals: WorldCommandPrincipalPort
+  /** When true, the authenticated principal must be this world's player character. */
+  readonly requireWorldPlayer?: boolean
 }
 
 function snapshotJsonValue(value: JsonValue, ancestors = new Set<object>()): JsonValue {
@@ -129,6 +131,9 @@ export function createAuthorizationGatedWorldCommandPort(
         return rejected(command, null, 'world-command-authorization-query-failed')
       }
       if (!aggregate) return rejected(command, null, 'world-command-world-not-found')
+      if (options.requireWorldPlayer && aggregate.playerPersonId !== principal) {
+        return rejected(command, aggregate, 'world-command-principal-not-world-player')
+      }
 
       const authorized = hasAuthorization(
         aggregate.identity.authorizations,
