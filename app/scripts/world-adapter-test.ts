@@ -168,7 +168,7 @@ async function main(): Promise<void> {
     && rebuilt.aggregate.streamHead.seq === 4)
 
   async function submitInput(input: {
-    readonly source: WorldCommandRequest['source']
+    readonly source: 'player-command' | 'rule' | 'schedule'
     readonly clientRequestId: string
     readonly actor: string
     readonly intentKind: string
@@ -273,7 +273,9 @@ async function main(): Promise<void> {
     intentKind: debtEvent.intentKind, requestWorldTime: debtEvent.requestWorldTime,
     payload: debtEvent.payload,
   })
-  const scheduleExecutionEvent = toLedgerEventInput(createScheduleEntryExecutionRecordedEventInput(scheduleId, debtReceipt.eventId, {
+  if (debtReceipt.status !== 'committed') throw new Error('adapter-debt-record-command-not-committed')
+  const debtEventId = debtReceipt.eventId
+  const scheduleExecutionEvent = toLedgerEventInput(createScheduleEntryExecutionRecordedEventInput(scheduleId, debtEventId, {
     actor: 'system', source: 'schedule', requestWorldTime: nextEvening, clientRequestId: 'adapter-schedule-execution',
   }))
   const scheduleExecutionReceipt = await submitInput({
@@ -337,7 +339,7 @@ async function main(): Promise<void> {
     && fullyUpdated?.planning.goals.find(item => item.id === goalId)?.status === 'achieved'
     && fullyUpdated.planning.scheduleEntries.length === 1
     && fullyUpdated.planning.scheduleEntries[0]?.execution.kind === 'value'
-    && fullyUpdated.planning.scheduleEntries[0]?.execution.value === debtReceipt.eventId
+    && fullyUpdated.planning.scheduleEntries[0]?.execution.value === debtEventId
     && fullyUpdated.economy.debts.find(item => item.id === debtId)?.status === 'settled'
     && fullyUpdated.economy.assets.find(item => item.id === assetId)?.rights.ownership.length === 1
     && fullyUpdated.economy.assets.find(item => item.id === assetId)?.owner.kind === 'n/a')
@@ -354,7 +356,7 @@ async function main(): Promise<void> {
     && finalReplay.aggregate.planning.goals.find(item => item.id === goalId)?.status === 'achieved'
     && finalReplay.aggregate.planning.scheduleEntries.length === 1
     && finalReplay.aggregate.planning.scheduleEntries[0]?.execution.kind === 'value'
-    && finalReplay.aggregate.planning.scheduleEntries[0]?.execution.value === debtReceipt.eventId
+    && finalReplay.aggregate.planning.scheduleEntries[0]?.execution.value === debtEventId
     && finalReplay.aggregate.economy.debts.find(item => item.id === debtId)?.status === 'settled'
     && finalReplay.aggregate.economy.assets.find(item => item.id === assetId)?.owner.kind === 'n/a'
     && finalReplay.aggregate.society.exposures.length === 1)
