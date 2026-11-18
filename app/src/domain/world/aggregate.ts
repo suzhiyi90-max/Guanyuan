@@ -377,12 +377,18 @@ export function validateWorldAggregate(
       || (relation.lifecycle.validTo !== 'open' && !eventSet.has(relation.lifecycle.validTo))) {
       addIssue(issues, 'society', 'relation-event-reference-missing', relation.id)
     }
+    if (relation.visibility.observer !== 'player' && !personSet.has(relation.visibility.observer)) {
+      addIssue(issues, 'society', 'relation-visibility-observer-missing', relation.id)
+    }
   }
   for (const claim of aggregate.society.claims) {
     if (!eventSet.has(claim.sourceEvent)) addIssue(issues, 'society', 'claim-event-reference-missing', claim.id)
   }
   for (const evidence of aggregate.society.evidence) {
     if (!eventSet.has(evidence.sourceEvent)) addIssue(issues, 'society', 'evidence-event-reference-missing', evidence.id)
+    if (evidence.evidence.kind === 'event' && !eventSet.has(evidence.evidence.id)) {
+      addIssue(issues, 'society', 'evidence-target-event-missing', evidence.id)
+    }
   }
   for (const membership of aggregate.society.memberships) {
     if (!eventSet.has(membership.validFrom) || !eventSet.has(membership.sourceEvent)
