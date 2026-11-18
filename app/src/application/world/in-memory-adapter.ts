@@ -43,6 +43,8 @@ const intentKinds: Readonly<Record<string, WorldDomainEventKind>> = Object.freez
   'knowledge.record': 'knowledge.recorded',
   'message.send': 'message.sent',
   'message.stage': 'message.stage.recorded',
+  'message.fail': 'message.failed',
+  'message.propagate': 'message.propagated',
 })
 
 export interface InMemoryWorldAdapterOptions {
