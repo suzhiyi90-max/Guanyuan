@@ -11,6 +11,7 @@ import type { StreamCursor } from '../event-replay'
 import type { WorldTime } from '../shared/world-time'
 import { compareWorldTime, isValidWorldTime } from '../shared/world-time'
 import type { EventId } from '../shared/ids'
+import type { WorldBootstrapMetadata } from './metadata'
 import type { Person } from '../person/model'
 import { validatePersonLifecycle, validateDeathSettlementReferences } from '../person/lifecycle'
 
@@ -42,6 +43,7 @@ export interface WorldAggregate {
   readonly worldId: WorldId
   readonly worldTime: WorldTime
   readonly streamHead: StreamCursor
+  readonly bootstrap: WorldBootstrapMetadata | null
   readonly persons: readonly Person[]
   readonly identity: {
     readonly assignments: readonly IdentityAssignment[]
@@ -139,6 +141,7 @@ export function createEmptyWorldAggregate(
     worldId,
     worldTime: Object.freeze({ ...worldTime }),
     streamHead: Object.freeze({ kind: 'genesis' as const, seq: 0 as const }),
+    bootstrap: null,
     persons: empty,
     identity: Object.freeze({ assignments: empty, offices: empty, appointments: empty, authorizations: empty }),
     society: Object.freeze({ relations: empty, claims: empty, evidence: empty, organizations: empty, memberships: empty }),
@@ -172,6 +175,17 @@ export function validateWorldAggregate(
   }
   if (!cursorMatchesLedger(aggregate.streamHead, ledger)) {
     addIssue(issues, 'envelope', 'stream-head-ledger-mismatch')
+  }
+  if (aggregate.streamHead.kind === 'genesis' && aggregate.bootstrap !== null) {
+    addIssue(issues, 'envelope', 'world-bootstrap-present-before-initialization')
+  }
+  if (aggregate.streamHead.kind === 'event' && aggregate.bootstrap === null) {
+    addIssue(issues, 'envelope', 'world-bootstrap-metadata-missing')
+  }
+  if (aggregate.bootstrap && [aggregate.bootstrap.scenarioPackId, aggregate.bootstrap.rulesetVersion,
+    aggregate.bootstrap.contentPackVersion, aggregate.bootstrap.seedFingerprint,
+    aggregate.bootstrap.locationCode, aggregate.bootstrap.populationPolicyVersion].some(value => !value.trim())) {
+    addIssue(issues, 'envelope', 'world-bootstrap-metadata-invalid')
   }
 
   const eventIds = ledger.events.map(event => event.id)
