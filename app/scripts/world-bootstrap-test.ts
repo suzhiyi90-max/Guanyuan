@@ -62,11 +62,11 @@ check('fixed historical appearance is limited to the verified minister exception
 check('generated population does not create relations or office assignments', first.status === 'ready'
   && first.generatedPeople.every(person => !('relations' in person) && !('office' in person)))
 check('generated candidates carry a seed-bound random origin record', first.status === 'ready'
-  && first.generatedPeople.length > 0
+  && first.generatedPeople[0] !== undefined
   && generatedCandidateOrigin(first.generatedPeople[0]).kind === 'seeded-random'
   && generatedCandidateOrigin(first.generatedPeople[0]).seedFingerprint === first.descriptor.seedFingerprint)
 check('historical exception carries validity and evidence into person provenance', first.status === 'ready'
-  && first.historicalPeople.length === 1
+  && first.historicalPeople[0] !== undefined
   && historicalCandidateOrigin(first.historicalPeople[0]).kind === 'historical-minister'
   && historicalCandidateOrigin(first.historicalPeople[0]).evidenceRefs.length === 1)
 check('bootstrap stores a seed fingerprint rather than a raw seed in descriptor', first.status === 'ready'
