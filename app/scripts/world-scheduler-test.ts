@@ -78,32 +78,6 @@ async function main(): Promise<void> {
   check('schedule plan is recorded before simulation', planReceipt.status === 'committed')
   if (planReceipt.status !== 'committed') throw new Error('scheduler-test-plan-not-committed')
 
-  const clockGoal = toLedgerEventInput(createGoalCreatedEventInput({
-    id: brandedId<'GoalId'>('goal:scheduler-test:advance-world-time'),
-    person: person.id,
-    statement: '记录世界时点推进',
-    priority: 1,
-    visibility: { observer: 'player', level: 'private' },
-  }, {
-    actor: 'system',
-    source: 'rule',
-    requestWorldTime: lateTime,
-    clientRequestId: 'scheduler-test:advance-world-time',
-  }))
-  const clockReceipt = await adapter.commands.submit({
-    worldId,
-    clientRequestId: clockGoal.clientRequestId,
-    actor: 'system',
-    source: 'rule',
-    intentKind: clockGoal.intentKind,
-    requestedAt: clockGoal.requestWorldTime,
-    expectedHead: planReceipt.streamHead,
-    payload: clockGoal.payload,
-  })
-  check('world time can pass an unexecuted schedule without erasing its pending obligation',
-    clockReceipt.status === 'committed')
-  if (clockReceipt.status !== 'committed') throw new Error('scheduler-test-clock-advance-not-committed')
-
   const goalId = brandedId<'GoalId'>('goal:scheduler-test:complete-duty')
   const goal = toLedgerEventInput(createGoalCreatedEventInput({
     id: goalId,
@@ -114,7 +88,7 @@ async function main(): Promise<void> {
   }, {
     actor: 'system',
     source: 'rule',
-    requestWorldTime: due,
+    requestWorldTime: lateTime,
     clientRequestId: 'scheduler-test:action:complete-duty',
   }))
   let rejectFirstSettlement = true
@@ -148,14 +122,18 @@ async function main(): Promise<void> {
 
   const deferredLod = await scheduler.advance({
     worldId,
-    from: lateTime,
-    to: nextMorning,
+    from: start,
+    to: lateTime,
     lod: 'remote-world',
     maxEvents: 2,
   })
-  check('LOD resolver can defer a local schedule without advancing or writing facts',
-    deferredLod.status === 'unchanged'
-    && adapter.readLedger().head === clockReceipt.streamHead.seq)
+  const afterRemoteTick = (await adapter.queries.read(worldId))!
+  check('remote LOD advances the canonical clock while deferring local schedule facts',
+    deferredLod.status === 'advanced'
+    && afterRemoteTick.worldTime.day === lateTime.day
+    && afterRemoteTick.worldTime.period === lateTime.period
+    && afterRemoteTick.planning.scheduleEntries[0]?.execution.kind === 'n/a'
+    && afterRemoteTick.planning.goals.every(item => item.id !== goalId))
 
   const first = await scheduler.advance({
     worldId,
