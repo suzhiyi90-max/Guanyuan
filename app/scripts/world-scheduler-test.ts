@@ -120,6 +120,21 @@ async function main(): Promise<void> {
     }),
   })
 
+  const budgetDeferred = await scheduler.advance({
+    worldId,
+    from: start,
+    to: lateTime,
+    lod: 'near-field',
+    maxEvents: 2,
+  })
+  const beforeBudgetAdvance = (await adapter.queries.read(worldId))!
+  check('event budget reserves the clock append and leaves unprocessed schedules untouched',
+    budgetDeferred.status === 'partial'
+    && budgetDeferred.pendingTaskIds.includes(`schedule:${scheduleId}`)
+    && beforeBudgetAdvance.worldTime.day === start.day
+    && beforeBudgetAdvance.worldTime.period === start.period
+    && beforeBudgetAdvance.streamHead.seq === planReceipt.streamHead.seq)
+
   const deferredLod = await scheduler.advance({
     worldId,
     from: start,
