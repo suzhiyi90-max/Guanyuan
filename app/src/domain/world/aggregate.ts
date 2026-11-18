@@ -10,9 +10,10 @@ import type { EventLedger, WorldId } from '../event-ledger'
 import type { StreamCursor } from '../event-replay'
 import type { WorldTime } from '../shared/world-time'
 import { compareWorldTime, isValidWorldTime } from '../shared/world-time'
-import type { EventId } from '../shared/ids'
+import type { EventId, PersonId } from '../shared/ids'
 import type { WorldBootstrapMetadata } from './metadata'
 import type { Person } from '../person/model'
+import type { PersonOriginRecord } from '../person/provenance'
 import { validatePersonLifecycle, validateDeathSettlementReferences } from '../person/lifecycle'
 
 import type { IdentityAssignment, Office, Appointment, Authorization } from '../identity/model'
@@ -45,6 +46,8 @@ export interface WorldAggregate {
   readonly streamHead: StreamCursor
   readonly bootstrap: WorldBootstrapMetadata | null
   readonly persons: readonly Person[]
+  readonly playerPersonId: PersonId | null
+  readonly personOrigins: readonly PersonOriginRecord[]
   readonly identity: {
     readonly assignments: readonly IdentityAssignment[]
     readonly offices: readonly Office[]
@@ -143,6 +146,8 @@ export function createEmptyWorldAggregate(
     streamHead: Object.freeze({ kind: 'genesis' as const, seq: 0 as const }),
     bootstrap: null,
     persons: empty,
+    playerPersonId: null,
+    personOrigins: empty,
     identity: Object.freeze({ assignments: empty, offices: empty, appointments: empty, authorizations: empty }),
     society: Object.freeze({ relations: empty, claims: empty, evidence: empty, organizations: empty, memberships: empty }),
     cognition: Object.freeze({ knowledge: empty, messages: empty, propagations: empty }),
@@ -202,6 +207,54 @@ export function validateWorldAggregate(
   }
 
   const personIds = aggregate.persons.map(person => person.id)
+  if (!uniqueIds(aggregate.personOrigins, item => item.person)) {
+    addIssue(issues, 'person', 'person-origin-duplicate')
+  }
+  const originByPerson = new Map(aggregate.personOrigins.map(item => [item.person, item.origin]))
+  let playerOriginCount = 0
+  for (const person of aggregate.persons) {
+    const origin = originByPerson.get(person.id)
+    if (!origin) {
+      addIssue(issues, 'person', 'person-origin-missing', person.id)
+      continue
+    }
+    if (origin.kind === 'seeded-random') {
+      if (![origin.candidateId, origin.seedFingerprint, origin.roleCode].every(value => value.trim())
+        || !['county', 'grassroots', 'other'].includes(origin.populationTier)) {
+        addIssue(issues, 'person', 'person-random-origin-invalid', person.id)
+      }
+    } else if (origin.kind === 'historical-minister') {
+      if (origin.category !== 'famous-minister' || origin.evidenceRefs.length === 0
+        || origin.evidenceRefs.some(ref => !ref.trim())
+        || !isValidWorldTime(origin.validFrom)
+        || (origin.validThrough !== null && !isValidWorldTime(origin.validThrough))) {
+        addIssue(issues, 'person', 'person-historical-origin-invalid', person.id)
+      } else if (isValidWorldTime(aggregate.worldTime)) {
+        if (compareWorldTime(origin.validFrom, aggregate.worldTime) > 0
+          || (origin.validThrough && compareWorldTime(origin.validThrough, aggregate.worldTime) < 0)) {
+          addIssue(issues, 'person', 'person-historical-origin-outside-validity', person.id)
+        }
+      }
+      if (origin.scope.kind === 'location'
+        && (!origin.scope.locationCode.trim() || origin.scope.locationCode !== aggregate.bootstrap?.locationCode)) {
+        addIssue(issues, 'person', 'person-historical-origin-location-mismatch', person.id)
+      }
+    } else if (origin.kind === 'player-character') {
+      playerOriginCount += 1
+      if (aggregate.playerPersonId !== person.id) addIssue(issues, 'person', 'player-origin-reference-mismatch', person.id)
+    }
+  }
+  for (const origin of aggregate.personOrigins) {
+    if (!personIds.includes(origin.person)) addIssue(issues, 'person', 'person-origin-person-missing', origin.person)
+  }
+  if (playerOriginCount > 1) addIssue(issues, 'person', 'player-origin-duplicate')
+  if (aggregate.playerPersonId === null && playerOriginCount > 0) {
+    addIssue(issues, 'person', 'player-origin-reference-mismatch')
+  }
+  if (aggregate.playerPersonId !== null
+    && (!personIds.includes(aggregate.playerPersonId) || playerOriginCount !== 1)) {
+    addIssue(issues, 'person', 'player-person-reference-invalid', aggregate.playerPersonId)
+  }
   const organizationIds = aggregate.society.organizations.map(item => item.id)
   const officeIds = aggregate.identity.offices.map(item => item.id)
   const relationIds = aggregate.society.relations.map(item => item.id)
