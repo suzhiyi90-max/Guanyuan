@@ -1,5 +1,4 @@
 import { brandedId } from '../src/domain'
-import type { EventId } from '../src/domain'
 import type { WorldId } from '../src/domain'
 import { bootstrapWorld, initializeWorldThroughPorts } from '../src/application'
 import type { WorldBootstrapRequest, WorldCommandPort, WorldCommandReceipt, WorldQueryPort } from '../src/application'
