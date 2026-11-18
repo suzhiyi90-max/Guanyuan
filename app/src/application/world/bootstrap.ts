@@ -231,9 +231,9 @@ export function bootstrapWorld(request: WorldBootstrapRequest): WorldBootstrapRe
   const historicalPeople: FixedHistoricalPersonCandidate[] = request.historicalMinisters.map(person => ({
     id: person.personId,
     displayName: person.displayName,
-    category: 'famous-minister',
+    category: 'famous-minister' as const,
     evidenceRefs: Object.freeze([...person.evidenceRefs]),
-    provenance: 'verified-historical-exception',
+    provenance: 'verified-historical-exception' as const,
   }))
   const usedNames = new Set(historicalPeople.map(person => person.displayName))
   const usedIds = new Set(historicalPeople.map(person => person.id))
@@ -288,7 +288,7 @@ export function bootstrapWorld(request: WorldBootstrapRequest): WorldBootstrapRe
       contentPackVersion: request.contentPackVersion,
       startedAt: Object.freeze({ ...request.worldTime }),
       locationCode: request.locationCode,
-      populationPolicyVersion: 'w6.1',
+      populationPolicyVersion: 'w6.1' as const,
     }),
     generatedPeople: Object.freeze(generatedPeople),
     historicalPeople: Object.freeze(historicalPeople),
