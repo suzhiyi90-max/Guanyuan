@@ -408,6 +408,26 @@ export function createWorldInitializationEventInput(
   }
 }
 
+export function createOrganizationRegisteredEventInput(
+  organization: Organization,
+  options: {
+    readonly actor: string
+    readonly source: Extract<LedgerSource, 'player-command' | 'rule'>
+    readonly requestWorldTime: WorldTime
+    readonly clientRequestId: string
+  },
+): WorldDomainEventInput<'organization.registered'> {
+  return {
+    source: options.source,
+    kind: 'organization.registered',
+    intentKind: 'organization.register',
+    actor: options.actor,
+    requestWorldTime: options.requestWorldTime,
+    clientRequestId: options.clientRequestId,
+    payload: { organization },
+  }
+}
+
 export function createPersonCreatedEventInput(
   person: PersonCreationData,
   origin: PersonOrigin,
