@@ -498,7 +498,7 @@ const schemas: ReadonlyArray<{ readonly kind: WorldDomainEventKind; readonly val
 ]
 
 export function createWorldDomainEventRegistry(): EventRegistry<WorldDomainEventKind> {
-  let registry = createEventRegistry<WorldDomainEventKind>('guanyuan.world-domain', '1.0.0')
+  let registry = createEventRegistry<WorldDomainEventKind>('guanyuan.world-domain', '1.1.0')
   for (const schema of schemas) {
     const result = registerEventSchema(registry, {
       kind: schema.kind,
