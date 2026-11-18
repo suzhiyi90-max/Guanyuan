@@ -123,7 +123,7 @@ async function run(): Promise<void> {
     id: relationId,
     from: person.id,
     to: secondPerson.id,
-    type: 'colleague',
+    type: 'colleague' as import('../src/domain').RelationTypeCode,
     visibility: { observer: 'player', level: 'contact' },
   }, {
     actor: 'system',
