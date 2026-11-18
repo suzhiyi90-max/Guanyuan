@@ -292,6 +292,15 @@ async function main(): Promise<void> {
   })
 
   const fullyUpdated = await adapter.queries.read(worldId)
+  console.error('Planning/economy adapter diagnostic:', JSON.stringify({
+    receipts: [goalReceipt, goalStatusReceipt, scheduleReceipt, debtReceipt, debtSettleReceipt, assetReceipt, grantReceipt, revokeReceipt],
+    ledgerHead: adapter.readLedger().head,
+    notifications,
+    goals: fullyUpdated?.planning.goals,
+    schedules: fullyUpdated?.planning.scheduleEntries,
+    debts: fullyUpdated?.economy.debts,
+    assets: fullyUpdated?.economy.assets,
+  }))
   check('adapter command map executes goal, schedule, debt and asset-right intents through replay',
     [goalReceipt, goalStatusReceipt, scheduleReceipt, debtReceipt, debtSettleReceipt, assetReceipt, grantReceipt, revokeReceipt]
       .every(receipt => receipt.status === 'committed')
