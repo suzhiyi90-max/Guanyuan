@@ -117,14 +117,16 @@ async function main(): Promise<void> {
   check('explicit active grant reaches the command port with the authenticated principal as actor',
     accepted.status === 'committed' && submitted === 1 && submittedActor === personId)
 
-  let releasePayloadRead: ((aggregate: WorldAggregate | null) => void) | null = null
-  let markPayloadReadStarted: (() => void) | null = null
-  const payloadReadStarted = new Promise<void>(resolve => { markPayloadReadStarted = resolve })
+  const payloadReadSignal: {
+    started?: () => void
+    release?: (aggregate: WorldAggregate | null) => void
+  } = {}
+  const payloadReadStarted = new Promise<void>(resolve => { payloadReadSignal.started = resolve })
   let snapshottedPayload: unknown = null
   const delayedQueries: WorldQueryPort = {
     read() {
-      if (markPayloadReadStarted) markPayloadReadStarted()
-      return new Promise(resolve => { releasePayloadRead = resolve })
+      payloadReadSignal.started?.()
+      return new Promise(resolve => { payloadReadSignal.release = resolve })
     },
     subscribe() { return () => undefined },
   }
