@@ -133,7 +133,12 @@ export function createDeterministicWorldScheduler(
 ): WorldSimulationPort {
   return Object.freeze({
     async advance(request: WorldSimulationRequest): Promise<WorldSimulationResult> {
-      const initial = await options.queries.read(request.worldId)
+      let initial: WorldAggregate | null
+      try {
+        initial = await options.queries.read(request.worldId)
+      } catch {
+        return rejected(request, genesis, 'world-simulation-world-query-failed')
+      }
       const initialHead = initial?.streamHead ?? genesis
       if (!initial) return rejected(request, initialHead, 'world-simulation-world-missing')
       if (!isValidWorldTime(request.from) || !isValidWorldTime(request.to)
