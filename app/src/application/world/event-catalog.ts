@@ -21,7 +21,7 @@ import {
   type EventSchemaValidationResult,
 } from '../../domain/event-registry'
 import type { WorldTime } from '../../domain/shared/world-time'
-import { isValidWorldTime } from '../../domain/shared/world-time'
+import { compareWorldTime, isValidWorldTime } from '../../domain/shared/world-time'
 
 export type WorldDomainEventKind =
   | 'world.initialized'
@@ -96,7 +96,8 @@ function isHistoricalMinisterAllowListEntry(value: JsonValue): boolean {
     || !isStringArray(value.evidenceRefs)
     || value.evidenceRefs.length === 0
     || !isWorldTimeValue(value.validFrom)
-    || (value.validThrough !== null && !isWorldTimeValue(value.validThrough))
+    || (value.validThrough !== null && (!isWorldTimeValue(value.validThrough)
+      || compareWorldTime(value.validThrough as unknown as WorldTime, value.validFrom as unknown as WorldTime) < 0))
     || !isRecord(value.scope)
     || typeof value.scope.kind !== 'string') return false
   if (value.scope.kind === 'world') return hasExactKeys(value.scope, ['kind'])
