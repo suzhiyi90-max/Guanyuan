@@ -50,9 +50,9 @@ function rejected(
 }
 
 /**
- * Player commands require an explicit, currently-active grant for a living
- * principal. Internal rule/schedule/system commands retain their separate
- * trusted application path and are not treated as player authorization.
+ * This is a player-facing boundary: every request must be tagged as a
+ * player-command and pass explicit authorization. Internal rule/schedule/system
+ * commands must use their own non-UI application composition, never this port.
  */
 export function createAuthorizationGatedWorldCommandPort(
   options: AuthorizationGatedWorldCommandOptions,
@@ -60,7 +60,7 @@ export function createAuthorizationGatedWorldCommandPort(
   return Object.freeze({
     async submit(request: WorldCommandRequest): Promise<WorldCommandReceipt> {
       if (request.source !== 'player-command') {
-        return options.commands.submit(request)
+        return rejected(request, null, 'world-command-source-not-allowed-at-player-boundary')
       }
 
       let principal: PersonId | null
