@@ -409,7 +409,7 @@ function isAssetPayload(payload: JsonValue): boolean {
     && [asset.id, asset.kind].every(isNonEmptyString)
     && typeof asset.quantity === 'number' && Number.isFinite(asset.quantity) && asset.quantity > 0
     && isField(asset.custody, isNonEmptyString)
-    && isField(asset.valuation, value => typeof value === 'number' && Number.isFinite(value))
+    && isField(asset.valuation, (value): value is number => typeof value === 'number' && Number.isFinite(value))
 }
 
 function isAssetRightGrantPayload(payload: JsonValue): boolean {
