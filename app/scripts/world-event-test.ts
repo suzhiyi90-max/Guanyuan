@@ -36,7 +36,7 @@ import type {
   PersonCreationData,
   WorldDomainEventKind,
 } from '../src/application'
-import type { FailureKind, WorldId } from '../src/domain'
+import type { FailureKind, WorldId, WorldTime } from '../src/domain'
 import type { RelationTypeCode } from '../src/domain'
 
 let passed = 0
