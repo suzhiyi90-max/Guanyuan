@@ -1,13 +1,16 @@
 import {
   brandedId,
+  createEmptyWorldAggregate,
+  createEventLedger,
   compareWorldTime,
   field,
   isFieldValue,
   isPersonLifecycleValid,
   isValidWorldTime,
   validatePersonLifecycle,
+  validateWorldAggregate,
 } from '../src/domain'
-import type { EstateSettlementDomain, Person } from '../src/domain'
+import type { EstateSettlementDomain, Person, Relation, RelationTypeCode, WorldId } from '../src/domain'
 
 let passed = 0
 let failed = 0
@@ -109,6 +112,42 @@ check('death before birth is rejected', validatePersonLifecycle({
   birth: field.value({ day: 8, period: '暮' } as const),
   death: field.value({ ...deathRecord, at: { day: 8, period: '午' } as const }),
 }, now).includes('death-precedes-birth'))
+
+
+const aggregateWorldId = brandedId<'WorldId'>('world-aggregate-test') as WorldId
+const aggregateLedger = createEventLedger(aggregateWorldId)
+const emptyAggregate = createEmptyWorldAggregate(aggregateWorldId, now)
+check('empty world shell validates before character generation', validateWorldAggregate(emptyAggregate, aggregateLedger).status === 'valid')
+check('world aggregate rejects invalid world time', validateWorldAggregate({
+  ...emptyAggregate,
+  worldTime: { day: 0, period: '晨' },
+}, aggregateLedger).status === 'rejected')
+check('world aggregate rejects a stream cursor not anchored in the ledger', validateWorldAggregate({
+  ...emptyAggregate,
+  streamHead: { kind: 'event', seq: 1, eventId: brandedId<'EventId'>('evt:world-aggregate-test:1') },
+}, aggregateLedger).status === 'rejected')
+const danglingRelation: Relation = {
+  id: brandedId<'RelationId'>('relation-dangling'),
+  from: brandedId<'PersonId'>('person-missing-a'),
+  to: brandedId<'PersonId'>('person-missing-b'),
+  type: 'colleague' as RelationTypeCode,
+  lifecycle: {
+    status: 'active',
+    validFrom: brandedId<'EventId'>('evt:world-aggregate-test:missing'),
+    validTo: 'open',
+  },
+  sourceEvent: brandedId<'EventId'>('evt:world-aggregate-test:missing'),
+  visibility: { observer: 'player', level: 'public' },
+}
+const danglingAggregate = {
+  ...emptyAggregate,
+  society: { ...emptyAggregate.society, relations: [danglingRelation] },
+}
+const danglingResult = validateWorldAggregate(danglingAggregate, aggregateLedger)
+check('world aggregate rejects relation endpoints outside the person registry',
+  danglingResult.status === 'rejected' && danglingResult.issues.some(issue => issue.code === 'relation-source-person-missing'))
+check('world aggregate rejects cross-domain event references outside the ledger',
+  danglingResult.status === 'rejected' && danglingResult.issues.some(issue => issue.code === 'relation-event-reference-missing'))
 
 // Compile-time contract guards: null and unbranded identifiers must not pass.
 // @ts-expect-error null is not a Field state
