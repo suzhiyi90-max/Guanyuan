@@ -147,7 +147,17 @@ export function resolveWorldSimulationPolicies(
 
 import type { WorldAggregate } from '../../domain/world/aggregate'
 import type { WorldSimulationRequest } from './ports'
-import type { WorldSimulationTask, WorldSimulationTaskSourcePort } from './scheduler'
+import {
+  createDeterministicWorldScheduler,
+  type WorldSimulationTask,
+  type WorldSimulationTaskSourcePort,
+} from './scheduler'
+import type {
+  WorldCommandPort,
+  WorldQueryPort,
+  WorldSimulationPort,
+  WorldSimulationResult,
+} from './ports'
 
 export interface WorldSimulationPolicyLevelResolverPort {
   /** L0–L3 classification is supplied by an explicit rules/domain adapter; no level is inferred here. */
@@ -198,6 +208,78 @@ export function createPolicyGatedWorldSimulationTaskSource(
         accepted.push(Object.freeze({ ...task, priority: decision.priority }))
       }
       return Object.freeze(accepted)
+    },
+  })
+}
+
+
+/** Supplies the active, versioned policy at the application simulation boundary. */
+export interface WorldSimulationRulesetProviderPort {
+  load(request: WorldSimulationRequest): Promise<WorldSimulationRuleset> | WorldSimulationRuleset
+}
+
+export interface PolicyConfiguredWorldSimulationOptions {
+  readonly commands: WorldCommandPort
+  readonly queries: WorldQueryPort
+  readonly tasks: WorldSimulationTaskSourcePort
+  readonly rulesets: WorldSimulationRulesetProviderPort
+  readonly levels: WorldSimulationPolicyLevelResolverPort
+}
+
+export type PolicyConfiguredWorldSimulationResult = WorldSimulationResult & {
+  readonly policy: { readonly rulesetId: string; readonly revision: string }
+}
+
+/**
+ * The production composition seam: resolve the active ruleset for each tick,
+ * gate deterministic tasks, then delegate all execution to the canonical
+ * scheduler/command/ledger path. The returned policy stamp is execution
+ * metadata; it is not represented as a world fact or written to the ledger.
+ */
+export function createPolicyConfiguredWorldSimulationPort(
+  options: PolicyConfiguredWorldSimulationOptions,
+): WorldSimulationPort & {
+  advance(request: WorldSimulationRequest): Promise<PolicyConfiguredWorldSimulationResult>
+} {
+  return Object.freeze({
+    async advance(request: WorldSimulationRequest): Promise<PolicyConfiguredWorldSimulationResult> {
+      let ruleset: WorldSimulationRuleset
+      try {
+        ruleset = await options.rulesets.load(request)
+      } catch {
+        const aggregate = await options.queries.read(request.worldId).catch(() => null)
+        return {
+          status: 'rejected',
+          worldId: request.worldId,
+          reason: 'world-simulation-policy-provider-failed',
+          streamHead: aggregate?.streamHead ?? { kind: 'genesis', seq: 0 },
+          policy: { rulesetId: 'unavailable', revision: 'unavailable' },
+        }
+      }
+      const issues = validateWorldSimulationRuleset(ruleset)
+      if (issues.length > 0) {
+        const aggregate = await options.queries.read(request.worldId).catch(() => null)
+        return {
+          status: 'rejected',
+          worldId: request.worldId,
+          reason: `world-simulation-policy-invalid:${issues.join(',')}`,
+          streamHead: aggregate?.streamHead ?? { kind: 'genesis', seq: 0 },
+          policy: {
+            rulesetId: nonEmpty(ruleset?.rulesetId) ? ruleset.rulesetId : 'invalid',
+            revision: nonEmpty(ruleset?.revision) ? ruleset.revision : 'invalid',
+          },
+        }
+      }
+      const scheduler = createDeterministicWorldScheduler({
+        commands: options.commands,
+        queries: options.queries,
+        tasks: createPolicyGatedWorldSimulationTaskSource(options.tasks, ruleset, options.levels),
+      })
+      const result = await scheduler.advance(request)
+      return {
+        ...result,
+        policy: { rulesetId: ruleset.rulesetId, revision: ruleset.revision },
+      }
     },
   })
 }
