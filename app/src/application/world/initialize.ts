@@ -136,6 +136,7 @@ export async function initializeWorldThroughPorts(
 
   let streamHead: StreamCursor = existing?.streamHead ?? genesis
   const createdPersonIds: PersonId[] = []
+  let alreadyCommittedCount = 0
   const allCandidates = [...built.generatedPeople, ...built.historicalPeople]
   const existingIds = new Set<PersonId>()
 
@@ -157,7 +158,7 @@ export async function initializeWorldThroughPorts(
     intentKind: string,
     clientRequestId: string,
     payload: ReturnType<typeof toLedgerEventInput>['payload'],
-  ): Promise<{ readonly head: StreamCursor } | { readonly reason: string }> => {
+  ): Promise<{ readonly head: StreamCursor; readonly duplicate: boolean } | { readonly reason: string }> => {
     let receipt: WorldCommandReceipt
     try {
       receipt = await ports.commands.submit({
@@ -176,7 +177,7 @@ export async function initializeWorldThroughPorts(
       return { reason: receipt.reason }
     }
     streamHead = receipt.streamHead
-    return { head: streamHead }
+    return { head: streamHead, duplicate: receipt.status === 'duplicate' }
   }
 
   if (!existing?.bootstrap) {
@@ -225,7 +226,8 @@ export async function initializeWorldThroughPorts(
         reason: result.reason,
       }
     }
-    createdPersonIds.push(candidate.id)
+    if (result.duplicate) alreadyCommittedCount += 1
+    else createdPersonIds.push(candidate.id)
   }
 
   return {
@@ -233,7 +235,7 @@ export async function initializeWorldThroughPorts(
     worldId: request.worldId,
     descriptor,
     createdPersonIds: Object.freeze(createdPersonIds),
-    existingPersonCount: existingIds.size,
+    existingPersonCount: existingIds.size + alreadyCommittedCount,
     streamHead,
   }
 }
