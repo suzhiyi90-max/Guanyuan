@@ -29,6 +29,7 @@ import {
   createAssetRegisteredEventInput,
   createAssetRightGrantedEventInput,
   createAssetRightRevokedEventInput,
+  projectWorldForObserver,
   reduceWorldDomainEvent,
   toLedgerEventInput,
   validateWorldDomainEventPayload,
@@ -662,6 +663,33 @@ if (finalValidation.status === 'rejected') {
   console.error('World aggregate validation issues:', JSON.stringify(finalValidation.issues))
 }
 check('replayed world aggregate validates against the complete ledger', finalValidation.status === 'valid')
+
+const playerSocialView = projectWorldForObserver(aggregate, 'player')
+const firstPersonView = projectWorldForObserver(aggregate, person.id)
+const ministerView = projectWorldForObserver(aggregate, historicalMinisterId)
+check('player social projection contains only player-visible relations and player-owned claims',
+  playerSocialView.relations.some(item => item.id === relationId)
+  && playerSocialView.claims.some(item => item.id === claimId)
+  && playerSocialView.knownPersons.some(item => item.id === person.id)
+  && playerSocialView.knownPersons.some(item => item.id === historicalMinisterId))
+check('NPC observer receives only their own knowledge and participant messages, not player-private claims',
+  firstPersonView.knowledge.length === 1
+  && firstPersonView.knowledge[0]?.id === knowledgeId
+  && firstPersonView.claims.length === 0
+  && firstPersonView.messages.some(item => item.id === messageId)
+  && firstPersonView.memberships.some(item => item.person === person.id)
+  && firstPersonView.organizations.some(item => item.id === organizationId))
+check('message recipient receives their own propagated knowledge without unrelated player knowledge',
+  ministerView.knowledge.length === 1
+  && ministerView.knowledge[0]?.id === recipientKnowledgeId
+  && ministerView.messages.some(item => item.id === messageId)
+  && ministerView.propagations.some(item => item.id === propagationId)
+  && !ministerView.memberships.some(item => item.person === person.id))
+check('unrelated NPC private relationship and knowledge are not globally disclosed',
+  !firstPersonView.relations.some(item => item.id === relationId)
+  && !ministerView.relations.some(item => item.id === relationId)
+  && !firstPersonView.knowledge.some(item => item.id === recipientKnowledgeId)
+  && !ministerView.knowledge.some(item => item.id === knowledgeId))
 
 const malformedRelationPayload = validateWorldDomainEventPayload(registry, 'relation.created', {
   relation: { id: 'relation:broken', from: person.id, to: historicalMinisterId, type: '', visibility: { observer: 'player', level: 'private' } },
