@@ -5,7 +5,7 @@
  * simulation scheduling from the deterministic domain. Implementations must
  * delegate fact writes to the existing command/ledger/replay boundary.
  */
-import type { EventLedger, JsonValue, WorldId } from '../../domain/event-ledger'
+import type { EventLedger, JsonValue, LedgerSource, WorldId } from '../../domain/event-ledger'
 import type { EventId, PersonId } from '../../domain/shared/ids'
 import type { WorldTime } from '../../domain/shared/world-time'
 import type { StreamCursor } from '../../domain/event-replay'
@@ -16,6 +16,8 @@ export interface WorldCommandRequest {
   readonly worldId: WorldId
   readonly clientRequestId: string
   readonly actor: string
+  /** Explicit trusted source; AI proposals are intentionally excluded. */
+  readonly source: Exclude<LedgerSource, 'ai-candidate'>
   readonly intentKind: string
   readonly requestedAt: WorldTime
   readonly expectedHead: StreamCursor
