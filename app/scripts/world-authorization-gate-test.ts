@@ -143,11 +143,11 @@ async function main(): Promise<void> {
   check('request actor text cannot substitute for a missing authenticated principal',
     missingPrincipal.status === 'rejected' && submitted === 1)
 
-  const trustedInternal = await gated.submit({
+  const spoofedInternal = await gated.submit({
     ...request, source: 'rule', clientRequestId: 'authorization-gate-internal-rule',
   })
-  check('internal rule command retains its separately trusted application path',
-    trustedInternal.status === 'committed' && submitted === 2)
+  check('player-facing gate rejects caller-supplied internal source labels',
+    spoofedInternal.status === 'rejected' && submitted === 1)
 
   const missingWorld: WorldQueryPort = {
     async read() { return null },
@@ -158,7 +158,7 @@ async function main(): Promise<void> {
   })
   const missing = await missingWorldGate.submit({ ...request, clientRequestId: 'authorization-gate-missing-world' })
   check('missing world projection is denied without command submission',
-    missing.status === 'rejected' && submitted === 2)
+    missing.status === 'rejected' && submitted === 1)
 
   if (failed > 0) throw new Error(`World authorization gate tests failed: ${failed}/${passed + failed}`)
   console.log(`World authorization gate tests: ${passed}/${passed + failed} passed`)
