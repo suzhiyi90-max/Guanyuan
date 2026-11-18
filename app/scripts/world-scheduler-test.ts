@@ -10,6 +10,7 @@ import {
   toLedgerEventInput,
   createDeterministicWorldScheduler,
   createScheduleTaskSource,
+  createCompositeWorldSimulationTaskSource,
 } from '../src/application'
 import type { WorldBootstrapRequest, WorldCommandPort } from '../src/application'
 
@@ -49,6 +50,42 @@ async function main(): Promise<void> {
 
   const beforePlan = (await adapter.queries.read(worldId))!
   const person = beforePlan.persons[0]!
+  const compositeQueue = createCompositeWorldSimulationTaskSource(
+    {
+      listDueTasks: () => [{
+        taskId: 'rule:later',
+        requestId: 'rule:later',
+        dueAt: lateTime,
+        priority: 1,
+        actor: 'system',
+        source: 'rule' as const,
+        intentKind: 'goal.create',
+        payload: {},
+      }],
+    },
+    {
+      listDueTasks: () => [{
+        taskId: 'rule:earlier',
+        requestId: 'rule:earlier',
+        dueAt: start,
+        priority: 1,
+        actor: 'system',
+        source: 'rule' as const,
+        intentKind: 'goal.create',
+        payload: {},
+      }],
+    },
+  )
+  const compositeTasks = await compositeQueue.listDueTasks({
+    worldId,
+    from: start,
+    to: lateTime,
+    lod: 'near-field',
+    maxEvents: 4,
+  }, beforePlan)
+  check('composite task sources merge and sort deterministically independent of source order',
+    compositeTasks.map(task => task.taskId).join(',') === 'rule:earlier,rule:later')
+
   const scheduleId = brandedId<'ScheduleId'>('schedule:scheduler-test:afternoon-duty')
   const planned = toLedgerEventInput(createScheduleEntryPlannedEventInput({
     id: scheduleId,
