@@ -59,6 +59,7 @@ export function createWorldPlayerBoundary(
     queries: options.queries,
     requirements,
     principals: options.principals,
+    requireWorldPlayer: true,
   })
 
   const queries: WorldPlayerQueryPort = Object.freeze({
