@@ -7,6 +7,7 @@
  */
 import { hasAuthorization } from '../../domain/identity/authorization'
 import type { AuthorizationRequest } from '../../domain/identity/model'
+import type { PersonId } from '../../domain/shared/ids'
 import type { WorldAggregate } from '../../domain/world/aggregate'
 import type {
   WorldCommandPort,
@@ -15,17 +16,23 @@ import type {
   WorldQueryPort,
 } from './ports'
 
-export type WorldCommandAuthorizationRequirement = Omit<AuthorizationRequest, 'at'>
+export type WorldCommandAuthorizationRequirement = Omit<AuthorizationRequest, 'principal' | 'at'>
 
+/** Resolves identity from trusted session/authentication state, never request.actor. */
+export interface WorldCommandPrincipalPort {
+  resolve(request: WorldCommandRequest): Promise<PersonId | null> | PersonId | null
+}
+
+/** Maps a command to its exact permission and scope; no rank/title inference. */
 export interface WorldCommandAuthorizationRequirementPort {
-  /** Resolve an authenticated principal and exact permission/scope requirement. */
-  resolve(request: WorldCommandRequest): WorldCommandAuthorizationRequirement | null
+  resolve(request: WorldCommandRequest): Promise<WorldCommandAuthorizationRequirement | null> | WorldCommandAuthorizationRequirement | null
 }
 
 export interface AuthorizationGatedWorldCommandOptions {
   readonly commands: WorldCommandPort
   readonly queries: WorldQueryPort
   readonly requirements: WorldCommandAuthorizationRequirementPort
+  readonly principals: WorldCommandPrincipalPort
 }
 
 function rejected(
@@ -56,16 +63,20 @@ export function createAuthorizationGatedWorldCommandPort(
         return options.commands.submit(request)
       }
 
+      let principal: PersonId | null
       let requirement: WorldCommandAuthorizationRequirement | null
       try {
-        requirement = options.requirements.resolve(request)
+        [principal, requirement] = await Promise.all([
+          options.principals.resolve(request),
+          options.requirements.resolve(request),
+        ])
       } catch {
         return rejected(request, null, 'world-command-authorization-resolution-failed')
       }
-      if (!requirement
-        || !requirement.permission.trim()
-        || !requirement.principal
-        || !requirement.scope) {
+      if (!principal) {
+        return rejected(request, null, 'world-command-authenticated-principal-missing')
+      }
+      if (!requirement || !requirement.permission.trim() || !requirement.scope) {
         return rejected(request, null, 'world-command-authorization-requirement-missing')
       }
 
@@ -79,7 +90,7 @@ export function createAuthorizationGatedWorldCommandPort(
 
       const authorized = hasAuthorization(
         aggregate.identity.authorizations,
-        { ...requirement, at: request.requestedAt },
+        { ...requirement, principal, at: request.requestedAt },
         aggregate.persons,
       )
       if (!authorized) {
