@@ -45,6 +45,9 @@ const intentKinds: Readonly<Record<string, WorldDomainEventKind>> = Object.freez
   'message.stage': 'message.stage.recorded',
   'message.fail': 'message.failed',
   'message.propagate': 'message.propagated',
+  'organization.membership.add': 'organization.membership.added',
+  'organization.membership.end': 'organization.membership.ended',
+  'relation.lifecycle.change': 'relation.lifecycle.changed',
 })
 
 export interface InMemoryWorldAdapterOptions {
