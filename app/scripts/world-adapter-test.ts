@@ -37,7 +37,16 @@ const request: WorldBootstrapRequest = {
     surnames: ['王', '李', '张', '赵'],
     givenNames: ['守仁', '文远', '景初', '仲平'],
   },
-  historicalMinisters: [],
+  historicalMinisters: [{
+    personId: brandedId<'PersonId'>('person:historical:adapter-minister'),
+    displayName: '测试名臣',
+    category: 'famous-minister',
+    evidenceStatus: 'verified',
+    evidenceRefs: ['source:test:minister'],
+    validFrom: worldTime,
+    validThrough: null,
+    scope: { kind: 'world' },
+  }],
 }
 
 async function main(): Promise<void> {
@@ -59,7 +68,7 @@ async function main(): Promise<void> {
 
   const repeated = await initializeWorldThroughPorts(request, adapter)
   if (repeated.status !== 'ready' || repeated.createdPersonIds.length !== 0
-    || repeated.existingPersonCount !== 2 || adapter.readLedger().head !== 3) {
+    || repeated.existingPersonCount !== 3 || adapter.readLedger().head !== 4) {
     console.error('Repeat initialization diagnostic:', JSON.stringify({
       repeated,
       bootstrap: aggregate?.bootstrap,
