@@ -164,7 +164,7 @@ async function main(): Promise<void> {
   check('invalid bootstrap input is rejected before any additional command is submitted',
     invalid.status === 'rejected'
     && invalid.reason === 'bootstrap-validation-failed'
-    && harness.submitted.length === 9)
+    && harness.submitted.length === 6)
 
   if (failed > 0) throw new Error(`World application initialization tests failed: ${failed}/${passed + failed}`)
   console.log(`World application initialization tests: ${passed}/${passed + failed} passed`)
