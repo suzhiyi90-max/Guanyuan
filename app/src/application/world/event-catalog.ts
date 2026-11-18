@@ -8,7 +8,7 @@ import type { JsonValue, LedgerEventInput, LedgerSource } from '../../domain/eve
 import type { Person } from '../../domain/person/model'
 import type { PersonOrigin } from '../../domain/person/provenance'
 import type { IdentityAssignment, Authorization } from '../../domain/identity/model'
-import type { Organization } from '../../domain/relations/model'
+import type { Organization, Relation, RelationClaim, RelationEvidence } from '../../domain/relations/model'
 import type { WorldBootstrapMetadata } from '../../domain/world/metadata'
 import type { WorldBootstrapDescriptor } from './bootstrap'
 import {
@@ -29,11 +29,17 @@ export type WorldDomainEventKind =
   | 'organization.registered'
   | 'identity.assignment.added'
   | 'authorization.granted'
+  | 'relation.created'
+  | 'relation.claim.recorded'
+  | 'relation.evidence.recorded'
 
 export type PersonCreationData = Omit<Person, 'lifeState' | 'archiveState' | 'death'>
 export type IdentityAssignmentCreationData = Omit<IdentityAssignment, 'validFrom' | 'validTo' | 'sourceEvent'>
 export type AuthorizationGrantData = Omit<Authorization,
   'grantedBy' | 'validFrom' | 'validTo' | 'revokedBy' | 'revokedAt'>
+export type RelationCreationData = Pick<Relation, 'id' | 'from' | 'to' | 'type' | 'visibility'>
+export type RelationClaimCreationData = Omit<RelationClaim, 'assertedAt' | 'sourceEvent'>
+export type RelationEvidenceCreationData = Omit<RelationEvidence, 'sourceEvent'>
 
 export interface WorldDomainEventPayloadMap {
   readonly 'world.initialized': WorldBootstrapMetadata
@@ -41,6 +47,9 @@ export interface WorldDomainEventPayloadMap {
   readonly 'organization.registered': { readonly organization: Organization }
   readonly 'identity.assignment.added': { readonly assignment: IdentityAssignmentCreationData }
   readonly 'authorization.granted': { readonly authorization: AuthorizationGrantData }
+  readonly 'relation.created': { readonly relation: RelationCreationData }
+  readonly 'relation.claim.recorded': { readonly claim: RelationClaimCreationData }
+  readonly 'relation.evidence.recorded': { readonly evidence: RelationEvidenceCreationData }
 }
 
 export type WorldDomainEventInput<Kind extends WorldDomainEventKind = WorldDomainEventKind> =
@@ -205,12 +214,48 @@ function isAuthorizationPayload(payload: JsonValue): boolean {
     && isAuthorizationScope(authorization.scope)
 }
 
+function isRelationPayload(payload: JsonValue): boolean {
+  if (!isRecord(payload) || !hasExactKeys(payload, ['relation']) || !isRecord(payload.relation)) return false
+  const relation = payload.relation
+  return hasExactKeys(relation, ['id', 'from', 'to', 'type', 'visibility'])
+    && [relation.id, relation.from, relation.to, relation.type].every(isNonEmptyString)
+    && isVisibility(relation.visibility)
+}
+
+function isRelationClaimPayload(payload: JsonValue): boolean {
+  if (!isRecord(payload) || !hasExactKeys(payload, ['claim']) || !isRecord(payload.claim)) return false
+  const claim = payload.claim
+  return hasExactKeys(claim, ['id', 'relation', 'claimant', 'certainty'])
+    && [claim.id, claim.relation].every(isNonEmptyString)
+    && (claim.claimant === 'player' || isNonEmptyString(claim.claimant))
+    && ['confirmed', 'reported', 'suspected', 'unverified'].includes(String(claim.certainty))
+}
+
+function isEvidenceReference(value: JsonValue | undefined): boolean {
+  if (!value || !isRecord(value) || !hasExactKeys(value, ['kind', 'id']) || !isNonEmptyString(value.id)) {
+    return false
+  }
+  return ['event', 'person', 'organization', 'document'].includes(String(value.kind))
+}
+
+function isRelationEvidencePayload(payload: JsonValue): boolean {
+  if (!isRecord(payload) || !hasExactKeys(payload, ['evidence']) || !isRecord(payload.evidence)) return false
+  const evidence = payload.evidence
+  return hasExactKeys(evidence, ['id', 'claim', 'evidence', 'weight'])
+    && [evidence.id, evidence.claim].every(isNonEmptyString)
+    && isEvidenceReference(evidence.evidence)
+    && ['direct', 'corroborating', 'hearsay'].includes(String(evidence.weight))
+}
+
 const schemas: ReadonlyArray<{ readonly kind: WorldDomainEventKind; readonly validate: EventSchemaValidator }> = [
   { kind: 'world.initialized', validate: isBootstrapMetadata },
   { kind: 'person.created', validate: isPersonCreationPayload },
   { kind: 'organization.registered', validate: isOrganizationPayload },
   { kind: 'identity.assignment.added', validate: isIdentityAssignmentPayload },
   { kind: 'authorization.granted', validate: isAuthorizationPayload },
+  { kind: 'relation.created', validate: isRelationPayload },
+  { kind: 'relation.claim.recorded', validate: isRelationClaimPayload },
+  { kind: 'relation.evidence.recorded', validate: isRelationEvidencePayload },
 ]
 
 export function createWorldDomainEventRegistry(): EventRegistry<WorldDomainEventKind> {
@@ -279,6 +324,66 @@ export function createPersonCreatedEventInput(
     requestWorldTime: options.requestWorldTime,
     clientRequestId: options.clientRequestId,
     payload: { person, origin },
+  }
+}
+
+export function createRelationCreatedEventInput(
+  relation: RelationCreationData,
+  options: {
+    readonly actor: string
+    readonly source: Extract<LedgerSource, 'player-command' | 'rule'>
+    readonly requestWorldTime: WorldTime
+    readonly clientRequestId: string
+  },
+): WorldDomainEventInput<'relation.created'> {
+  return {
+    source: options.source,
+    kind: 'relation.created',
+    intentKind: 'relation.create',
+    actor: options.actor,
+    requestWorldTime: options.requestWorldTime,
+    clientRequestId: options.clientRequestId,
+    payload: { relation },
+  }
+}
+
+export function createRelationClaimRecordedEventInput(
+  claim: RelationClaimCreationData,
+  options: {
+    readonly actor: string
+    readonly source: Extract<LedgerSource, 'player-command' | 'rule'>
+    readonly requestWorldTime: WorldTime
+    readonly clientRequestId: string
+  },
+): WorldDomainEventInput<'relation.claim.recorded'> {
+  return {
+    source: options.source,
+    kind: 'relation.claim.recorded',
+    intentKind: 'relation.claim',
+    actor: options.actor,
+    requestWorldTime: options.requestWorldTime,
+    clientRequestId: options.clientRequestId,
+    payload: { claim },
+  }
+}
+
+export function createRelationEvidenceRecordedEventInput(
+  evidence: RelationEvidenceCreationData,
+  options: {
+    readonly actor: string
+    readonly source: Extract<LedgerSource, 'player-command' | 'rule'>
+    readonly requestWorldTime: WorldTime
+    readonly clientRequestId: string
+  },
+): WorldDomainEventInput<'relation.evidence.recorded'> {
+  return {
+    source: options.source,
+    kind: 'relation.evidence.recorded',
+    intentKind: 'relation.evidence.record',
+    actor: options.actor,
+    requestWorldTime: options.requestWorldTime,
+    clientRequestId: options.clientRequestId,
+    payload: { evidence },
   }
 }
 
