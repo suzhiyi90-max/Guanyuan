@@ -20,7 +20,7 @@ export type WorldCommandAuthorizationRequirement = Omit<AuthorizationRequest, 'p
 
 /** Resolves identity from trusted session/authentication state, never request.actor. */
 export interface WorldCommandPrincipalPort {
-  resolve(request: WorldCommandRequest): Promise<PersonId | null> | PersonId | null
+  resolve(): Promise<PersonId | null> | PersonId | null
 }
 
 /** Maps a command to its exact permission and scope; no rank/title inference. */
@@ -67,7 +67,7 @@ export function createAuthorizationGatedWorldCommandPort(
       let requirement: WorldCommandAuthorizationRequirement | null
       try {
         [principal, requirement] = await Promise.all([
-          options.principals.resolve(request),
+          options.principals.resolve(),
           options.requirements.resolve(request),
         ])
       } catch {
