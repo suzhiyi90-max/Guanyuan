@@ -71,6 +71,7 @@ const authorizedAggregate: WorldAggregate = {
 }
 let currentAggregate: WorldAggregate | null = authorizedAggregate
 let submitted = 0
+let submittedActor: string | null = null
 const receipt: WorldCommandReceipt = {
   status: 'committed',
   worldId,
@@ -79,8 +80,9 @@ const receipt: WorldCommandReceipt = {
   streamHead: { kind: 'event', seq: 1, eventId },
 }
 const commands: WorldCommandPort = {
-  async submit(): Promise<WorldCommandReceipt> {
+  async submit(command): Promise<WorldCommandReceipt> {
     submitted += 1
+    submittedActor = command.actor
     return receipt
   },
 }
@@ -110,8 +112,8 @@ const request: WorldCommandRequest = {
 
 async function main(): Promise<void> {
   const accepted = await gated.submit(request)
-  check('explicit active grant for a living principal reaches canonical command port',
-    accepted.status === 'committed' && submitted === 1)
+  check('explicit active grant reaches the command port with the authenticated principal as actor',
+    accepted.status === 'committed' && submitted === 1 && submittedActor === personId)
 
   currentAggregate = { ...authorizedAggregate, identity: { ...empty.identity, authorizations: [] } }
   const noGrant = await gated.submit({ ...request, clientRequestId: 'authorization-gate-no-grant' })
