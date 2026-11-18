@@ -59,8 +59,15 @@ export function createAuthorizationGatedWorldCommandPort(
 ): WorldCommandPort {
   return Object.freeze({
     async submit(request: WorldCommandRequest): Promise<WorldCommandReceipt> {
-      if (request.source !== 'player-command') {
-        return rejected(request, null, 'world-command-source-not-allowed-at-player-boundary')
+      // Snapshot request identity and authorization inputs before crossing async
+      // boundaries; TypeScript readonly does not prevent runtime mutation.
+      const command: WorldCommandRequest = Object.freeze({
+        ...request,
+        requestedAt: Object.freeze({ ...request.requestedAt }),
+        expectedHead: Object.freeze({ ...request.expectedHead }),
+      })
+      if (command.source !== 'player-command') {
+        return rejected(command, null, 'world-command-source-not-allowed-at-player-boundary')
       }
 
       let principal: PersonId | null
@@ -68,10 +75,10 @@ export function createAuthorizationGatedWorldCommandPort(
       try {
         [principal, requirement] = await Promise.all([
           options.principals.resolve(),
-          options.requirements.resolve(request),
+          options.requirements.resolve(command),
         ])
       } catch {
-        return rejected(request, null, 'world-command-authorization-resolution-failed')
+        return rejected(command, null, 'world-command-authorization-resolution-failed')
       }
       if (!principal) {
         return rejected(request, null, 'world-command-authenticated-principal-missing')
@@ -82,7 +89,7 @@ export function createAuthorizationGatedWorldCommandPort(
 
       let aggregate: WorldAggregate | null
       try {
-        aggregate = await options.queries.read(request.worldId)
+        aggregate = await options.queries.read(command.worldId)
       } catch {
         return rejected(request, null, 'world-command-authorization-query-failed')
       }
@@ -90,13 +97,13 @@ export function createAuthorizationGatedWorldCommandPort(
 
       const authorized = hasAuthorization(
         aggregate.identity.authorizations,
-        { ...requirement, principal, at: request.requestedAt },
+        { ...requirement, principal, at: command.requestedAt },
         aggregate.persons,
       )
       if (!authorized) {
         return rejected(request, aggregate, 'world-command-unauthorized')
       }
-      return options.commands.submit(request)
+      return options.commands.submit({ ...command, actor: principal })
     },
   })
 }
