@@ -17,9 +17,9 @@ import {
   validateIdentityAssignment,
   validateAuthorization,
 } from '../../domain/identity/validation'
-import type { Organization, Relation, RelationClaim, RelationEvidence } from '../../domain/relations/model'
+import type { Organization, Relation, RelationClaim, RelationEvidence, Membership } from '../../domain/relations/model'
 import type { FailureKind, KnowledgeEntry, Message, MessagePropagation } from '../../domain/cognition/model'
-import { validateOrganization, validateRelation, validateRelationClaim, validateRelationEvidence } from '../../domain/relations/validation'
+import { validateOrganization, validateRelation, validateRelationClaim, validateRelationEvidence, validateMembership } from '../../domain/relations/validation'
 import { validateKnowledgeEntry, validateMessage, validateMessagePropagation } from '../../domain/cognition/validation'
 import type { LifeHistory } from '../../domain/life/model'
 import { validateLifeHistory } from '../../domain/life/validation'
@@ -553,6 +553,92 @@ function applyMessageStageRecorded(
   })
 }
 
+function applyMembershipAdded(
+  aggregate: WorldAggregate,
+  event: LedgerEvent<WorldDomainEventKind>,
+): WorldAggregate {
+  requireBootstrap(aggregate)
+  const payload = event.payload as unknown as WorldDomainEventPayloadMap['organization.membership.added']
+  const data: MembershipCreationData = payload.membership
+  if (aggregate.society.memberships.some(item => item.id === data.id)) {
+    throw new Error('world-reducer-membership-duplicate')
+  }
+  if (!aggregate.society.organizations.some(item => item.id === data.organization)) {
+    throw new Error('world-reducer-membership-organization-missing')
+  }
+  if (!aggregate.persons.some(item => item.id === data.person)) {
+    throw new Error('world-reducer-membership-person-missing')
+  }
+  const membership: Membership = Object.freeze({
+    ...data,
+    obligations: Object.freeze([...data.obligations]),
+    validFrom: event.id,
+    validTo: 'open',
+    sourceEvent: event.id,
+  })
+  const issues = validateMembership(membership)
+  if (issues.length > 0) throw new Error(`world-reducer-membership-invalid:${issues.join(',')}`)
+  return Object.freeze({
+    ...aggregate,
+    ...withEventCursor(aggregate, event),
+    society: Object.freeze({
+      ...aggregate.society,
+      memberships: Object.freeze([...aggregate.society.memberships, membership]),
+    }),
+  })
+}
+
+function applyMembershipEnded(
+  aggregate: WorldAggregate,
+  event: LedgerEvent<WorldDomainEventKind>,
+): WorldAggregate {
+  requireBootstrap(aggregate)
+  const payload = event.payload as unknown as WorldDomainEventPayloadMap['organization.membership.ended']
+  const index = aggregate.society.memberships.findIndex(item => item.id === payload.membershipId)
+  if (index < 0) throw new Error('world-reducer-membership-end-missing')
+  const current = aggregate.society.memberships[index]!
+  if (current.validTo !== 'open') throw new Error('world-reducer-membership-already-ended')
+  const updated: Membership = Object.freeze({ ...current, validTo: event.id })
+  const issues = validateMembership(updated)
+  if (issues.length > 0) throw new Error(`world-reducer-membership-end-invalid:${issues.join(',')}`)
+  const memberships = aggregate.society.memberships.map((item, itemIndex) => itemIndex === index ? updated : item)
+  return Object.freeze({
+    ...aggregate,
+    ...withEventCursor(aggregate, event),
+    society: Object.freeze({ ...aggregate.society, memberships: Object.freeze(memberships) }),
+  })
+}
+
+function applyRelationLifecycleChanged(
+  aggregate: WorldAggregate,
+  event: LedgerEvent<WorldDomainEventKind>,
+): WorldAggregate {
+  requireBootstrap(aggregate)
+  const payload = event.payload as unknown as WorldDomainEventPayloadMap['relation.lifecycle.changed']
+  const index = aggregate.society.relations.findIndex(item => item.id === payload.relationId)
+  if (index < 0) throw new Error('world-reducer-relation-lifecycle-missing')
+  const current = aggregate.society.relations[index]!
+  if (current.lifecycle.status === 'severed' || current.lifecycle.status === payload.status) {
+    throw new Error('world-reducer-relation-lifecycle-transition-invalid')
+  }
+  const relation: Relation = Object.freeze({
+    ...current,
+    lifecycle: Object.freeze({
+      status: payload.status,
+      validFrom: current.lifecycle.validFrom,
+      validTo: payload.status === 'severed' ? event.id : 'open',
+    }),
+  })
+  const issues = validateRelation(relation)
+  if (issues.length > 0) throw new Error(`world-reducer-relation-lifecycle-invalid:${issues.join(',')}`)
+  const relations = aggregate.society.relations.map((item, itemIndex) => itemIndex === index ? relation : item)
+  return Object.freeze({
+    ...aggregate,
+    ...withEventCursor(aggregate, event),
+    society: Object.freeze({ ...aggregate.society, relations: Object.freeze(relations) }),
+  })
+}
+
 /** Apply one schema-validated event to the read-only world projection. */
 export function reduceWorldDomainEvent(
   aggregate: WorldAggregate,
@@ -592,6 +678,12 @@ export function reduceWorldDomainEvent(
       return applyMessageFailed(aggregate, event)
     case 'message.propagated':
       return applyMessagePropagated(aggregate, event)
+    case 'organization.membership.added':
+      return applyMembershipAdded(aggregate, event)
+    case 'organization.membership.ended':
+      return applyMembershipEnded(aggregate, event)
+    case 'relation.lifecycle.changed':
+      return applyRelationLifecycleChanged(aggregate, event)
     default: {
       const unreachable: never = event.kind
       throw new Error(`world-reducer-unhandled-event:${String(unreachable)}`)
