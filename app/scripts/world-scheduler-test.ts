@@ -9,8 +9,9 @@ import {
   initializeWorldThroughPorts,
   toLedgerEventInput,
   createDeterministicWorldScheduler,
+  createScheduleTaskSource,
 } from '../src/application'
-import type { WorldBootstrapRequest, WorldCommandPort, WorldSimulationTask } from '../src/application'
+import type { WorldBootstrapRequest, WorldCommandPort } from '../src/application'
 
 let passed = 0
 let failed = 0
@@ -88,18 +89,6 @@ async function main(): Promise<void> {
     requestWorldTime: due,
     clientRequestId: 'scheduler-test:action:complete-duty',
   }))
-  const task: WorldSimulationTask = Object.freeze({
-    taskId: 'schedule-task:afternoon-duty',
-    requestId: goal.clientRequestId,
-    dueAt: due,
-    priority: 10,
-    actor: 'system',
-    source: 'schedule',
-    intentKind: goal.intentKind,
-    payload: goal.payload,
-    scheduleId,
-  })
-
   let rejectFirstSettlement = true
   const commands: WorldCommandPort = {
     async submit(command) {
@@ -120,7 +109,13 @@ async function main(): Promise<void> {
   const scheduler = createDeterministicWorldScheduler({
     commands,
     queries: adapter.queries,
-    tasks: { listDueTasks: () => [task] },
+    tasks: createScheduleTaskSource({
+      resolve(entry, aggregate, lod) {
+        return entry.id === scheduleId && lod === 'near-field' && aggregate.worldId === worldId
+          ? { actor: 'system', intentKind: goal.intentKind, payload: goal.payload, priority: 10 }
+          : null
+      },
+    }),
   })
 
   const first = await scheduler.advance({
@@ -136,7 +131,7 @@ async function main(): Promise<void> {
   const afterPartial = (await adapter.queries.read(worldId))!
   check('scheduler reports a resumable partial result when settlement fails after action commit',
     first.status === 'partial'
-    && first.pendingTaskIds.includes(task.taskId)
+    && first.pendingTaskIds.includes(`schedule:${scheduleId}`)
     && first.emittedEventIds.length === 1
     && afterPartial.planning.goals.some(item => item.id === goalId)
     && afterPartial.planning.scheduleEntries[0]?.execution.kind === 'n/a')
