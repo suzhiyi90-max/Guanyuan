@@ -53,6 +53,8 @@ const intentKinds: Readonly<Record<string, WorldDomainEventKind>> = Object.freez
   'goal.create': 'goal.created',
   'goal.status.change': 'goal.status.changed',
   'schedule.entry.plan': 'schedule.entry.planned',
+  'schedule.entry.execution': 'schedule.entry.execution.recorded',
+  'schedule.entry.deviation': 'schedule.entry.deviation.recorded',
   'debt.record': 'debt.recorded',
   'debt.settle': 'debt.settled',
   'asset.register': 'asset.registered',
