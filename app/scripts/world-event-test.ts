@@ -175,7 +175,8 @@ const authorizationInput: WorldDomainEventInput<'authorization.granted'> = {
 apply(authorizationInput)
 check('authorization grant receives immutable event provenance',
   aggregate.identity.authorizations.length === 1
-  && aggregate.identity.authorizations[0].grantedBy === aggregate.streamHead.eventId)
+  && aggregate.streamHead.kind === 'event'
+  && aggregate.identity.authorizations[0]?.grantedBy === aggregate.streamHead.eventId)
 
 const finalValidation = validateWorldAggregate(aggregate, ledger)
 check('replayed world aggregate validates against the complete ledger', finalValidation.status === 'valid')
@@ -195,8 +196,10 @@ if (duplicateAppend.status === 'appended') {
   check('duplicate initialization event append is prepared', false)
 }
 
+const lastEvent = ledger.events[ledger.events.length - 1]
+if (!lastEvent) throw new Error('test-ledger-event-missing')
 const skippedEvent = {
-  ...ledger.events[ledger.events.length - 1],
+  ...lastEvent,
   seq: ledger.head + 2,
   id: brandedId<'EventId'>(`evt:${worldId}:${ledger.head + 2}`),
 }
