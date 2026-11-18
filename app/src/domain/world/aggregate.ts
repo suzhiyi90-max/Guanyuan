@@ -192,6 +192,23 @@ export function validateWorldAggregate(
     aggregate.bootstrap.locationCode, aggregate.bootstrap.populationPolicyVersion].some(value => !value.trim())) {
     addIssue(issues, 'envelope', 'world-bootstrap-metadata-invalid')
   }
+  if (aggregate.bootstrap) {
+    const allowList = aggregate.bootstrap.historicalNameAllowList
+    if (!Array.isArray(allowList)
+      || !uniqueIds(allowList, item => item.personId)
+      || new Set(allowList.map(item => item.displayName)).size !== allowList.length) {
+      addIssue(issues, 'envelope', 'world-historical-name-allow-list-invalid')
+    }
+    for (const item of allowList ?? []) {
+      if (!item.displayName.trim() || item.category !== 'famous-minister'
+        || item.evidenceRefs.length === 0 || item.evidenceRefs.some(ref => !ref.trim())
+        || !isValidWorldTime(item.validFrom)
+        || (item.validThrough !== null && !isValidWorldTime(item.validThrough))
+        || (item.scope.kind === 'location' && !item.scope.locationCode.trim())) {
+        addIssue(issues, 'envelope', 'world-historical-name-allow-list-entry-invalid', item.personId)
+      }
+    }
+  }
 
   const eventIds = ledger.events.map(event => event.id)
   const eventTimes = new Map<EventId, WorldTime>()
@@ -243,6 +260,23 @@ export function validateWorldAggregate(
       if (origin.scope.kind === 'location'
         && (!origin.scope.locationCode.trim() || origin.scope.locationCode !== aggregate.bootstrap?.locationCode)) {
         addIssue(issues, 'person', 'person-historical-origin-location-mismatch', person.id)
+      }
+      const allowListEntry = aggregate.bootstrap?.historicalNameAllowList.find(item => item.personId === person.id)
+      const sameScope = allowListEntry?.scope.kind === origin.scope.kind
+        && (origin.scope.kind === 'world'
+          || (allowListEntry.scope.kind === 'location'
+            && allowListEntry.scope.locationCode === origin.scope.locationCode))
+      const sameValidity = !!allowListEntry
+        && compareWorldTime(allowListEntry.validFrom, origin.validFrom) === 0
+        && ((allowListEntry.validThrough === null && origin.validThrough === null)
+          || (!!allowListEntry.validThrough && !!origin.validThrough
+            && compareWorldTime(allowListEntry.validThrough, origin.validThrough) === 0))
+      const sameEvidence = !!allowListEntry
+        && allowListEntry.evidenceRefs.length === origin.evidenceRefs.length
+        && allowListEntry.evidenceRefs.every((ref, index) => ref === origin.evidenceRefs[index])
+      if (!allowListEntry || allowListEntry.displayName !== person.displayName
+        || !sameScope || !sameValidity || !sameEvidence) {
+        addIssue(issues, 'person', 'person-historical-origin-not-allowlisted', person.id)
       }
     } else if (origin.kind === 'player-character') {
       playerOriginCount += 1
