@@ -5,11 +5,11 @@
  * simulation scheduling from the deterministic domain. Implementations must
  * delegate fact writes to the existing command/ledger/replay boundary.
  */
-import type { JsonValue, WorldId } from '../../domain/event-ledger'
-import type { EventId } from '../../domain/shared/ids'
+import type { EventLedger, JsonValue, WorldId } from '../../domain/event-ledger'
+import type { EventId, PersonId } from '../../domain/shared/ids'
 import type { WorldTime } from '../../domain/shared/world-time'
 import type { StreamCursor } from '../../domain/event-replay'
-import type { WorldAggregate } from '../../domain/world/aggregate'
+import type { WorldAggregate, WorldAggregateValidation } from '../../domain/world/aggregate'
 import type { WorldSnapshot } from '../../domain/world-snapshot'
 
 export interface WorldCommandRequest {
@@ -44,6 +44,16 @@ export interface WorldCommandPort {
 }
 
 /** Query results are materialized projections, never an alternate write model. */
+export interface WorldProjectionRequest<Kind extends string = string> {
+  readonly ledger: EventLedger<Kind>
+  readonly target: StreamCursor
+}
+
+/** Rebuilds a projection from the canonical ledger; implementations must use registered replay reducers. */
+export interface WorldProjectionPort<Kind extends string = string> {
+  rebuild(request: WorldProjectionRequest<Kind>): Promise<WorldAggregateValidation>
+}
+
 export interface WorldQueryPort {
   read(worldId: WorldId): Promise<WorldAggregate | null>
   subscribe(worldId: WorldId, listener: (aggregate: WorldAggregate) => void): () => void
@@ -98,9 +108,9 @@ export interface WorldSimulationPort {
 export interface WorldCandidateContext {
   readonly worldId: WorldId
   readonly worldTime: WorldTime
-  readonly observer: string
+  readonly observer: PersonId | 'player'
   /** Explicit allow-list: providers must not receive the full objective world graph. */
-  readonly exposedPersonIds: readonly string[]
+  readonly exposedPersonIds: readonly PersonId[]
   readonly exposedEventIds: readonly EventId[]
   readonly allowedKinds: readonly string[]
   readonly seed: string
@@ -120,6 +130,7 @@ export interface WorldCandidateProviderPort {
 
 export interface WorldApplicationPorts {
   readonly commands: WorldCommandPort
+  readonly projector: WorldProjectionPort
   readonly queries: WorldQueryPort
   readonly snapshots: WorldSnapshotPort
   readonly simulation: WorldSimulationPort
