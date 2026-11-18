@@ -148,6 +148,10 @@ export function createDeterministicWorldScheduler(
         return rejected(request, initial.streamHead, 'world-simulation-invalid-interval')
       }
       if (!sameTime(request.from, initial.worldTime)) {
+        // A retry after the final clock append may observe the already-committed target time.
+        if (sameTime(request.to, initial.worldTime)) {
+          return { status: 'unchanged', worldId: request.worldId, streamHead: initial.streamHead }
+        }
         return rejected(request, initial.streamHead, 'world-simulation-stale-from-time')
       }
       if (!Number.isInteger(request.maxEvents) || request.maxEvents < 1) {
