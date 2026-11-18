@@ -7,6 +7,7 @@
  */
 import { hasAuthorization } from '../../domain/identity/authorization'
 import type { AuthorizationRequest } from '../../domain/identity/model'
+import type { JsonValue } from '../../domain/event-ledger'
 import type { PersonId } from '../../domain/shared/ids'
 import type { WorldAggregate } from '../../domain/world/aggregate'
 import type {
@@ -35,6 +36,31 @@ export interface AuthorizationGatedWorldCommandOptions {
   readonly principals: WorldCommandPrincipalPort
 }
 
+function snapshotJsonValue(value: JsonValue, ancestors = new Set<object>()): JsonValue {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean' || typeof value === 'number') {
+    return value
+  }
+  if (typeof value !== 'object') throw new Error('world-command-payload-not-json')
+  if (ancestors.has(value)) throw new Error('world-command-payload-circular-reference')
+  ancestors.add(value)
+  try {
+    if (Array.isArray(value)) {
+      return Object.freeze(value.map(item => snapshotJsonValue(item, ancestors)))
+    }
+    const prototype = Object.getPrototypeOf(value)
+    if (prototype !== Object.prototype && prototype !== null) {
+      throw new Error('world-command-payload-not-plain-object')
+    }
+    const copy: Record<string, JsonValue> = {}
+    for (const key of Object.keys(value)) {
+      copy[key] = snapshotJsonValue(value[key]!, ancestors)
+    }
+    return Object.freeze(copy)
+  } finally {
+    ancestors.delete(value)
+  }
+}
+
 function rejected(
   request: WorldCommandRequest,
   aggregate: WorldAggregate | null,
@@ -61,11 +87,19 @@ export function createAuthorizationGatedWorldCommandPort(
     async submit(request: WorldCommandRequest): Promise<WorldCommandReceipt> {
       // Snapshot request identity and authorization inputs before crossing async
       // boundaries; TypeScript readonly does not prevent runtime mutation.
-      const command: WorldCommandRequest = Object.freeze({
-        ...request,
-        requestedAt: Object.freeze({ ...request.requestedAt }),
-        expectedHead: Object.freeze({ ...request.expectedHead }),
-      })
+      let command: WorldCommandRequest
+      try {
+        command = Object.freeze({
+          ...request,
+          requestedAt: Object.freeze({ ...request.requestedAt }),
+          expectedHead: Object.freeze({ ...request.expectedHead }),
+          // Snapshot nested JSON payloads too: callers must not be able to
+          // change the target/action while principal and authorization resolve.
+          payload: snapshotJsonValue(request.payload),
+        })
+      } catch {
+        return rejected(request, null, 'world-command-request-snapshot-failed')
+      }
       if (command.source !== 'player-command') {
         return rejected(command, null, 'world-command-source-not-allowed-at-player-boundary')
       }
