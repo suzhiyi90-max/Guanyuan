@@ -108,6 +108,16 @@ export type WorldSimulationResult =
       readonly emittedEventIds: readonly EventId[]
       readonly streamHead: StreamCursor
     }
+  | {
+      readonly status: 'partial'
+      readonly worldId: WorldId
+      readonly from: WorldTime
+      readonly to: WorldTime
+      readonly emittedEventIds: readonly EventId[]
+      readonly pendingTaskIds: readonly string[]
+      readonly streamHead: StreamCursor
+      readonly reason: string
+    }
   | { readonly status: 'unchanged'; readonly worldId: WorldId; readonly streamHead: StreamCursor }
   | { readonly status: 'rejected'; readonly worldId: WorldId; readonly reason: string; readonly streamHead: StreamCursor }
 
