@@ -29,6 +29,7 @@ import {
   createDebtRecordedEventInput,
   createDebtSettledEventInput,
   createAssetRegisteredEventInput,
+  createAssetCustodyTransferredEventInput,
   createAssetRightGrantedEventInput,
   createAssetRightRevokedEventInput,
   createPersonExposureRecordedEventInput,
@@ -97,8 +98,8 @@ let aggregate = createEmptyWorldAggregate(worldId, now)
 
 check('world domain event registry is frozen and versioned', registry.frozen
   && registry.registryId === 'guanyuan.world-domain'
-  && registry.registryVersion === '1.2.0'
-  && registry.schemas.length === 29)
+  && registry.registryVersion === '1.3.0'
+  && registry.schemas.length === 30)
 
 function applyAt<K extends WorldDomainEventKind>(
   input: WorldDomainEventInput<K>,
@@ -774,6 +775,18 @@ check('right revocation is explicit and recomputes derived ownership without del
   aggregate.economy.assets[0]?.owner.kind === 'n/a'
   && aggregate.economy.assets[0]?.rights.ownership.length === 1
   && aggregate.economy.rightRevocations.length === 1)
+
+applyAt(createAssetCustodyTransferredEventInput(assetId, person.id, unconnectedPerson.id, {
+  actor: 'player',
+  source: 'player-command',
+  requestWorldTime: nextEvening,
+  clientRequestId: 'asset-custody-transfer-001',
+}), nextEvening)
+check('asset custody transfer changes physical custodian without changing ownership rights',
+  aggregate.economy.assets[0]?.custody.kind === 'value'
+  && aggregate.economy.assets[0]?.custody.value === unconnectedPerson.id
+  && aggregate.economy.assets[0]?.owner.kind === 'n/a'
+  && aggregate.economy.assets[0]?.rights.ownership.length === 1)
 
 const finalValidation = validateWorldAggregate(aggregate, ledger)
 if (finalValidation.status === 'rejected') {
