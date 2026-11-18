@@ -79,7 +79,7 @@ export function createWorldPlayerBoundary(
       let unsubscribe: (() => void) | null = null
       void Promise.resolve()
         .then(() => options.principals.resolve())
-        .then(principal => {
+        .then(async principal => {
           if (!active || !principal) return
           const aggregate = await options.queries.read(worldId)
           if (!active || !aggregate || aggregate.playerPersonId !== principal) return
