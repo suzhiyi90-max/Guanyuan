@@ -233,3 +233,10 @@ export function createPersonCreatedEventInput(
     payload: { person },
   }
 }
+
+/** Convert the typed payload envelope to the W3 JSON-only ledger contract. */
+export function toLedgerEventInput<Kind extends WorldDomainEventKind>(
+  input: WorldDomainEventInput<Kind>,
+): LedgerEventInput<Kind> {
+  return { ...input, payload: input.payload as unknown as JsonValue }
+}
