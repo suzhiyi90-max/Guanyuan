@@ -10,6 +10,9 @@ import {
   createWorldDomainEventRegistry,
   createWorldInitializationEventInput,
   createPersonCreatedEventInput,
+  createRelationCreatedEventInput,
+  createRelationClaimRecordedEventInput,
+  createRelationEvidenceRecordedEventInput,
   reduceWorldDomainEvent,
   toLedgerEventInput,
   validateWorldDomainEventPayload,
@@ -18,6 +21,7 @@ import type {
   WorldBootstrapDescriptor,
   WorldDomainEventInput,
   PersonCreationData,
+  WorldDomainEventKind,
 } from '../src/application'
 import type { WorldId } from '../src/domain'
 
@@ -66,15 +70,15 @@ const descriptor: WorldBootstrapDescriptor = {
   }],
 }
 const registry = createWorldDomainEventRegistry()
-let ledger = createEventLedger<'world.initialized' | 'person.created' | 'organization.registered' | 'identity.assignment.added' | 'authorization.granted'>(worldId)
+let ledger = createEventLedger<WorldDomainEventKind>(worldId)
 let aggregate = createEmptyWorldAggregate(worldId, now)
 
 check('world domain event registry is frozen and versioned', registry.frozen
   && registry.registryId === 'guanyuan.world-domain'
   && registry.registryVersion === '1.0.0'
-  && registry.schemas.length === 5)
+  && registry.schemas.length === 8)
 
-function apply<K extends 'world.initialized' | 'person.created' | 'organization.registered' | 'identity.assignment.added' | 'authorization.granted'>(
+function apply<K extends WorldDomainEventKind>(
   input: WorldDomainEventInput<K>,
 ): void {
   const ledgerInput = toLedgerEventInput(input)
@@ -232,6 +236,61 @@ check('fixed historical name is accepted only when it matches the world allow-li
   aggregate.persons.some(item => item.id === historicalMinisterId)
   && aggregate.personOrigins.some(item => item.person === historicalMinisterId && item.origin.kind === 'historical-minister'))
 
+const relationId = brandedId<'RelationId'>('relation:person-to-minister')
+apply(createRelationCreatedEventInput({
+  id: relationId,
+  from: person.id,
+  to: historicalMinisterId,
+  type: 'teacher',
+  visibility: { observer: 'player', level: 'private' },
+}, {
+  actor: 'system',
+  source: 'rule',
+  requestWorldTime: now,
+  clientRequestId: 'relation-create-001',
+}))
+check('relation creation commits an objective directed edge with event-backed lifecycle',
+  aggregate.society.relations.length === 1
+  && aggregate.society.relations[0]?.from === person.id
+  && aggregate.society.relations[0]?.to === historicalMinisterId
+  && aggregate.society.relations[0]?.lifecycle.validFrom === aggregate.society.relations[0]?.sourceEvent
+  && aggregate.society.relations[0]?.lifecycle.validTo === 'open')
+
+const claimId = brandedId<'RelationClaimId'>('relation-claim:player-says-teacher')
+apply(createRelationClaimRecordedEventInput({
+  id: claimId,
+  relation: relationId,
+  claimant: 'player',
+  certainty: 'suspected',
+}, {
+  actor: 'player',
+  source: 'player-command',
+  requestWorldTime: now,
+  clientRequestId: 'relation-claim-001',
+}))
+check('relation claim records holder assertion separately from objective relation',
+  aggregate.society.claims.length === 1
+  && aggregate.society.claims[0]?.claimant === 'player'
+  && aggregate.society.claims[0]?.certainty === 'suspected'
+  && aggregate.society.claims[0]?.assertedAt.day === now.day)
+
+apply(createRelationEvidenceRecordedEventInput({
+  id: brandedId<'RelationEvidenceId'>('relation-evidence:direct-person'),
+  claim: claimId,
+  evidence: { kind: 'person', id: historicalMinisterId },
+  weight: 'direct',
+}, {
+  actor: 'player',
+  source: 'player-command',
+  requestWorldTime: now,
+  clientRequestId: 'relation-evidence-001',
+}))
+check('relation evidence remains a separate provenance record attached to a claim',
+  aggregate.society.evidence.length === 1
+  && aggregate.society.evidence[0]?.claim === claimId
+  && aggregate.society.evidence[0]?.weight === 'direct')
+
+
 const reversedValidityPayload = {
   ...descriptor,
   historicalNameAllowList: [{
@@ -291,6 +350,11 @@ if (finalValidation.status === 'rejected') {
   console.error('World aggregate validation issues:', JSON.stringify(finalValidation.issues))
 }
 check('replayed world aggregate validates against the complete ledger', finalValidation.status === 'valid')
+
+const malformedRelationPayload = validateWorldDomainEventPayload(registry, 'relation.created', {
+  relation: { id: 'relation:broken', from: person.id, to: historicalMinisterId, type: '', visibility: { observer: 'player', level: 'private' } },
+})
+check('relation event schema rejects an empty relation type', malformedRelationPayload.status === 'payload-invalid')
 
 const malformedPayload = validateWorldDomainEventPayload(registry, 'person.created', {
   person: { id: 'incomplete' },
