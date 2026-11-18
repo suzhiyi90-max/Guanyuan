@@ -22,6 +22,7 @@ import {
   createMessageStageRecordedEventInput,
   createMessageFailureRecordedEventInput,
   createMessagePropagationRecordedEventInput,
+  createPersonExposureRecordedEventInput,
   createGoalCreatedEventInput,
   createGoalStatusChangedEventInput,
   createScheduleEntryPlannedEventInput,
@@ -139,6 +140,14 @@ async function run(): Promise<void> {
     source: 'rule',
     requestWorldTime: start,
     clientRequestId: 'projector-person-create-002',
+  }))
+  const exposureEvent = append(createPersonExposureRecordedEventInput({
+    id: brandedId<'ExposureId'>('exposure:projector:player-met-second-person'),
+    observer: 'player',
+    subject: secondPerson.id,
+    kind: 'met',
+  }, {
+    actor: 'system', source: 'rule', requestWorldTime: start, clientRequestId: 'projector-player-exposure',
   }))
   const organizationId = brandedId<'OrgId'>('org:projector:county-office')
   append(createOrganizationRegisteredEventInput({
@@ -375,6 +384,8 @@ async function run(): Promise<void> {
     && complete.aggregate.persons.length === 2
     && complete.aggregate.persons[0].id === person.id
     && complete.aggregate.life.histories.length === 2
+    && complete.aggregate.society.exposures.length === 1
+    && complete.aggregate.society.exposures[0]?.id === exposureEvent.id
     && complete.aggregate.society.relations.length === 1
     && complete.aggregate.society.claims.length === 1
     && complete.aggregate.society.evidence.length === 1
