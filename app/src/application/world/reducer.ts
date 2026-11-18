@@ -1041,7 +1041,7 @@ function applyAssetCustodyTransferred(
   }
   const updated: Asset = Object.freeze({
     ...current,
-    custody: field.value(payload.toPersonId),
+    custody: field.value(brandedId<'PersonId'>(payload.toPersonId)),
   })
   const assets = aggregate.economy.assets.map((item, index) => index === assetIndex ? updated : item)
   return Object.freeze({
