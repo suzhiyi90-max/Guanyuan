@@ -118,11 +118,12 @@ async function main(): Promise<void> {
     accepted.status === 'committed' && submitted === 1 && submittedActor === personId)
 
   let releasePayloadRead: ((aggregate: WorldAggregate | null) => void) | null = null
-  let payloadReadStarted = false
+  let markPayloadReadStarted: (() => void) | null = null
+  const payloadReadStarted = new Promise<void>(resolve => { markPayloadReadStarted = resolve })
   let snapshottedPayload: unknown = null
   const delayedQueries: WorldQueryPort = {
     read() {
-      payloadReadStarted = true
+      if (markPayloadReadStarted) markPayloadReadStarted()
       return new Promise(resolve => { releasePayloadRead = resolve })
     },
     subscribe() { return () => undefined },
@@ -142,8 +143,8 @@ async function main(): Promise<void> {
     clientRequestId: 'authorization-gate-payload-snapshot',
     payload: mutablePayload,
   })
-  await Promise.resolve()
-  check('authorization query begins after the request snapshot is captured', payloadReadStarted)
+  await payloadReadStarted
+  check('authorization query begins after the request snapshot is captured', true)
   mutablePayload.target.office = 'office:mutated'
   mutablePayload.target.personIds[0] = 'person:mutated'
   if (releasePayloadRead) releasePayloadRead(authorizedAggregate)
