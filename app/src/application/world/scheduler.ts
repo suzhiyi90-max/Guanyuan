@@ -92,6 +92,27 @@ export function createScheduleTaskSource(
   })
 }
 
+/** Combines deterministic rule, schedule and maintenance queues behind one stable ordering boundary. */
+export function createCompositeWorldSimulationTaskSource(
+  ...sources: readonly WorldSimulationTaskSourcePort[]
+): WorldSimulationTaskSourcePort {
+  if (sources.some(source => !source || typeof source.listDueTasks !== 'function')) {
+    throw new Error('world-simulation-task-source-invalid')
+  }
+  const stableSources = Object.freeze([...sources])
+  return Object.freeze({
+    async listDueTasks(request: WorldSimulationRequest, aggregate: WorldAggregate) {
+      const tasks: WorldSimulationTask[] = []
+      for (const source of stableSources) {
+        const batch = await source.listDueTasks(request, aggregate)
+        if (!Array.isArray(batch)) throw new Error('world-simulation-task-source-invalid-result')
+        tasks.push(...batch)
+      }
+      return Object.freeze(tasks.sort(compareTasks))
+    },
+  })
+}
+
 const genesis = Object.freeze({ kind: 'genesis' as const, seq: 0 })
 
 function sameTime(left: WorldTime, right: WorldTime): boolean {
