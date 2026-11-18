@@ -141,8 +141,9 @@ async function run(): Promise<void> {
     requestWorldTime: start,
     clientRequestId: 'projector-person-create-002',
   }))
+  const exposureId = brandedId<'ExposureId'>('exposure:projector:player-met-second-person')
   const exposureEvent = append(createPersonExposureRecordedEventInput({
-    id: brandedId<'ExposureId'>('exposure:projector:player-met-second-person'),
+    id: exposureId,
     observer: 'player',
     subject: secondPerson.id,
     kind: 'met',
@@ -385,7 +386,8 @@ async function run(): Promise<void> {
     && complete.aggregate.persons[0].id === person.id
     && complete.aggregate.life.histories.length === 2
     && complete.aggregate.society.exposures.length === 1
-    && complete.aggregate.society.exposures[0]?.id === exposureEvent.id
+    && complete.aggregate.society.exposures[0]?.id === exposureId
+    && complete.aggregate.society.exposures[0]?.sourceEvent === exposureEvent.id
     && complete.aggregate.society.relations.length === 1
     && complete.aggregate.society.claims.length === 1
     && complete.aggregate.society.evidence.length === 1
