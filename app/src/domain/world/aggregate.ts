@@ -206,7 +206,8 @@ export function validateWorldAggregate(
       if (!item.displayName.trim() || item.category !== 'famous-minister'
         || item.evidenceRefs.length === 0 || item.evidenceRefs.some((ref: string) => !ref.trim())
         || !isValidWorldTime(item.validFrom)
-        || (item.validThrough !== null && !isValidWorldTime(item.validThrough))
+        || (item.validThrough !== null && (!isValidWorldTime(item.validThrough)
+          || compareWorldTime(item.validThrough, item.validFrom) < 0))
         || (item.scope.kind === 'location' && !item.scope.locationCode.trim())) {
         addIssue(issues, 'envelope', 'world-historical-name-allow-list-entry-invalid', item.personId)
       }
