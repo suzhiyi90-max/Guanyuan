@@ -16,7 +16,7 @@ import {
   createLifeStateMaintenanceTaskSource,
 } from '../src/application'
 import type { WorldBootstrapRequest, WorldCommandPort } from '../src/application'
-import { resolveWorldSimulationPolicies, validateWorldSimulationRuleset } from '../src/application'
+import { createPolicyGatedWorldSimulationTaskSource, resolveWorldSimulationPolicies, validateWorldSimulationRuleset } from '../src/application'
 
 let passed = 0
 let failed = 0
@@ -417,6 +417,68 @@ async function main(): Promise<void> {
   check('policy resolver rejects candidates without a stable identity',
     malformedDecision?.status === 'rejected'
     && malformedDecision.reason === 'invalid-candidate-id')
+
+  const policyTask = {
+    taskId: 'rule:policy-gated',
+    requestId: 'rule:policy-gated',
+    dueAt: due,
+    priority: 1,
+    actor: 'system',
+    source: 'rule' as const,
+    intentKind: 'goal.create',
+    payload: { goal: 'explicit-policy' },
+  }
+  const policySource = createPolicyGatedWorldSimulationTaskSource(
+    { listDueTasks: () => [policyTask] },
+    policyRuleset,
+    { resolve: () => 'L0' },
+  )
+  const policyRequest = {
+    worldId,
+    from: start,
+    to: due,
+    lod: 'near-field' as const,
+    maxEvents: 12,
+  }
+  const policyTasks = await policySource.listDueTasks(policyRequest, beforePlan)
+  check('policy gate applies declared priority while preserving deterministic task identity and payload',
+    policyTasks.length === 1
+    && policyTasks[0]?.taskId === policyTask.taskId
+    && policyTasks[0]?.requestId === policyTask.requestId
+    && policyTasks[0]?.priority === 8
+    && JSON.stringify(policyTasks[0]?.payload) === JSON.stringify(policyTask.payload))
+  const deferredPolicySource = createPolicyGatedWorldSimulationTaskSource(
+    { listDueTasks: () => [policyTask] },
+    policyRuleset,
+    { resolve: () => 'L0' },
+  )
+  const deferredPolicyTasks = await deferredPolicySource.listDueTasks(
+    { ...policyRequest, lod: 'remote-world' },
+    beforePlan,
+  )
+  check('policy gate defers tasks when the active LOD is not explicitly enabled',
+    deferredPolicyTasks.length === 0)
+  let policyBudgetRejected = false
+  try {
+    await policySource.listDueTasks({ ...policyRequest, maxEvents: 13 }, beforePlan)
+  } catch {
+    policyBudgetRejected = true
+  }
+  check('policy gate rejects requests exceeding the versioned ruleset event budget',
+    policyBudgetRejected)
+  const unknownLevelSource = createPolicyGatedWorldSimulationTaskSource(
+    { listDueTasks: () => [policyTask] },
+    policyRuleset,
+    { resolve: () => 'L9' },
+  )
+  let unknownLevelRejected = false
+  try {
+    await unknownLevelSource.listDueTasks(policyRequest, beforePlan)
+  } catch {
+    unknownLevelRejected = true
+  }
+  check('policy gate fails closed when the level classifier returns an unknown level',
+    unknownLevelRejected)
 
   if (failed > 0) throw new Error(`Deterministic world scheduler tests failed: ${failed}/${passed + failed}`)
   console.log(`Deterministic world scheduler tests: ${passed}/${passed + failed} passed`)
