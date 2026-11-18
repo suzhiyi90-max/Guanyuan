@@ -10,6 +10,7 @@ import { compareWorldTime, isValidWorldTime } from '../../domain/shared/world-ti
 import type { LedgerEvent } from '../../domain/event-ledger'
 import type { EventRegistry } from '../../domain/event-registry'
 import type { Person } from '../../domain/person/model'
+import type { PersonOriginRecord } from '../../domain/person/provenance'
 import { validatePersonLifecycle } from '../../domain/person/lifecycle'
 import type { IdentityAssignment, Authorization } from '../../domain/identity/model'
 import {
@@ -111,10 +112,25 @@ function applyPersonCreated(
     eventTimes: new Map<EventId, import('../../domain/shared/world-time').WorldTime>([[event.id, event.committedAt]]),
   })
   if (historyIssues.length > 0) throw new Error(`world-reducer-life-history-invalid:${historyIssues.join(',')}`)
+  if (payload.origin.kind === 'player-character' && aggregate.playerPersonId !== null) {
+    throw new Error('world-reducer-player-character-already-exists')
+  }
+  const origin = payload.origin.kind === 'historical-minister'
+    ? Object.freeze({
+        ...payload.origin,
+        evidenceRefs: Object.freeze([...payload.origin.evidenceRefs]),
+        validFrom: Object.freeze({ ...payload.origin.validFrom }),
+        validThrough: payload.origin.validThrough ? Object.freeze({ ...payload.origin.validThrough }) : null,
+        scope: Object.freeze({ ...payload.origin.scope }),
+      })
+    : Object.freeze({ ...payload.origin })
+  const originRecord: PersonOriginRecord = Object.freeze({ person: person.id, origin })
   return Object.freeze({
     ...aggregate,
     ...withEventCursor(aggregate, event),
     persons: Object.freeze([...aggregate.persons, person]),
+    playerPersonId: payload.origin.kind === 'player-character' ? person.id : aggregate.playerPersonId,
+    personOrigins: Object.freeze([...aggregate.personOrigins, originRecord]),
     life: Object.freeze({
       ...aggregate.life,
       histories: Object.freeze([...aggregate.life.histories, history]),
