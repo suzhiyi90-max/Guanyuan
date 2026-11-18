@@ -284,7 +284,8 @@ apply(createMembershipEndedEventInput(membershipId, {
   actor: 'system', source: 'rule', requestWorldTime: now, clientRequestId: 'membership-ended-001',
 }))
 check('membership exit closes the existing interval without deleting membership history',
-  aggregate.society.memberships[0]?.validTo === aggregate.streamHead.eventId)
+  aggregate.streamHead.kind === 'event'
+  && aggregate.society.memberships[0]?.validTo === aggregate.streamHead.eventId)
 
 apply(createRelationLifecycleChangedEventInput(relationId, 'dormant', {
   actor: 'system', source: 'rule', requestWorldTime: now, clientRequestId: 'relation-dormant-001',
@@ -296,7 +297,8 @@ apply(createRelationLifecycleChangedEventInput(relationId, 'severed', {
   actor: 'system', source: 'rule', requestWorldTime: now, clientRequestId: 'relation-severed-001',
 }))
 check('relation may become dormant, resume, and finally sever while preserving its history',
-  aggregate.society.relations[0]?.lifecycle.status === 'severed'
+  aggregate.streamHead.kind === 'event'
+  && aggregate.society.relations[0]?.lifecycle.status === 'severed'
   && aggregate.society.relations[0]?.lifecycle.validTo === aggregate.streamHead.eventId)
 const relationReopenAppend = appendLedgerEvent(ledger, toLedgerEventInput(
   createRelationLifecycleChangedEventInput(relationId, 'active', {
