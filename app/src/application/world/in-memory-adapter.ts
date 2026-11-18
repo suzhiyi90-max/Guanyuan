@@ -61,13 +61,6 @@ function sameCursor(left: StreamCursor, right: StreamCursor): boolean {
     && (left.kind === 'genesis' || (right.kind === 'event' && left.eventId === right.eventId))
 }
 
-function currentHead(ledger: EventLedger<WorldDomainEventKind>): StreamCursor {
-  const tail = ledger.events[ledger.events.length - 1]
-  return tail
-    ? Object.freeze({ kind: 'event' as const, seq: tail.seq, eventId: tail.id })
-    : Object.freeze({ kind: 'genesis' as const, seq: 0 as const })
-}
-
 export function createInMemoryWorldAdapter(options: InMemoryWorldAdapterOptions): InMemoryWorldAdapter {
   const registry = options.registry ?? createWorldDomainEventRegistry()
   if (!registry.frozen || !Object.isFrozen(registry)) throw new Error('world-adapter-registry-not-frozen')
