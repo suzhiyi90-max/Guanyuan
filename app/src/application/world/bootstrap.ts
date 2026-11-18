@@ -285,7 +285,7 @@ export function bootstrapWorld(request: WorldBootstrapRequest): WorldBootstrapRe
 
 export function generatedCandidateOrigin(candidate: GeneratedPersonCandidate): PersonOrigin {
   return Object.freeze({
-    kind: 'seeded-random',
+    kind: 'seeded-random' as const,
     candidateId: candidate.id,
     seedFingerprint: candidate.seedFingerprint,
     roleCode: candidate.roleCode,
@@ -295,7 +295,7 @@ export function generatedCandidateOrigin(candidate: GeneratedPersonCandidate): P
 
 export function historicalCandidateOrigin(candidate: FixedHistoricalPersonCandidate): PersonOrigin {
   return Object.freeze({
-    kind: 'historical-minister',
+    kind: 'historical-minister' as const,
     category: 'famous-minister',
     evidenceRefs: Object.freeze([...candidate.evidenceRefs]),
     validFrom: Object.freeze({ ...candidate.validFrom }),
