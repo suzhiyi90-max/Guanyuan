@@ -36,6 +36,7 @@ import type {
 const intentKinds: Readonly<Record<string, WorldDomainEventKind>> = Object.freeze({
   'world.initialize': 'world.initialized',
   'world.time.advance': 'world.time.advanced',
+  'life.state.fact.record': 'life.state.fact.recorded',
   'person.create': 'person.created',
   'organization.register': 'organization.registered',
   'identity.assign': 'identity.assignment.added',
