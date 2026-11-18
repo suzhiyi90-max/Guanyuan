@@ -227,7 +227,7 @@ export function createDeterministicWorldScheduler(
 
       const advanceClock = async (): Promise<{ readonly receipt: WorldCommandReceipt; readonly aggregate: WorldAggregate | null }> => {
         const input = toLedgerEventInput(createWorldTimeAdvancedEventInput(
-          request.from,
+          latest.worldTime,
           request.to,
           {
             actor: 'system',
@@ -245,7 +245,7 @@ export function createDeterministicWorldScheduler(
         )
       }
 
-      if (selected.length === 0 && clockRequired) {
+      if (selected.length === 0 && ordered.length === 0 && clockRequired) {
         try {
           const clock = await advanceClock()
           if (isFailure(clock.receipt) || !clock.aggregate) {
@@ -375,7 +375,7 @@ export function createDeterministicWorldScheduler(
           reason: 'world-simulation-event-budget-exhausted',
         }
       }
-      if (clockRequired) {
+      if (compareWorldTime(request.to, latest.worldTime) > 0) {
         try {
           const clock = await advanceClock()
           if (!isFailure(clock.receipt)
