@@ -378,7 +378,6 @@ function applyRelationEvidenceRecorded(
 }
 
 function cognitionReferences(aggregate: WorldAggregate, event: LedgerEvent<WorldDomainEventKind>) {
-  const prefix = `evt:${aggregate.worldId}:`
   return {
     persons: aggregate.persons.map(item => item.id),
     relations: aggregate.society.relations.map(item => item.id),
