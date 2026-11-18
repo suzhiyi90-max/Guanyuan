@@ -750,6 +750,20 @@ if (finalValidation.status === 'rejected') {
 }
 check('replayed world aggregate validates against the complete ledger', finalValidation.status === 'valid')
 
+const forgedScheduleExecution = {
+  ...aggregate,
+  planning: {
+    ...aggregate.planning,
+    scheduleEntries: aggregate.planning.scheduleEntries.map(item => item.id === scheduleId
+      ? { ...item, execution: field.value(currentEventId()) }
+      : item),
+  },
+}
+const forgedScheduleResult = validateWorldAggregate(forgedScheduleExecution, ledger)
+check('aggregate rejects a schedule execution reference without its matching settlement event',
+  forgedScheduleResult.status === 'rejected'
+  && forgedScheduleResult.issues.some(issue => issue.code === 'schedule-execution-settlement-event-missing'))
+
 const playerSocialView = projectWorldForObserver(aggregate, 'player')
 const firstPersonView = projectWorldForObserver(aggregate, person.id)
 const ministerView = projectWorldForObserver(aggregate, historicalMinisterId)
