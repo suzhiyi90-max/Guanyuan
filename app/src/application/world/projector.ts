@@ -10,6 +10,7 @@ import type { EventRegistry } from '../../domain/event-registry'
 import type { WorldTime } from '../../domain/shared/world-time'
 import { isValidWorldTime } from '../../domain/shared/world-time'
 import type { WorldAggregate, WorldAggregateValidation } from '../../domain/world/aggregate'
+import type { EventId } from '../../domain/shared/ids'
 import { createEmptyWorldAggregate, validateWorldAggregate } from '../../domain/world/aggregate'
 import type { WorldProjectionPort, WorldProjectionRequest } from './ports'
 import type { WorldDomainEventKind } from './event-catalog'
@@ -124,15 +125,20 @@ export function createWorldAggregateProjector(
     async rebuild(request: WorldProjectionRequest<WorldDomainEventKind>): Promise<WorldAggregateValidation> {
       const { ledger, target } = request
       const initial = createEmptyWorldAggregate(ledger.worldId, options.worldStartTime)
+      const events = target.kind === 'genesis' ? [] : ledger.events.filter(event => event.seq <= target.seq)
+      const eventContext = {
+        eventIds: events.map(event => event.id as EventId),
+        eventTimes: new Map(events.map(event => [event.id as EventId, event.committedAt] as const)),
+      }
       const replay = rebuildReadOnlyProjection({
         worldId: ledger.worldId,
         fromExclusive: { kind: 'genesis', seq: 0 },
         toInclusive: target,
-        events: target.kind === 'genesis' ? [] : ledger.events.filter(event => event.seq <= target.seq),
+        events,
         registry: options.registry,
         initialState: encodeAggregate(initial),
         reduce: (state, event) => encodeAggregate(
-          reduceWorldDomainEvent(decodeAggregate(state), event, options.registry),
+          reduceWorldDomainEvent(decodeAggregate(state), event, options.registry, eventContext),
         ),
       })
       if (replay.status !== 'rebuilt') return rejected(`world-replay-${replay.issue}`)
