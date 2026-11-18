@@ -137,6 +137,8 @@ jobs:
         run: npm run test:world-adapter
       - name: World application initialization and resumable population contracts
         run: npm run test:world-initialize
+      - name: Deterministic world simulation scheduler contracts
+        run: npm run test:world-scheduler
       - name: World event registry and aggregate reducer contracts
         run: npm run test:world-event
       - name: Replay-backed world projector contracts
