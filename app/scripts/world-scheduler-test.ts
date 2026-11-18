@@ -16,7 +16,7 @@ import {
   createLifeStateMaintenanceTaskSource,
 } from '../src/application'
 import type { WorldBootstrapRequest, WorldCommandPort } from '../src/application'
-import { createPolicyGatedWorldSimulationTaskSource, resolveWorldSimulationPolicies, validateWorldSimulationRuleset } from '../src/application'
+import { createPolicyConfiguredWorldSimulationPort, createPolicyGatedWorldSimulationTaskSource, resolveWorldSimulationPolicies, validateWorldSimulationRuleset } from '../src/application'
 
 let passed = 0
 let failed = 0
@@ -479,6 +479,59 @@ async function main(): Promise<void> {
   }
   check('policy gate fails closed when the level classifier returns an unknown level',
     unknownLevelRejected)
+
+
+  const policyTick: WorldTime = { day: 5, period: '晨' }
+  const integratedGoal = toLedgerEventInput(createGoalCreatedEventInput({
+    id: brandedId<'GoalId'>('goal:scheduler-test:policy-integrated'),
+    person: person.id,
+    statement: '通过版本化策略门控的规则行动',
+    priority: 2,
+    visibility: { observer: 'player', level: 'private' },
+  }, {
+    actor: 'system',
+    source: 'rule',
+    requestWorldTime: policyTick,
+    clientRequestId: 'scheduler-test:policy-integrated-goal',
+  }))
+  let loadedPolicyRevision = ''
+  const policyConfiguredPort = createPolicyConfiguredWorldSimulationPort({
+    commands: adapter.commands,
+    queries: adapter.queries,
+    tasks: {
+      listDueTasks: () => [{
+        taskId: 'rule:policy-integrated',
+        requestId: integratedGoal.clientRequestId,
+        dueAt: policyTick,
+        priority: 1,
+        actor: 'system',
+        source: 'rule',
+        intentKind: integratedGoal.intentKind,
+        payload: integratedGoal.payload as never,
+      }],
+    },
+    rulesets: {
+      load: () => {
+        loadedPolicyRevision = policyRuleset.revision
+        return policyRuleset
+      },
+    },
+    levels: { resolve: () => 'L0' },
+  })
+  const policyIntegratedResult = await policyConfiguredPort.advance({
+    worldId,
+    from: maintenanceTime,
+    to: policyTick,
+    lod: 'near-field',
+    maxEvents: 12,
+  })
+  const afterPolicyIntegrated = (await adapter.queries.read(worldId))!
+  check('policy-configured simulation port loads the active revision and routes accepted work through the canonical scheduler',
+    policyIntegratedResult.status === 'advanced'
+    && policyIntegratedResult.policy.rulesetId === policyRuleset.rulesetId
+    && policyIntegratedResult.policy.revision === policyRuleset.revision
+    && loadedPolicyRevision === policyRuleset.revision
+    && afterPolicyIntegrated.planning.goals.some(item => item.statement === '通过版本化策略门控的规则行动'))
 
   if (failed > 0) throw new Error(`Deterministic world scheduler tests failed: ${failed}/${passed + failed}`)
   console.log(`Deterministic world scheduler tests: ${passed}/${passed + failed} passed`)
