@@ -60,6 +60,7 @@ const intentKinds: Readonly<Record<string, WorldDomainEventKind>> = Object.freez
   'debt.record': 'debt.recorded',
   'debt.settle': 'debt.settled',
   'asset.register': 'asset.registered',
+  'asset.custody.transfer': 'asset.custody.transferred',
   'asset.right.grant': 'asset.right.granted',
   'asset.right.revoke': 'asset.right.revoked',
   'person.exposure.record': 'person.exposure.recorded',
