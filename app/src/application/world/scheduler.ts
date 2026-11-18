@@ -71,7 +71,7 @@ export function createScheduleTaskSource(
       return aggregate.planning.scheduleEntries.flatMap(entry => {
         const plannedAt: WorldTime = { day: entry.day, period: entry.period }
         if (compareWorldTime(plannedAt, request.to) > 0
-          || entry.execution.kind === 'value' || entry.deviation.kind === 'value') return []
+          || entry.execution.kind !== 'n/a' || entry.deviation.kind !== 'n/a') return []
         // An overdue but unsettled task is still eligible; resolve it at the current world time.
         const dueAt = compareWorldTime(plannedAt, request.from) < 0 ? request.from : plannedAt
         const action = resolver.resolve(entry, aggregate, request.lod)
@@ -144,7 +144,9 @@ function validTask(task: WorldSimulationTask): boolean {
     && (task.source === 'rule' || task.source === 'schedule')
     && typeof task.intentKind === 'string' && task.intentKind.trim().length > 0
     && task.payload !== undefined
-    && (task.scheduleId === undefined || (typeof task.scheduleId === 'string' && task.scheduleId.length > 0))
+    && (task.scheduleId === undefined
+      ? task.source !== 'schedule'
+      : task.source === 'schedule' && typeof task.scheduleId === 'string' && task.scheduleId.length > 0)
 }
 
 function isFailure(receipt: WorldCommandReceipt): receipt is Extract<WorldCommandReceipt, { status: 'rejected' | 'conflict' }> {
@@ -202,7 +204,7 @@ export function createDeterministicWorldScheduler(
       for (const task of ordered) {
         if (task.scheduleId !== undefined) {
           const entry = initial.planning.scheduleEntries.find(item => item.id === task.scheduleId)
-          if (!entry || entry.execution.kind === 'value' || entry.deviation.kind === 'value'
+          if (!entry || entry.execution.kind !== 'n/a' || entry.deviation.kind !== 'n/a'
             || task.source !== 'schedule'
             || compareWorldTime(task.dueAt, { day: entry.day, period: entry.period }) < 0) {
             return rejected(request, initial.streamHead, 'world-simulation-schedule-task-not-eligible')
