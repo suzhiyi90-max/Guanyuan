@@ -17,8 +17,8 @@ import {
   validateIdentityAssignment,
   validateAuthorization,
 } from '../../domain/identity/validation'
-import type { Organization } from '../../domain/relations/model'
-import { validateOrganization } from '../../domain/relations/validation'
+import type { Organization, Relation, RelationClaim, RelationEvidence } from '../../domain/relations/model'
+import { validateOrganization, validateRelation, validateRelationClaim, validateRelationEvidence } from '../../domain/relations/validation'
 import type { LifeHistory } from '../../domain/life/model'
 import { validateLifeHistory } from '../../domain/life/validation'
 import type { WorldBootstrapMetadata } from '../../domain/world/metadata'
@@ -30,6 +30,9 @@ import {
   type PersonCreationData,
   type IdentityAssignmentCreationData,
   type AuthorizationGrantData,
+  type RelationCreationData,
+  type RelationClaimCreationData,
+  type RelationEvidenceCreationData,
 } from './event-catalog'
 
 function assertNextEvent(
@@ -272,6 +275,103 @@ function applyAuthorizationGranted(
   })
 }
 
+function applyRelationCreated(
+  aggregate: WorldAggregate,
+  event: LedgerEvent<WorldDomainEventKind>,
+): WorldAggregate {
+  requireBootstrap(aggregate)
+  const payload = event.payload as unknown as WorldDomainEventPayloadMap['relation.created']
+  const data: RelationCreationData = payload.relation
+  if (aggregate.society.relations.some(item => item.id === data.id)) {
+    throw new Error('world-reducer-relation-duplicate')
+  }
+  const personIds = aggregate.persons.map(person => person.id)
+  if (!personIds.includes(data.from)) throw new Error('world-reducer-relation-source-person-missing')
+  if (!personIds.includes(data.to)) throw new Error('world-reducer-relation-target-person-missing')
+  if (data.visibility.observer !== 'player' && !personIds.includes(data.visibility.observer)) {
+    throw new Error('world-reducer-relation-observer-person-missing')
+  }
+  const relation: Relation = Object.freeze({
+    ...data,
+    lifecycle: Object.freeze({ status: 'active', validFrom: event.id, validTo: 'open' }),
+    sourceEvent: event.id,
+    visibility: Object.freeze({ ...data.visibility }),
+  })
+  const issues = validateRelation(relation)
+  if (issues.length > 0) throw new Error(`world-reducer-relation-invalid:${issues.join(',')}`)
+  return Object.freeze({
+    ...aggregate,
+    ...withEventCursor(aggregate, event),
+    society: Object.freeze({
+      ...aggregate.society,
+      relations: Object.freeze([...aggregate.society.relations, relation]),
+    }),
+  })
+}
+
+function applyRelationClaimRecorded(
+  aggregate: WorldAggregate,
+  event: LedgerEvent<WorldDomainEventKind>,
+): WorldAggregate {
+  requireBootstrap(aggregate)
+  const payload = event.payload as unknown as WorldDomainEventPayloadMap['relation.claim.recorded']
+  const data: RelationClaimCreationData = payload.claim
+  if (aggregate.society.claims.some(item => item.id === data.id)) {
+    throw new Error('world-reducer-relation-claim-duplicate')
+  }
+  const claim: RelationClaim = Object.freeze({
+    ...data,
+    assertedAt: Object.freeze({ ...event.committedAt }),
+    sourceEvent: event.id,
+  })
+  const issues = validateRelationClaim(
+    claim,
+    aggregate.society.relations.map(item => item.id),
+    aggregate.persons.map(person => person.id),
+  )
+  if (issues.length > 0) throw new Error(`world-reducer-relation-claim-invalid:${issues.join(',')}`)
+  return Object.freeze({
+    ...aggregate,
+    ...withEventCursor(aggregate, event),
+    society: Object.freeze({
+      ...aggregate.society,
+      claims: Object.freeze([...aggregate.society.claims, claim]),
+    }),
+  })
+}
+
+function applyRelationEvidenceRecorded(
+  aggregate: WorldAggregate,
+  event: LedgerEvent<WorldDomainEventKind>,
+): WorldAggregate {
+  requireBootstrap(aggregate)
+  const payload = event.payload as unknown as WorldDomainEventPayloadMap['relation.evidence.recorded']
+  const data: RelationEvidenceCreationData = payload.evidence
+  if (aggregate.society.evidence.some(item => item.id === data.id)) {
+    throw new Error('world-reducer-relation-evidence-duplicate')
+  }
+  const evidence: RelationEvidence = Object.freeze({
+    ...data,
+    evidence: Object.freeze({ ...data.evidence }),
+    sourceEvent: event.id,
+  })
+  const issues = validateRelationEvidence(
+    evidence,
+    aggregate.society.claims.map(item => item.id),
+    aggregate.persons.map(person => person.id),
+    aggregate.society.organizations.map(item => item.id),
+  )
+  if (issues.length > 0) throw new Error(`world-reducer-relation-evidence-invalid:${issues.join(',')}`)
+  return Object.freeze({
+    ...aggregate,
+    ...withEventCursor(aggregate, event),
+    society: Object.freeze({
+      ...aggregate.society,
+      evidence: Object.freeze([...aggregate.society.evidence, evidence]),
+    }),
+  })
+}
+
 /** Apply one schema-validated event to the read-only world projection. */
 export function reduceWorldDomainEvent(
   aggregate: WorldAggregate,
@@ -295,6 +395,12 @@ export function reduceWorldDomainEvent(
       return applyIdentityAssignmentAdded(aggregate, event)
     case 'authorization.granted':
       return applyAuthorizationGranted(aggregate, event)
+    case 'relation.created':
+      return applyRelationCreated(aggregate, event)
+    case 'relation.claim.recorded':
+      return applyRelationClaimRecorded(aggregate, event)
+    case 'relation.evidence.recorded':
+      return applyRelationEvidenceRecorded(aggregate, event)
     default: {
       const unreachable: never = event.kind
       throw new Error(`world-reducer-unhandled-event:${String(unreachable)}`)
