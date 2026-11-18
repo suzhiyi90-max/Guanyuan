@@ -6,6 +6,7 @@ import {
   type WorldCommandRequest,
   type WorldObserverQueryPort,
   type WorldQueryPort,
+  type WorldObserverSocialView,
 } from '../src/application'
 import type { WorldAggregate } from '../src/domain'
 
@@ -40,6 +41,11 @@ let queriedObserver: string | null = null
 let subscribedObserver: string | null = null
 let observerUnsubscribed = 0
 let observerSubscribeCalls = 0
+let emitObserverView: ((view: WorldObserverSocialView) => void) | null = null
+let holdObserverRead = false
+let resolveObserverRead: ((view: WorldObserverSocialView | null) => void) | null = null
+let signalObserverReadStarted: (() => void) | null = null
+let observerReadStarted = Promise.resolve()
 let resolveObserverSubscribed: () => void = () => undefined
 const observerSubscribed = new Promise<void>(resolve => { resolveObserverSubscribed = resolve })
 const rawCommands: WorldCommandPort = {
@@ -58,11 +64,14 @@ const rawQueries: WorldQueryPort = {
 const rawObserverQueries: WorldObserverQueryPort = {
   async read(_id, observer) {
     queriedObserver = observer
-    return null
+    if (!holdObserverRead) return null
+    observerReadStarted = new Promise<void>(resolve => { signalObserverReadStarted = resolve })
+    return new Promise(resolve => { resolveObserverRead = resolve; signalObserverReadStarted?.() })
   },
   subscribe(_id, observer) {
     observerSubscribeCalls += 1
     subscribedObserver = observer
+    emitObserverView = listener
     resolveObserverSubscribed()
     return () => { observerUnsubscribed += 1 }
   },
@@ -108,6 +117,19 @@ async function main(): Promise<void> {
   check('player query binds the observer to the trusted authenticated principal and matching world player',
     view === null && queriedObserver === principalId)
 
+  const observerView = {
+    worldId, observer: principalId, observerPersonId: principalId,
+  } as WorldObserverSocialView
+  holdObserverRead = true
+  const pendingRead = boundary.queries.read(worldId)
+  await observerReadStarted
+  authenticated = otherPersonId
+  resolveObserverRead?.(observerView)
+  const switchedSessionView = await pendingRead
+  check('read begun by a prior session is discarded after principal changes', switchedSessionView === null)
+  authenticated = principalId
+  holdObserverRead = false
+
   worldAggregate = { ...worldAggregate, playerPersonId: otherPersonId }
   queriedObserver = null
   const foreignWorldView = await boundary.queries.read(worldId)
@@ -120,6 +142,16 @@ async function main(): Promise<void> {
   await observerSubscribed
   check('player subscription binds the observer to the trusted authenticated principal',
     subscribedObserver === principalId && !notified)
+  authenticated = otherPersonId
+  emitObserverView?.(observerView)
+  await Promise.resolve()
+  await Promise.resolve()
+  check('existing subscription stops delivering after authenticated principal changes', !notified)
+  authenticated = principalId
+  emitObserverView?.(observerView)
+  await Promise.resolve()
+  await Promise.resolve()
+  check('active subscription delivers only while the same principal remains authenticated', notified)
   unsubscribe()
   check('player query subscription cleanup reaches the underlying observer subscription',
     observerUnsubscribed === 1)
