@@ -30,6 +30,8 @@ import { validateGoalStatusHistory } from '../../domain/planning/status-history'
 import type { Debt, Asset, RightGrant, RightRevocation, AssetRightKind } from '../../domain/economy/model'
 import { deriveAssetOwner, validateAssetSet, validateDebt, validateDebtSet } from '../../domain/economy/validation'
 import type { LifeHistory } from '../../domain/life/model'
+import type { LifeStateFact } from '../../domain/life/state'
+import { validateLifeStateFacts } from '../../domain/life/state-validation'
 import { validateLifeHistory } from '../../domain/life/validation'
 import type { WorldBootstrapMetadata } from '../../domain/world/metadata'
 import type { WorldAggregate } from '../../domain/world/aggregate'
@@ -57,6 +59,7 @@ import {
   type AssetCreationData,
   type AssetRightGrantData,
   type PersonExposureCreationData,
+  type LifeStateFactCreationData,
 } from './event-catalog'
 
 function assertNextEvent(
@@ -1086,6 +1089,35 @@ function applyAssetRightRevoked(
   })
 }
 
+function applyLifeStateFactRecorded(
+  aggregate: WorldAggregate,
+  event: LedgerEvent<WorldDomainEventKind>,
+  context?: WorldEventContext,
+): WorldAggregate {
+  requireBootstrap(aggregate)
+  const payload = event.payload as unknown as WorldDomainEventPayloadMap['life.state.fact.recorded']
+  const data: LifeStateFactCreationData = payload.fact
+  const fact: LifeStateFact = Object.freeze({
+    ...data,
+    sourceEvent: event.id,
+    at: Object.freeze({ ...event.committedAt }),
+  })
+  const refs = eventReferences(event, context)
+  const issues = validateLifeStateFacts(
+    [...aggregate.life.stateFacts, fact],
+    { persons: aggregate.persons, events: refs.events, eventTimes: refs.eventTimes },
+  )
+  if (issues.length > 0) throw new Error(`world-reducer-life-state-fact-invalid:${issues.join(',')}`)
+  return Object.freeze({
+    ...aggregate,
+    ...withEventCursor(aggregate, event),
+    life: Object.freeze({
+      ...aggregate.life,
+      stateFacts: Object.freeze([...aggregate.life.stateFacts, fact]),
+    }),
+  })
+}
+
 function applyPersonExposureRecorded(
   aggregate: WorldAggregate,
   event: LedgerEvent<WorldDomainEventKind>,
@@ -1135,6 +1167,8 @@ export function reduceWorldDomainEvent(
       return applyWorldInitialized(aggregate, event)
     case 'world.time.advanced':
       return applyWorldTimeAdvanced(aggregate, event)
+    case 'life.state.fact.recorded':
+      return applyLifeStateFactRecorded(aggregate, event, context)
     case 'person.created':
       return applyPersonCreated(aggregate, event)
     case 'organization.registered':
