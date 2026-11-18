@@ -43,6 +43,8 @@ function expectThrow(name: string, action: () => void, expected: string): void {
 
 const worldId = brandedId<'WorldId'>('world-event-contract-test') as WorldId
 const now = { day: 1, period: '晨' } as const
+const historicalMinisterId = brandedId<'PersonId'>('person:historical:minister-001')
+const historicalEvidence = ['source:chronicle:volume-01']
 const descriptor: WorldBootstrapDescriptor = {
   worldId,
   startedAt: now,
@@ -52,6 +54,15 @@ const descriptor: WorldBootstrapDescriptor = {
   seedFingerprint: 'a1b2c3d4',
   locationCode: 'peixian',
   populationPolicyVersion: 'w6.1',
+  historicalNameAllowList: [{
+    personId: historicalMinisterId,
+    displayName: '史载名臣',
+    category: 'famous-minister',
+    evidenceRefs: historicalEvidence,
+    validFrom: now,
+    validThrough: null,
+    scope: { kind: 'world' },
+  }],
 }
 const registry = createWorldDomainEventRegistry()
 let ledger = createEventLedger<'world.initialized' | 'person.created' | 'organization.registered' | 'identity.assignment.added' | 'authorization.granted'>(worldId)
@@ -183,6 +194,39 @@ check('authorization grant receives immutable event provenance',
   aggregate.identity.authorizations.length === 1
   && aggregate.streamHead.kind === 'event'
   && aggregate.identity.authorizations[0]?.grantedBy === aggregate.streamHead.eventId)
+
+const historicalPerson: PersonCreationData = {
+  id: historicalMinisterId,
+  displayName: '史载名臣',
+  birth: field.unknown,
+  capability: brandedId<'CapabilityRef'>('cap:historical:minister-001'),
+  stateDomains: {
+    body: brandedId<'BodyScopeRef'>('body:historical:minister-001'),
+    mind: brandedId<'MindScopeRef'>('mind:historical:minister-001'),
+    knowledge: brandedId<'KnowledgeScopeId'>('knowledge:historical:minister-001'),
+    goals: [],
+    scheduleScope: brandedId<'ScheduleScopeId'>('schedule:historical:minister-001'),
+    economy: brandedId<'EconomyScopeId'>('economy:historical:minister-001'),
+    location: brandedId<'LocationStateRef'>('location:historical:minister-001'),
+  },
+  history: brandedId<'LifeHistoryRef'>('history:historical:minister-001'),
+}
+apply(createPersonCreatedEventInput(historicalPerson, {
+  kind: 'historical-minister',
+  category: 'famous-minister',
+  evidenceRefs: historicalEvidence,
+  validFrom: now,
+  validThrough: null,
+  scope: { kind: 'world' },
+}, {
+  actor: 'system',
+  source: 'rule',
+  requestWorldTime: now,
+  clientRequestId: 'historical-minister-create-001',
+}))
+check('fixed historical name is accepted only when it matches the world allow-list',
+  aggregate.persons.some(item => item.id === historicalMinisterId)
+  && aggregate.personOrigins.some(item => item.person === historicalMinisterId && item.origin.kind === 'historical-minister'))
 
 const finalValidation = validateWorldAggregate(aggregate, ledger)
 check('replayed world aggregate validates against the complete ledger', finalValidation.status === 'valid')
