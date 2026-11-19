@@ -14,3 +14,5 @@ export * from './world/simulation-policy'
 export * from './world/authorization-gate'
 
 export * from './world/player-boundary'
+
+export * from './identity/owner'
