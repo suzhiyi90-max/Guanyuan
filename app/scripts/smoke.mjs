@@ -577,7 +577,7 @@ try {
   await page.waitForFunction(expected => {
     const drawer = document.querySelector('.intelligence-drawer')
     const scroll = drawer?.querySelector('.drawer-scroll')
-    const selectedFilter = drawer?.querySelector<HTMLButtonElement>('.knowledge-legend button[aria-pressed="true"]')
+    const selectedFilter = drawer?.querySelector('.knowledge-legend button[aria-pressed="true"]')
     return Boolean(drawer && scroll && selectedFilter
       && document.activeElement === selectedFilter
       && Math.abs(scroll.scrollTop - expected) <= 2)
