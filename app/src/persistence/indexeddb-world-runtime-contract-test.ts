@@ -308,23 +308,37 @@ export async function runIndexedDbWorldRuntimeContractTests(): Promise<readonly 
     },
     history: brandedId<'LifeHistoryRef'>(`history:w6:genesis-service:${suffix}`),
   }
+  let serviceFactoryCalls = 0
   const serviceDependencies = {
     identity: { resolve: async () => serviceOwner },
     requestIds: { create: () => `req:genesis-service:${suffix}` },
     clock: { current: async () => start },
-    persons: { create: async () => servicePerson },
+    persons: { create: async () => { serviceFactoryCalls += 1; return servicePerson } },
     reservations: serviceRuntime,
     ledger: serviceRuntime,
   }
+  const uninitializedGenesis = await runPlayerGenesis(serviceDependencies, servicePerson.displayName)
+  check('Genesis refuses an uninitialized world before invoking the trusted person factory',
+    uninitializedGenesis.status === 'rejected'
+      && uninitializedGenesis.reason === 'genesis-world-not-initialized'
+      && serviceFactoryCalls === 0, passed)
+  const serviceBootstrap = await initializeWorldThroughPorts(
+    requestFor(serviceWorld, start), serviceRuntime.createWorldAdapter(serviceWorld, start),
+  )
+  check('Genesis world bootstrap is established through the canonical initialization port',
+    serviceBootstrap.status === 'ready', passed)
   const serviceGenesis = await runPlayerGenesis(serviceDependencies, servicePerson.displayName)
-  check(`trusted Genesis service reserves WorldId and commits canonical player binding (${JSON.stringify(serviceGenesis)})`,
+  check(`trusted Genesis service resumes reservation and commits canonical player binding (${JSON.stringify(serviceGenesis)})`,
     serviceGenesis.status === 'ready' && serviceGenesis.worldId === serviceWorld
-      && serviceGenesis.personId === servicePerson.id, passed)
+      && serviceGenesis.personId === servicePerson.id && serviceFactoryCalls === 1, passed)
   const serviceRetry = await runPlayerGenesis(serviceDependencies, servicePerson.displayName)
   const serviceRetryLedger = await serviceRuntime.loadLedger(serviceWorld)
   check('Genesis service retry recovers the finalized binding without a second person event',
     serviceRetry.status === 'recovered' && serviceRetryLedger.status === 'loaded'
-      && serviceRetryLedger.ledger.events.length === 1, passed)
+      && serviceRetryLedger.ledger.events.length === 3
+      && serviceRetryLedger.ledger.events.filter(event => event.kind === 'person.created'
+        && (event.payload as { readonly origin?: { readonly kind?: string } }).origin?.kind === 'player-character').length === 1,
+    passed)
 
   // Simulate process loss after the Genesis event commit but before the
   // reservation checkpoint write. Recovery must discover that event by its
@@ -341,7 +355,10 @@ export async function runIndexedDbWorldRuntimeContractTests(): Promise<readonly 
     ...servicePerson,
     id: brandedId<'PersonId'>(`person:w6:genesis-crash:${suffix}`),
   }
+  await initializeWorldThroughPorts(requestFor(crashWorld, start), crashRuntime.createWorldAdapter(crashWorld, start))
   const crashAdapter = crashRuntime.createWorldAdapter(crashWorld, start)
+  const crashBase = await crashRuntime.loadLedger(crashWorld)
+  if (crashBase.status !== 'loaded') throw new Error('w6-contract-crash-bootstrap-missing')
   const crashInput = toLedgerEventInput(createPersonCreatedEventInput(
     crashPerson, { kind: 'player-character' }, {
       actor: crashOwner, source: 'player-command', requestWorldTime: start,
@@ -355,7 +372,7 @@ export async function runIndexedDbWorldRuntimeContractTests(): Promise<readonly 
     source: 'player-command',
     intentKind: crashInput.intentKind,
     requestedAt: start,
-    expectedHead: { kind: 'genesis', seq: 0 },
+    expectedHead: crashBase.metadata.streamHead,
     payload: crashInput.payload,
   })
   if (crashAppend.status !== 'committed') throw new Error('w6-contract-crash-genesis-append-failed')
@@ -371,7 +388,7 @@ export async function runIndexedDbWorldRuntimeContractTests(): Promise<readonly 
   const crashLedger = await crashRuntime.loadLedger(crashWorld)
   check('crash recovery after append-before-checkpoint finalizes the existing Genesis event exactly once',
     crashRecovery.status === 'recovered' && crashLedger.status === 'loaded'
-      && crashLedger.ledger.events.length === 1
+      && crashLedger.ledger.events.length === 3
       && crashRecovery.personId === crashPerson.id, passed)
 
   // Simulate loss after the reservation checkpoint but before the binding
@@ -388,7 +405,12 @@ export async function runIndexedDbWorldRuntimeContractTests(): Promise<readonly 
     ...servicePerson,
     id: brandedId<'PersonId'>(`person:w6:genesis-checkpoint:${suffix}`),
   }
+  await initializeWorldThroughPorts(
+    requestFor(checkpointWorld, start), checkpointRuntime.createWorldAdapter(checkpointWorld, start),
+  )
   const checkpointAdapter = checkpointRuntime.createWorldAdapter(checkpointWorld, start)
+  const checkpointBase = await checkpointRuntime.loadLedger(checkpointWorld)
+  if (checkpointBase.status !== 'loaded') throw new Error('w6-contract-checkpoint-bootstrap-missing')
   const checkpointInput = toLedgerEventInput(createPersonCreatedEventInput(
     checkpointPerson, { kind: 'player-character' }, {
       actor: checkpointOwner, source: 'player-command', requestWorldTime: start,
@@ -402,7 +424,7 @@ export async function runIndexedDbWorldRuntimeContractTests(): Promise<readonly 
     source: 'player-command',
     intentKind: checkpointInput.intentKind,
     requestedAt: start,
-    expectedHead: { kind: 'genesis', seq: 0 },
+    expectedHead: checkpointBase.metadata.streamHead,
     payload: checkpointInput.payload,
   })
   if (checkpointAppend.status !== 'committed') throw new Error('w6-contract-checkpoint-genesis-append-failed')
