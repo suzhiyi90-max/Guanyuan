@@ -438,6 +438,8 @@ async function main(): Promise<void> {
     processorPrepared.status === 'prepared'
     && processorPrepared.receipt.status === 'committed'
     && processorPrepared.ledger.head === processorLedgerBefore.head + 1
+    && processorPrepared.event.id === processorPrepared.receipt.eventId
+    && processorPrepared.idempotencyRecord.eventId === processorPrepared.event.id
     && adapter.readLedger() === processorLedgerBefore
     && (await adapter.queries.read(worldId)) === processorBase)
 
