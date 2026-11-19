@@ -19,3 +19,5 @@ export * from './identity/owner'
 export * from './identity/owner-person-principal'
 
 export * from './identity/owner-player-boundary'
+
+export * from './identity/owner-player-runtime-startup'
