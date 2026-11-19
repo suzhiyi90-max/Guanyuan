@@ -457,6 +457,7 @@ async function main(): Promise<void> {
   check('shared processor recognizes identical retries before rejecting their stale expected cursor',
     duplicateWithStaleCursor.status === 'duplicate'
     && duplicateWithStaleCursor.receipt.status === 'duplicate'
+    && processorCommit.status === 'committed'
     && duplicateWithStaleCursor.receipt.eventId === processorCommit.eventId)
 
   const conflictingPayload = toLedgerEventInput(createGoalCreatedEventInput({
