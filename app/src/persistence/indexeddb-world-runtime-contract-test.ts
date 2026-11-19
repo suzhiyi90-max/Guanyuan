@@ -109,10 +109,10 @@ export async function runIndexedDbWorldRuntimeContractTests(): Promise<readonly 
     expectedHead: { kind: 'genesis', seq: 0 },
     payload: firstEvent.payload,
   })
+  const afterFingerprintConflict = await runtime.loadLedger(allocatedWorldId)
   check('same request identity with changed fingerprint conflicts without append', fingerprintConflict.status === 'conflict'
-    && (await runtime.loadLedger(allocatedWorldId)).status === 'loaded'
-    && (await runtime.loadLedger(allocatedWorldId)).status === 'loaded'
-    && ((await runtime.loadLedger(allocatedWorldId)) as { status: 'loaded'; ledger: { head: number } }).ledger.head === 2, passed)
+    && afterFingerprintConflict.status === 'loaded'
+    && afterFingerprintConflict.ledger.head === 2, passed)
 
   const restartedRuntime = new IndexedDbWorldRuntime({ factory: globalThis.indexedDB, databaseName })
   const restartedAdapter = restartedRuntime.createWorldAdapter(allocatedWorldId, start)
