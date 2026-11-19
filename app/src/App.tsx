@@ -292,6 +292,10 @@ function GameApp({ game }: { game: ReturnType<typeof useGuanyuanGame> }) {
   }
 
   const openSource = (source: ClueSource, refs?: string[]) => {
+    // FE-176：跨来源回查先封存当前表面、分区与滚动位置，目标表面保留统一「回原处」入口。
+    const originLabel = overlay === 'evidence' ? '证据板' : overlay === 'intelligence' ? '情报台账' : '来源查验'
+    const sourceLabel = source === 'document' ? '文书' : source === 'ledger' ? '账房' : '东堤'
+    setReturnSpot(captureSpot(originLabel, `回查 · ${sourceLabel}${refs?.length ? ` · ${refs.join('、')}` : ''}`))
     if (source === 'document') {
       if (refs) setSelectedCompare(refs)
       openDocument('compare', refs?.[0] ?? null)
@@ -305,6 +309,7 @@ function GameApp({ game }: { game: ReturnType<typeof useGuanyuanGame> }) {
       focusOn('ledger-three')
       return
     }
+    setOverlay(null)
     setActiveSection('today')
     changeScene('river')
   }
