@@ -64,7 +64,7 @@ try {
     return module.runIndexedDbWorldRuntimeContractTests()
   })
   check('W6 独立 IndexedDB Reservation / Durable Ledger 专项契约',
-    indexedDbWorldContracts.length === 31, `${indexedDbWorldContracts.length}/31`)
+    indexedDbWorldContracts.length === 33, `${indexedDbWorldContracts.length}/33`)
   await page.evaluate(raw => { localStorage.clear(); localStorage.setItem('guanyuan.save.v1', raw) }, legacyDraft)
   await page.reload({ waitUntil: 'domcontentloaded' })
   await settle(600)
