@@ -67,6 +67,13 @@ export interface PrepareWorldCommandOptions {
   readonly projector: WorldProjectionPort<WorldDomainEventKind>
 }
 
+export interface PreparedWorldCommandReceipt {
+  readonly worldId: WorldId
+  readonly clientRequestId: string
+  readonly eventId: LedgerEvent<WorldDomainEventKind>['id']
+  readonly streamHead: StreamCursor
+}
+
 export type PreparedWorldCommandResult =
   | {
       readonly status: 'prepared'
@@ -74,7 +81,7 @@ export type PreparedWorldCommandResult =
       readonly aggregate: WorldAggregate
       readonly event: LedgerEvent<WorldDomainEventKind>
       readonly idempotencyRecord: LedgerIdempotencyRecord
-      readonly receipt: WorldCommandReceipt & { readonly status: 'committed' }
+      readonly receipt: PreparedWorldCommandReceipt
     }
   | {
       readonly status: 'duplicate' | 'conflict' | 'rejected'
@@ -241,7 +248,6 @@ export async function prepareWorldCommand(
     event: tail,
     idempotencyRecord,
     receipt: {
-      status: 'committed',
       worldId: request.worldId,
       clientRequestId: request.clientRequestId,
       eventId: tail.id,
