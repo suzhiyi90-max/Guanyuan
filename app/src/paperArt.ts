@@ -218,3 +218,110 @@ export const paperPlates: Record<PaperPlateId, PaperPlateSpec> = {
     prompt: '清代县衙签押房案角一景的横幅空样（建议 1280×360，约 32:9）：米黄偏暖旧宣纸底，左侧一叠微微错开的空白纸签与一只抽出半寸的卷宗匣口，中部一支悬停的毛笔与一盏将明未明的油灯暖晕，右侧一道极淡的横向墨痕与纸纤维；三段之间留出干净空白供界面叠「查档 / 议拟 / 落笔」进度与正文；完全无文字、无数字、无印章、无界格、无人物、无现代物件，低对比、柔和顶光、整幅亮度均匀，不做立体阴影与暗角，纸签与笔架只作极淡剪影不画细节。',
   },
 }
+
+/**
+ * FE-151 / C-157：人物品秩卡框。
+ * 与通用纸纹预加载分离，按人物卷实际打开时再加载，避免启动时预载七张大图。
+ * inset 为各族卡框实测纸心边界；槽位以纸心百分比定位，不进入美术图层。
+ */
+export type RankCardFrameId =
+  | 'official-7-9'
+  | 'official-4-6'
+  | 'official-1-3'
+  | 'gentry'
+  | 'merchant'
+  | 'advisor'
+  | 'runner'
+
+export interface RankCardFrameSpec {
+  id: RankCardFrameId
+  src: string
+  alt: string
+  insetX: number
+  insetY: number
+}
+
+export const rankCardFrames: Record<RankCardFrameId, RankCardFrameSpec> = {
+  'official-7-9': {
+    id: 'official-7-9',
+    src: '/assets/card-frame-79-draft.png',
+    alt: '官员七至九品空白品秩卡框',
+    insetX: 4.43,
+    insetY: 3.22,
+  },
+  'official-4-6': {
+    id: 'official-4-6',
+    src: '/assets/card-frame-official-4-6.png',
+    alt: '官员四至六品空白品秩卡框',
+    insetX: 5.86,
+    insetY: 4.25,
+  },
+  'official-1-3': {
+    id: 'official-1-3',
+    src: '/assets/card-frame-official-1-3.png',
+    alt: '官员一至三品空白品秩卡框',
+    insetX: 5.60,
+    insetY: 4.00,
+  },
+  gentry: {
+    id: 'gentry',
+    src: '/assets/card-frame-gentry.png',
+    alt: '士绅空白人物卡框',
+    insetX: 6.12,
+    insetY: 4.49,
+  },
+  merchant: {
+    id: 'merchant',
+    src: '/assets/card-frame-merchant.png',
+    alt: '商贾空白人物卡框',
+    insetX: 5.08,
+    insetY: 3.56,
+  },
+  advisor: {
+    id: 'advisor',
+    src: '/assets/card-frame-advisor.png',
+    alt: '幕友空白人物卡框',
+    insetX: 5.99,
+    insetY: 4.49,
+  },
+  runner: {
+    id: 'runner',
+    src: '/assets/card-frame-runner.png',
+    alt: '差役空白人物卡框',
+    insetX: 6.38,
+    insetY: 4.88,
+  },
+}
+
+/**
+ * C-157 slotMap：相对逐族 inset 后的纸心定位。
+ * 爵封与荣誉槽先保留位置，不渲染空标签；有权威人物事实后再接入。
+ */
+export const rankCardSlotMap = {
+  portrait: { top: 2, height: 44 },
+  identity: { top: 47, height: 17 },
+  rank: { top: 66, height: 10 },
+  nobility: { top: 77, height: 6 },
+  honor: { top: 84, height: 6 },
+  marks: { top: 92, height: 8 },
+} as const
+
+const officialGradeDigits: Record<string, number> = {
+  一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9,
+}
+
+/** 只按已有 role/rank 文本映射卡框；未知身份不猜族类，退回旧名帖。 */
+export function rankCardFrameOf(role: string, rank: string): RankCardFrameSpec | null {
+  const grade = /([一二三四五六七八九])品/u.exec(rank)?.[1]
+  if (grade) {
+    const value = officialGradeDigits[grade]
+    if (value <= 3) return rankCardFrames['official-1-3']
+    if (value <= 6) return rankCardFrames['official-4-6']
+    return rankCardFrames['official-7-9']
+  }
+  if (rank.includes('绅衿') || role.includes('士绅')) return rankCardFrames.gentry
+  if (rank.includes('铺户') || role.includes('粮商') || role.includes('商人')) return rankCardFrames.merchant
+  if (rank.includes('幕') || role.includes('幕友')) return rankCardFrames.advisor
+  if (rank.includes('工头') || role.includes('堡夫') || role.includes('差役')) return rankCardFrames.runner
+  return null
+}
