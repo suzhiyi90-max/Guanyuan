@@ -44,6 +44,7 @@ export function SaveFolio({ summary, onExport, onReset, onPrepareImport, onCommi
   const deleteConfirmRef = useRef<HTMLButtonElement | null>(null)
   const deleteCancelRef = useRef<HTMLButtonElement | null>(null)
   const deleteTriggerRef = useRef<HTMLButtonElement | null>(null)
+  const restoreLibraryFocusRef = useRef(false)
   const armTimer = useRef(0)
   const savedTimer = useRef(0)
 
@@ -108,6 +109,17 @@ export function SaveFolio({ summary, onExport, onReset, onPrepareImport, onCommi
     if (open && onListSavedWorlds) void refreshWorlds()
   }, [open, onListSavedWorlds, refreshWorlds])
 
+  // 删除成功后，等待目录刷新与删除忙碌态都完成，再把焦点交还目录操作区。
+  // 不在 refreshWorlds() 返回前抢焦点，避免刷新按钮仍处于 disabled 状态。
+  useEffect(() => {
+    if (!restoreLibraryFocusRef.current || deleteTarget || deletingWorldId || worldsStatus === 'loading') return
+    const refreshButton = rootRef.current?.querySelector<HTMLButtonElement>('.save-folio-library-head button')
+    const target = refreshButton ?? headRef.current
+    if (!target || ('disabled' in target && target.disabled)) return
+    restoreLibraryFocusRef.current = false
+    target.focus()
+  }, [deleteTarget, deletingWorldId, worldsStatus, worlds])
+
   const handleChooseWorld = async (worldId: string) => {
     if (!onChooseSavedWorld || restoringWorldId || deletingWorldId) return
     setRestoringWorldId(worldId)
@@ -126,13 +138,10 @@ export function SaveFolio({ summary, onExport, onReset, onPrepareImport, onCommi
     try {
       const result = await onDeleteSavedWorld(target.worldId)
       if (result.status === 'success') {
+        restoreLibraryFocusRef.current = true
         setDeleteTarget(null)
         if (!result.deleted) setDeleteError('档案已不存在，目录已重新核对。')
         await refreshWorlds()
-        window.requestAnimationFrame(() => {
-          const refreshButton = rootRef.current?.querySelector<HTMLButtonElement>('.save-folio-library-head button')
-          ;(refreshButton ?? headRef.current)?.focus()
-        })
       } else {
         const messages: Record<string, string> = {
           'active-world': '当前正在接续的人生不能删除。',
