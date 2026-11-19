@@ -59,6 +59,12 @@ try {
     return module.runIndexedDbSaveRepositoryContractTests()
   })
   check('IndexedDB 世界存档仓储专项契约', indexedDbContracts.length === 32, `${indexedDbContracts.length}/32`)
+  const indexedDbWorldContracts = await page.evaluate(async () => {
+    const module = await import('/src/persistence/indexeddb-world-runtime-contract-test.ts')
+    return module.runIndexedDbWorldRuntimeContractTests()
+  })
+  check('W6 独立 IndexedDB Reservation / Durable Ledger 专项契约',
+    indexedDbWorldContracts.length === 15, `${indexedDbWorldContracts.length}/15`)
   await page.evaluate(raw => { localStorage.clear(); localStorage.setItem('guanyuan.save.v1', raw) }, legacyDraft)
   await page.reload({ waitUntil: 'domcontentloaded' })
   await settle(600)
