@@ -320,11 +320,10 @@ export async function runIndexedDbWorldRuntimeContractTests(): Promise<readonly 
     serviceGenesis.status === 'ready' && serviceGenesis.worldId === serviceWorld
       && serviceGenesis.personId === servicePerson.id, passed)
   const serviceRetry = await runPlayerGenesis(serviceDependencies, servicePerson)
+  const serviceRetryLedger = await serviceRuntime.loadLedger(serviceWorld)
   check('Genesis service retry recovers the finalized binding without a second person event',
-    serviceRetry.status === 'recovered'
-      && (await serviceRuntime.loadLedger(serviceWorld)).status === 'loaded'
-      && ((await serviceRuntime.loadLedger(serviceWorld)).status === 'loaded'
-        && (await serviceRuntime.loadLedger(serviceWorld)).ledger.events.length === 1), passed)
+    serviceRetry.status === 'recovered' && serviceRetryLedger.status === 'loaded'
+      && serviceRetryLedger.ledger.events.length === 1, passed)
 
   // Simulate process loss after the Genesis event commit but before the
   // reservation checkpoint write. Recovery must discover that event by its
@@ -405,13 +404,13 @@ export async function runIndexedDbWorldRuntimeContractTests(): Promise<readonly 
     payload: checkpointInput.payload,
   })
   if (checkpointAppend.status !== 'committed') throw new Error('w6-contract-checkpoint-genesis-append-failed')
-  const checkpoint = {
+  const checkpointRecoveryData = {
     personId: checkpointPerson.id,
     eventId: checkpointAppend.eventId,
     streamHead: checkpointAppend.streamHead,
   }
   const checkpointMarked = await checkpointRuntime.markGenesisEventCommitted(
-    checkpointOwner, checkpointReservation.reservation.clientRequestId, checkpoint,
+    checkpointOwner, checkpointReservation.reservation.clientRequestId, checkpointRecoveryData,
   )
   if (checkpointMarked.status !== 'committed') throw new Error('w6-contract-checkpoint-mark-failed')
   const checkpointRecovery = await runPlayerGenesis({
@@ -421,11 +420,13 @@ export async function runIndexedDbWorldRuntimeContractTests(): Promise<readonly 
     reservations: checkpointRuntime,
     ledger: checkpointRuntime,
   }, checkpointPerson)
+  const checkpointRecoveryBinding = await checkpointRuntime.readOwnerPersonBinding(checkpointOwner)
+  const checkpointRecoveryLedger = await checkpointRuntime.loadLedger(checkpointWorld)
   check('crash recovery after checkpoint-before-binding finalizes without replay append',
     checkpointRecovery.status === 'recovered'
-      && (await checkpointRuntime.readOwnerPersonBinding(checkpointOwner))?.personId === checkpointPerson.id
-      && ((await checkpointRuntime.loadLedger(checkpointWorld)).status === 'loaded'
-        && (await checkpointRuntime.loadLedger(checkpointWorld)).ledger.events.length === 1), passed)
+      && checkpointRecoveryBinding?.personId === checkpointPerson.id
+      && checkpointRecoveryLedger.status === 'loaded'
+      && checkpointRecoveryLedger.ledger.events.length === 1, passed)
 
   return Object.freeze(passed)
 }
