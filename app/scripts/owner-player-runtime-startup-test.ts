@@ -6,6 +6,7 @@ import type { OwnerPersonBinding, OwnerWorldReservation, OwnerWorldReservationPo
 import type { WorldCommandAuthorizationPolicy } from '../src/application/world/authorization-gate'
 import type { WorldCommandRequest } from '../src/application/world/ports'
 import type { GenesisPersonFactoryPort } from '../src/application/world/genesis'
+import type { WorldDomainEventKind } from '../src/application/world/event-catalog'
 import type { WorldAggregate } from '../src/domain/world/aggregate'
 import type { WorldId, LedgerEvent } from '../src/domain/event-ledger'
 import type { WorldTime } from '../src/domain/shared/world-time'
@@ -46,7 +47,7 @@ function fixture(options: {
     worldStartTime, state: 'reserved',
   } : null
   let binding: OwnerPersonBinding | null = null
-  const events: LedgerEvent[] = []
+  const events: LedgerEvent<WorldDomainEventKind>[] = []
   let aggregate = createEmptyWorldAggregate(worldId, worldStartTime) as WorldAggregate
   const identity: OwnerIdentityPort = {
     async resolve() {
@@ -92,7 +93,7 @@ function fixture(options: {
         source: request.source, intentKind: request.intentKind,
         kind: 'person.created', clientRequestId: request.clientRequestId,
         requestWorldTime: request.requestedAt, payload: request.payload,
-      } as unknown as LedgerEvent
+      } as unknown as LedgerEvent<WorldDomainEventKind>
       events.push(event)
       const payload = request.payload as { person: Record<string, unknown>; origin: { kind: string } }
       aggregate = {
@@ -170,7 +171,7 @@ function fixture(options: {
           id: initializedEventId, worldId, seq: 1, actor: 'system', source: 'rule',
           intentKind: 'world.initialize', kind: 'world.initialized',
           clientRequestId: 'world-initialize-request', requestWorldTime: worldStartTime, payload: {},
-        } as unknown as LedgerEvent)
+        } as unknown as LedgerEvent<WorldDomainEventKind>)
         aggregate = createEmptyWorldAggregate(worldId, worldStartTime) as WorldAggregate
         return { status: 'ready' as const, worldId: input.worldId }
       },
