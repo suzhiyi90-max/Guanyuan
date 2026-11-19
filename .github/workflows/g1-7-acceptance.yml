@@ -53,6 +53,7 @@ on:
       - work/w6-i3c-genesis-binding-recovery
       - work/w6-h-owner-person-principal
       - work/w6-hc-owner-player-boundary-composition
+      - work/w6-hi-owner-player-runtime-startup
   pull_request:
     branches:
       - work/w5-e2a-portable-import-core
@@ -116,6 +117,7 @@ on:
       - work/w6-i3c-genesis-binding-recovery
       - work/w6-h-owner-person-principal
       - work/w6-hc-owner-player-boundary-composition
+      - work/w6-hi-owner-player-runtime-startup
   workflow_dispatch:
 
 permissions:
@@ -164,6 +166,8 @@ jobs:
         run: npm run test:owner-person-principal
       - name: Owner player boundary composition contracts
         run: npm run test:owner-player-boundary-composition
+      - name: Owner player runtime startup contracts
+        run: npm run test:owner-player-runtime-startup
       - name: World event registry and aggregate reducer contracts
         run: npm run test:world-event
       - name: Replay-backed world projector contracts
