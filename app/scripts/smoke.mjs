@@ -575,16 +575,20 @@ try {
   await click('.return-chip')
   await page.waitForSelector('.intelligence-drawer', { state: 'visible' })
   await page.waitForFunction(expected => {
-    const node = document.querySelector('.intelligence-drawer .drawer-scroll')
-    return Boolean(node && Math.abs(node.scrollTop - expected) <= 2)
-  }, intelOriginScroll, { timeout: 2500 }).catch(() => undefined)
+    const drawer = document.querySelector('.intelligence-drawer')
+    const scroll = drawer?.querySelector('.drawer-scroll')
+    const selectedFilter = drawer?.querySelector<HTMLButtonElement>('.knowledge-legend button[aria-pressed="true"]')
+    return Boolean(drawer && scroll && selectedFilter
+      && document.activeElement === selectedFilter
+      && Math.abs(scroll.scrollTop - expected) <= 2)
+  }, intelOriginScroll, { timeout: 3500 }).catch(() => undefined)
   check('FE-176 文书来源回跳恢复情报台账筛选与滚动位置',
     await page.locator('.intelligence-drawer').isVisible()
     && await page.locator('.knowledge-legend button:has-text("已核实")').getAttribute('aria-pressed') === 'true'
     && await intelScroll.evaluate((node, expected) => Math.abs(node.scrollTop - expected) <= 2, intelOriginScroll),
     `expectedScroll=${intelOriginScroll}; actualScroll=${await intelScroll.evaluate(node => node.scrollTop)}`)
-  check('FE-176 文书来源回跳后焦点重新交给情报台账',
-    await page.locator('.intelligence-drawer').evaluate(node => node.contains(document.activeElement)))
+  check('FE-176 文书来源回跳后键盘焦点归还当前筛选项',
+    await page.locator('.knowledge-legend button[aria-pressed="true"]').evaluate(node => document.activeElement === node))
   await verifiedPins.nth(1).click()
   await page.waitForSelector('.ledger-section', { state: 'visible' })
   check('FE-176 情报来源跳转账房并保留回原处入口', await page.locator('.return-chip').isVisible() && await page.locator('.ledger-section').isVisible())
