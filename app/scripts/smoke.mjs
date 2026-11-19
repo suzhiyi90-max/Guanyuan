@@ -1078,7 +1078,7 @@ try {
     return result.status === 'success' && result.value === null
   }, deleteFixture.worldId)
   check('E3 确认删除后目录与存档仓储均无该人生', deleteResult)
-  await page.waitForFunction(() => document.activeElement?.matches('.save-folio-library-head button') === true, { timeout: 1800 }).catch(() => undefined)
+  await page.waitForFunction(() => document.activeElement?.matches('.save-folio-library-head button') === true, undefined, { timeout: 1800 }).catch(() => undefined)
   const deleteFocusState = await page.evaluate(() => ({
     focused: document.activeElement?.matches('.save-folio-library-head button') === true,
     active: document.activeElement?.outerHTML?.slice(0, 240) ?? null,
