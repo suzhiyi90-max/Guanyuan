@@ -71,7 +71,7 @@ export type PreparedWorldCommandResult =
       readonly status: 'prepared'
       readonly ledger: EventLedger<WorldDomainEventKind>
       readonly aggregate: WorldAggregate
-      readonly receipt: Extract<WorldCommandReceipt, { status: 'committed' }>
+      readonly receipt: WorldCommandReceipt & { readonly status: 'committed' }
     }
   | {
       readonly status: 'duplicate' | 'conflict' | 'rejected'
