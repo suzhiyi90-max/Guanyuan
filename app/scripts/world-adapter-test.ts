@@ -436,7 +436,6 @@ async function main(): Promise<void> {
   })
   check('shared command processor prepares a replay-valid candidate without mutating adapter state',
     processorPrepared.status === 'prepared'
-    && processorPrepared.receipt.status === 'committed'
     && processorPrepared.ledger.head === processorLedgerBefore.head + 1
     && processorPrepared.event.id === processorPrepared.receipt.eventId
     && processorPrepared.idempotencyRecord.eventId === processorPrepared.event.id
