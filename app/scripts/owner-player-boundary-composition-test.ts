@@ -6,7 +6,6 @@ import type {
 } from '../src/application/world/durable-ports'
 import type { WorldCommandAuthorizationPolicy } from '../src/application/world/authorization-gate'
 import type { WorldAggregate } from '../src/domain/world/aggregate'
-import type { PersonId } from '../src/domain/shared/ids'
 import type { WorldId } from '../src/domain/event-ledger'
 
 let passed = 0
@@ -130,7 +129,7 @@ async function main(): Promise<void> {
   check('valid finalized Owner→Person binding composes a player boundary', Boolean(session))
   check('composed session exposes only the trusted reserved WorldId', session?.worldId === worldId)
   check('raw command and aggregate ports are not exposed on the player boundary',
-    Boolean(session && !('readLedger' in (session.boundary as unknown as object))))
+    Boolean(session && Object.keys(session.boundary).sort().join(',') === 'commands,queries'))
 
   const view = session ? await session.boundary.queries.read(worldId) : null
   check('player query returns an observer-scoped projection for the bound Person',
