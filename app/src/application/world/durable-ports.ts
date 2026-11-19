@@ -34,16 +34,16 @@ export interface OwnerWorldReservationPort {
   readReservation(ownerId: OwnerId): Promise<OwnerWorldReservation | null>
 }
 
-export interface DurableWorldLedgerLoad<Kind extends string = WorldDomainEventKind> {
-  readonly status: 'loaded'
+export interface DurableWorldMetadata {
+  readonly schemaVersion: 1
   readonly worldId: WorldId
+  readonly worldStartTime: WorldTime
   readonly head: number
   readonly streamHead: StreamCursor
-  readonly ledger: EventLedger<Kind>
 }
 
 export type DurableWorldLedgerResult<Kind extends string = WorldDomainEventKind> =
-  | DurableWorldLedgerLoad<Kind>
+  | { readonly status: 'loaded'; readonly metadata: DurableWorldMetadata; readonly ledger: EventLedger<Kind> }
   | { readonly status: 'missing' }
   | { readonly status: 'rejected'; readonly reason: string }
 
