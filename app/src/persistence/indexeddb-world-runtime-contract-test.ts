@@ -154,10 +154,10 @@ export async function runIndexedDbWorldRuntimeContractTests(): Promise<readonly 
   if (!current) throw new Error('w6-contract-restored-aggregate-missing')
   const next = { day: 1, period: '午' } as const
   const inputA = toLedgerEventInput(createWorldTimeAdvancedEventInput(start, next, {
-    actor: 'system', requestWorldTime: start, clientRequestId: 'w6-idb-concurrent-a',
+    actor: 'system', requestWorldTime: next, clientRequestId: 'w6-idb-concurrent-a',
   }))
   const inputB = toLedgerEventInput(createWorldTimeAdvancedEventInput(start, next, {
-    actor: 'system', requestWorldTime: start, clientRequestId: 'w6-idb-concurrent-b',
+    actor: 'system', requestWorldTime: next, clientRequestId: 'w6-idb-concurrent-b',
   }))
   const adapterA = restartedRuntime.createWorldAdapter(allocatedWorldId, start)
   const adapterB = restartedRuntime.createWorldAdapter(allocatedWorldId, start)
