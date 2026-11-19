@@ -36,10 +36,24 @@ export interface GenesisWorldTimePort {
   current(): Promise<WorldTime>
 }
 
+export interface GenesisPersonFactoryPort {
+  /**
+   * Creates PersonId and state-domain identifiers in the trusted application
+   * layer. For the same owner/world/request tuple it must return stable data.
+   */
+  create(input: {
+    readonly ownerId: OwnerId
+    readonly worldId: WorldId
+    readonly clientRequestId: string
+    readonly displayName: string
+  }): Promise<PersonCreationData> | PersonCreationData
+}
+
 export interface GenesisCoordinatorDependencies {
   readonly identity: OwnerIdentityPort
   readonly requestIds: GenesisRequestIdPort
   readonly clock: GenesisWorldTimePort
+  readonly persons: GenesisPersonFactoryPort
   readonly reservations: OwnerWorldReservationPort
   readonly ledger: DurableWorldLedgerPort
 }
@@ -90,12 +104,13 @@ function findGenesisEvent(
 /**
  * Starts Genesis or resumes any interrupted stage:
  * reservation → canonical person.created → committed checkpoint → binding.
- * Caller must provide the same PersonCreationData on retries until the event
- * exists; once it exists, recovery uses the canonical ledger payload instead.
+ * Person identity and state-domain ids are created by the trusted person
+ * factory. Once the event exists, recovery uses the canonical ledger payload
+ * and does not call the factory again.
  */
 export async function runPlayerGenesis(
   dependencies: GenesisCoordinatorDependencies,
-  person: PersonCreationData,
+  displayName: string,
 ): Promise<GenesisResult> {
   let ownerId: OwnerId
   try { ownerId = await dependencies.identity.resolve() } catch {
@@ -136,6 +151,18 @@ export async function runPlayerGenesis(
       checkpoint = existing.checkpoint
       recovered = true
     } else {
+      let person: PersonCreationData
+      try {
+        person = await dependencies.persons.create({
+          ownerId,
+          worldId: reservation.worldId,
+          clientRequestId: reservation.clientRequestId,
+          displayName: displayName.trim(),
+        })
+      } catch {
+        return { status: 'rejected', reason: 'genesis-person-factory-failed' }
+      }
+      if (!displayName.trim()) return { status: 'rejected', reason: 'genesis-player-name-empty' }
       const adapter = dependencies.ledger.createWorldAdapter(reservation.worldId, reservation.worldStartTime)
       const input = toLedgerEventInput(createPersonCreatedEventInput(
         person,
