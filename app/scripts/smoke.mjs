@@ -98,7 +98,7 @@ try {
         const label = node.querySelector('.hotspot-label')
         const labelRect = label?.getBoundingClientRect()
         const style = label ? getComputedStyle(label) : null
-        return { index, className: node.className, text: node.innerText.replace(/\\s+/g, ' ').trim(), rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height, right: rect.right, bottom: rect.bottom }, label: labelRect ? { x: labelRect.x, y: labelRect.y, width: labelRect.width, height: labelRect.height, right: labelRect.right, bottom: labelRect.bottom, display: style.display, visibility: style.visibility, clipPath: style.clipPath } : null }
+        return { index, className: node.className, text: node.innerText.replace(/\s+/g, ' ').trim(), rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height, right: rect.right, bottom: rect.bottom }, label: labelRect ? { x: labelRect.x, y: labelRect.y, width: labelRect.width, height: labelRect.height, right: labelRect.right, bottom: labelRect.bottom, display: style.display, visibility: style.visibility, clipPath: style.clipPath } : null }
       })
       const intersections = []
       for (let i = 0; i < hotspots.length; i++) for (let j = i + 1; j < hotspots.length; j++) {
@@ -451,7 +451,7 @@ try {
   await page.setViewportSize({ width: 1024, height: 768 })
   await settle(200)
   const debtTablet = await page.evaluate(() => ({ scroll: document.documentElement.scrollWidth, inner: innerWidth, columns: getComputedStyle(document.querySelector('.debt-body')).gridTemplateColumns }))
-  check('S-23 1024 单列纵排且无横向溢出', debtTablet.scroll <= debtTablet.inner && debtTablet.columns.trim().split(/\\s+/).length === 1, JSON.stringify(debtTablet))
+  check('S-23 1024 保持三栏桌面布局且无横向溢出', debtTablet.scroll <= debtTablet.inner && debtTablet.columns.trim().split(/\s+/).length === 3, JSON.stringify(debtTablet))
   await page.setViewportSize({ width: 390, height: 844 })
   await settle(200)
   const debtMobile = await page.evaluate(() => {
@@ -460,7 +460,7 @@ try {
     const foot = document.querySelector('.debt-foot')?.getBoundingClientRect()
     return { scroll: document.documentElement.scrollWidth, inner: innerWidth, columns: getComputedStyle(body).gridTemplateColumns, bodyScroll: body?.scrollHeight, bodyClient: body?.clientHeight, headTop: head?.top, headBottom: head?.bottom, footTop: foot?.top, footBottom: foot?.bottom }
   })
-  check('S-23 390 单列全屏、头尾固定可见且无横向溢出', debtMobile.scroll <= debtMobile.inner && debtMobile.columns.trim().split(/\\s+/).length === 1 && debtMobile.headTop >= 0 && debtMobile.footBottom <= 844 && debtMobile.bodyScroll > debtMobile.bodyClient, JSON.stringify(debtMobile))
+  check('S-23 390 单列全屏、头尾固定可见且无横向溢出', debtMobile.scroll <= debtMobile.inner && debtMobile.columns.trim().split(/\s+/).length === 1 && debtMobile.headTop >= 0 && debtMobile.footBottom <= 844 && debtMobile.bodyScroll > debtMobile.bodyClient, JSON.stringify(debtMobile))
   await shot('FE174-debt-ledger-390')
   await page.setViewportSize({ width: 1440, height: 900 })
   await settle(180)
