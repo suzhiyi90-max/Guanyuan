@@ -4,6 +4,7 @@ import type { WorldTime } from '../domain/shared/world-time'
 import { field } from '../domain/shared/field'
 import { ownerIdFromTrustedValue } from '../application/identity/owner'
 import { initializeWorldThroughPorts } from '../application/world/initialize'
+import { runPlayerGenesis } from '../application/world/genesis'
 import type { WorldBootstrapRequest } from '../application/world/bootstrap'
 import {
   createPersonCreatedEventInput,
@@ -281,6 +282,150 @@ export async function runIndexedDbWorldRuntimeContractTests(): Promise<readonly 
   const ownerlessWorld = await restartedRuntime.loadLedger(allocatedWorldId)
   check('world ledger without its unique owner reservation fails closed', ownerlessWorld.status === 'rejected'
     && ownerlessWorld.reason === 'w6-owner-reservation-world-mismatch', passed)
+
   db.close()
+
+  // Normal trusted Genesis and idempotent retry.
+  const serviceDb = `${databaseName}-genesis-service`
+  const serviceOwner = ownerIdFromTrustedValue(`owner:local:genesis-service-${suffix}`)
+  const serviceWorld = brandedId<'WorldId'>(`world:w6:genesis-service:${suffix}`) as WorldId
+  const serviceRuntime = new IndexedDbWorldRuntime({
+    factory: globalThis.indexedDB, databaseName: serviceDb, allocateWorldId: () => serviceWorld,
+  })
+  const servicePerson = {
+    id: brandedId<'PersonId'>(`person:w6:genesis-service:${suffix}`),
+    displayName: 'Genesis Service 契约玩家',
+    birth: field.unknown,
+    capability: brandedId<'CapabilityRef'>(`capability:w6:genesis-service:${suffix}`),
+    stateDomains: {
+      body: brandedId<'BodyScopeRef'>(`body:w6:genesis-service:${suffix}`),
+      mind: brandedId<'MindScopeRef'>(`mind:w6:genesis-service:${suffix}`),
+      knowledge: brandedId<'KnowledgeScopeId'>(`knowledge:w6:genesis-service:${suffix}`),
+      goals: [],
+      scheduleScope: brandedId<'ScheduleScopeId'>(`schedule:w6:genesis-service:${suffix}`),
+      economy: brandedId<'EconomyScopeId'>(`economy:w6:genesis-service:${suffix}`),
+      location: brandedId<'LocationStateRef'>(`location:w6:genesis-service:${suffix}`),
+    },
+    history: brandedId<'LifeHistoryRef'>(`history:w6:genesis-service:${suffix}`),
+  }
+  const serviceDependencies = {
+    identity: { resolve: async () => serviceOwner },
+    requestIds: { create: () => `req:genesis-service:${suffix}` },
+    clock: { current: async () => start },
+    reservations: serviceRuntime,
+    ledger: serviceRuntime,
+  }
+  const serviceGenesis = await runPlayerGenesis(serviceDependencies, servicePerson)
+  check('trusted Genesis service reserves WorldId and commits canonical player binding',
+    serviceGenesis.status === 'ready' && serviceGenesis.worldId === serviceWorld
+      && serviceGenesis.personId === servicePerson.id, passed)
+  const serviceRetry = await runPlayerGenesis(serviceDependencies, servicePerson)
+  check('Genesis service retry recovers the finalized binding without a second person event',
+    serviceRetry.status === 'recovered'
+      && (await serviceRuntime.loadLedger(serviceWorld)).status === 'loaded'
+      && ((await serviceRuntime.loadLedger(serviceWorld)).status === 'loaded'
+        && (await serviceRuntime.loadLedger(serviceWorld)).ledger.events.length === 1), passed)
+
+  // Simulate process loss after the Genesis event commit but before the
+  // reservation checkpoint write. Recovery must discover that event by its
+  // persisted request id and finalize the binding without appending again.
+  const crashDb = `${databaseName}-genesis-crash`
+  const crashOwner = ownerIdFromTrustedValue(`owner:local:genesis-crash-${suffix}`)
+  const crashWorld = brandedId<'WorldId'>(`world:w6:genesis-crash:${suffix}`) as WorldId
+  const crashRuntime = new IndexedDbWorldRuntime({
+    factory: globalThis.indexedDB, databaseName: crashDb, allocateWorldId: () => crashWorld,
+  })
+  const crashReservation = await crashRuntime.reserveWorld(crashOwner, `req:genesis-crash:${suffix}`, start)
+  if (crashReservation.status !== 'reserved') throw new Error('w6-contract-crash-reservation-missing')
+  const crashPerson = {
+    ...servicePerson,
+    id: brandedId<'PersonId'>(`person:w6:genesis-crash:${suffix}`),
+  }
+  const crashAdapter = crashRuntime.createWorldAdapter(crashWorld, start)
+  const crashInput = toLedgerEventInput(createPersonCreatedEventInput(
+    crashPerson, { kind: 'player-character' }, {
+      actor: crashOwner, source: 'player-command', requestWorldTime: start,
+      clientRequestId: crashReservation.reservation.clientRequestId,
+    },
+  ))
+  const crashAppend = await crashAdapter.commands.submit({
+    worldId: crashWorld,
+    clientRequestId: crashInput.clientRequestId,
+    actor: crashOwner,
+    source: 'player-command',
+    intentKind: crashInput.intentKind,
+    requestedAt: start,
+    expectedHead: { kind: 'genesis', seq: 0 },
+    payload: crashInput.payload,
+  })
+  if (crashAppend.status !== 'committed') throw new Error('w6-contract-crash-genesis-append-failed')
+  const crashDependencies = {
+    identity: { resolve: async () => crashOwner },
+    requestIds: { create: () => 'unused-after-reservation' },
+    clock: { current: async () => start },
+    reservations: crashRuntime,
+    ledger: crashRuntime,
+  }
+  const crashRecovery = await runPlayerGenesis(crashDependencies, crashPerson)
+  const crashLedger = await crashRuntime.loadLedger(crashWorld)
+  check('crash recovery after append-before-checkpoint finalizes the existing Genesis event exactly once',
+    crashRecovery.status === 'recovered' && crashLedger.status === 'loaded'
+      && crashLedger.ledger.events.length === 1
+      && crashRecovery.personId === crashPerson.id, passed)
+
+  // Simulate loss after the reservation checkpoint but before the binding
+  // transaction. The service resumes from the persisted checkpoint.
+  const checkpointDb = `${databaseName}-genesis-checkpoint`
+  const checkpointOwner = ownerIdFromTrustedValue(`owner:local:genesis-checkpoint-${suffix}`)
+  const checkpointWorld = brandedId<'WorldId'>(`world:w6:genesis-checkpoint:${suffix}`) as WorldId
+  const checkpointRuntime = new IndexedDbWorldRuntime({
+    factory: globalThis.indexedDB, databaseName: checkpointDb, allocateWorldId: () => checkpointWorld,
+  })
+  const checkpointReservation = await checkpointRuntime.reserveWorld(checkpointOwner, `req:genesis-checkpoint:${suffix}`, start)
+  if (checkpointReservation.status !== 'reserved') throw new Error('w6-contract-checkpoint-reservation-missing')
+  const checkpointPerson = {
+    ...servicePerson,
+    id: brandedId<'PersonId'>(`person:w6:genesis-checkpoint:${suffix}`),
+  }
+  const checkpointAdapter = checkpointRuntime.createWorldAdapter(checkpointWorld, start)
+  const checkpointInput = toLedgerEventInput(createPersonCreatedEventInput(
+    checkpointPerson, { kind: 'player-character' }, {
+      actor: checkpointOwner, source: 'player-command', requestWorldTime: start,
+      clientRequestId: checkpointReservation.reservation.clientRequestId,
+    },
+  ))
+  const checkpointAppend = await checkpointAdapter.commands.submit({
+    worldId: checkpointWorld,
+    clientRequestId: checkpointInput.clientRequestId,
+    actor: checkpointOwner,
+    source: 'player-command',
+    intentKind: checkpointInput.intentKind,
+    requestedAt: start,
+    expectedHead: { kind: 'genesis', seq: 0 },
+    payload: checkpointInput.payload,
+  })
+  if (checkpointAppend.status !== 'committed') throw new Error('w6-contract-checkpoint-genesis-append-failed')
+  const checkpoint = {
+    personId: checkpointPerson.id,
+    eventId: checkpointAppend.eventId,
+    streamHead: checkpointAppend.streamHead,
+  }
+  const checkpointMarked = await checkpointRuntime.markGenesisEventCommitted(
+    checkpointOwner, checkpointReservation.reservation.clientRequestId, checkpoint,
+  )
+  if (checkpointMarked.status !== 'committed') throw new Error('w6-contract-checkpoint-mark-failed')
+  const checkpointRecovery = await runPlayerGenesis({
+    identity: { resolve: async () => checkpointOwner },
+    requestIds: { create: () => 'unused-after-checkpoint' },
+    clock: { current: async () => start },
+    reservations: checkpointRuntime,
+    ledger: checkpointRuntime,
+  }, checkpointPerson)
+  check('crash recovery after checkpoint-before-binding finalizes without replay append',
+    checkpointRecovery.status === 'recovered'
+      && (await checkpointRuntime.readOwnerPersonBinding(checkpointOwner))?.personId === checkpointPerson.id
+      && ((await checkpointRuntime.loadLedger(checkpointWorld)).status === 'loaded'
+        && (await checkpointRuntime.loadLedger(checkpointWorld)).ledger.events.length === 1), passed)
+
   return Object.freeze(passed)
 }
