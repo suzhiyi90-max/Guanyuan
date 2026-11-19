@@ -151,6 +151,7 @@ export async function runPlayerGenesis(
       checkpoint = existing.checkpoint
       recovered = true
     } else {
+      if (!displayName.trim()) return { status: 'rejected', reason: 'genesis-player-name-empty' }
       let person: PersonCreationData
       try {
         person = await dependencies.persons.create({
@@ -162,7 +163,6 @@ export async function runPlayerGenesis(
       } catch {
         return { status: 'rejected', reason: 'genesis-person-factory-failed' }
       }
-      if (!displayName.trim()) return { status: 'rejected', reason: 'genesis-player-name-empty' }
       const adapter = dependencies.ledger.createWorldAdapter(reservation.worldId, reservation.worldStartTime)
       const input = toLedgerEventInput(createPersonCreatedEventInput(
         person,
