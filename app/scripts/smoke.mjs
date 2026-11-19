@@ -789,6 +789,7 @@ try {
   if (hasE008ArchiveRef) {
     await archiveEvidenceLinks.first().click()
     await page.waitForSelector('.evidence-board', { state: 'visible' })
+    // FE-173：证据回查期间焦点必须留在模态内，回跳后再交还档案标题。
     check('证据板打开后焦点由模态接管', await page.evaluate(() => { const board = document.querySelector('.evidence-board'); return Boolean(board && board.contains(document.activeElement)) }))
     check('人物档案回查沿用原证据板并定位E-008', await page.locator('.evidence-board').getAttribute('data-source-focus') === 'E-008' && await page.locator('[data-evidence-origin-ref="E-008"]').isVisible())
     await shot('96-archive-evidence-focus-1440')
