@@ -54,6 +54,7 @@ on:
       - work/w6-h-owner-person-principal
       - work/w6-hc-owner-player-boundary-composition
       - work/w6-hi-owner-player-runtime-startup
+      - work/w6-hj-test-fixture-isolation
   pull_request:
     branches:
       - work/w5-e2a-portable-import-core
@@ -118,6 +119,7 @@ on:
       - work/w6-h-owner-person-principal
       - work/w6-hc-owner-player-boundary-composition
       - work/w6-hi-owner-player-runtime-startup
+      - work/w6-hj-test-fixture-isolation
   workflow_dispatch:
 
 permissions:
