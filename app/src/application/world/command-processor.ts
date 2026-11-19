@@ -68,7 +68,7 @@ export interface PrepareWorldCommandOptions {
 }
 
 export interface PreparedWorldCommandReceipt {
-  readonly worldId: WorldId
+  readonly worldId: WorldCommandRequest['worldId']
   readonly clientRequestId: string
   readonly eventId: LedgerEvent<WorldDomainEventKind>['id']
   readonly streamHead: StreamCursor
