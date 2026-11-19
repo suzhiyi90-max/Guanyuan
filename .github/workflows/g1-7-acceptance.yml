@@ -46,6 +46,7 @@ on:
       - integration/w5-e3-fe170-scene-art
       - feat/c157-rank-card-frames
       - work/fe172-1024-hotspot-density-audit
+      - work/s03-person-archive-focus-audit
   pull_request:
     branches:
       - work/fe172-1024-hotspot-density-audit
