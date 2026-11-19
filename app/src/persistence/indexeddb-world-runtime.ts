@@ -309,23 +309,31 @@ export class IndexedDbWorldRuntime implements OwnerWorldReservationPort, Durable
   async readReservation(ownerId: OwnerId): Promise<W6OwnerWorldReservation | null> {
     let db: IDBDatabase
     try { db = await this.open() } catch { return null }
-    try {
-      const tx = db.transaction([OWNER_RESERVATIONS, WORLD_METADATA], 'readonly')
-      const done = transactionDone(tx)
-      const raw = await requestValue(tx.objectStore(OWNER_RESERVATIONS).get(ownerId))
-      if (raw === undefined) {
-        await done
-        return null
+    return new Promise(resolve => {
+      let result: W6OwnerWorldReservation | null = null
+      let tx: IDBTransaction
+      try { tx = db.transaction([OWNER_RESERVATIONS, WORLD_METADATA], 'readonly') } catch {
+        resolve(null)
+        return
       }
-      if (!isReservation(raw)) {
-        await done
-        return null
+      tx.oncomplete = () => resolve(result)
+      tx.onabort = () => resolve(null)
+      tx.onerror = () => { /* onabort resolves */ }
+      const ownerRequest = tx.objectStore(OWNER_RESERVATIONS).get(ownerId)
+      ownerRequest.onsuccess = () => {
+        const raw = ownerRequest.result as unknown
+        if (!isReservation(raw)) return
+        const metadataRequest = tx.objectStore(WORLD_METADATA).get(raw.worldId)
+        metadataRequest.onsuccess = () => {
+          result = isWorldMetadata(metadataRequest.result)
+            && metadataRequest.result.worldId === raw.worldId
+            && sameTime(metadataRequest.result.worldStartTime, raw.worldStartTime)
+            ? raw : null
+        }
+        metadataRequest.onerror = () => { result = null }
       }
-      const metadata = await requestValue(tx.objectStore(WORLD_METADATA).get(raw.worldId))
-      await done
-      return isWorldMetadata(metadata) && metadata.worldId === raw.worldId
-        && sameTime(metadata.worldStartTime, raw.worldStartTime) ? raw : null
-    } catch { return null }
+      ownerRequest.onerror = () => { result = null }
+    })
   }
 
   async loadLedger(
