@@ -325,20 +325,30 @@ export class IndexedDbWorldRuntime implements OwnerWorldReservationPort, Durable
     let db: IDBDatabase
     try { db = await this.open() } catch { return { status: 'rejected', reason: 'w6-indexeddb-unavailable' } }
     try {
-      const tx = db.transaction([WORLD_METADATA, WORLD_EVENTS, IDEMPOTENCY_RECORDS], 'readonly')
+      const tx = db.transaction([OWNER_RESERVATIONS, WORLD_METADATA, WORLD_EVENTS, IDEMPOTENCY_RECORDS], 'readonly')
       const done = transactionDone(tx)
+      const ownerReservationsRequest = tx.objectStore(OWNER_RESERVATIONS).index('worldId').getAll(worldId)
       const metaRequest = tx.objectStore(WORLD_METADATA).get(worldId)
       const eventsRequest = tx.objectStore(WORLD_EVENTS).index('worldId').getAll(worldId)
       const idempotencyRequest = tx.objectStore(IDEMPOTENCY_RECORDS).index('worldId').getAll(worldId)
-      const [rawMetadata, rawEvents, rawIdempotency] = await Promise.all([
-        requestValue(metaRequest), requestValue(eventsRequest), requestValue(idempotencyRequest),
+      const [rawOwnerReservations, rawMetadata, rawEvents, rawIdempotency] = await Promise.all([
+        requestValue(ownerReservationsRequest), requestValue(metaRequest), requestValue(eventsRequest), requestValue(idempotencyRequest),
       ])
       await done
-      if (rawMetadata === undefined) return { status: 'missing' }
+      if (rawMetadata === undefined) {
+        return rawOwnerReservations.length === 0 && rawEvents.length === 0 && rawIdempotency.length === 0
+          ? { status: 'missing' }
+          : { status: 'rejected', reason: 'w6-world-metadata-missing-with-residual-records' }
+      }
       if (!isWorldMetadata(rawMetadata) || rawMetadata.worldId !== worldId) {
         return { status: 'rejected', reason: 'w6-world-metadata-corrupt' }
       }
       const metadata = rawMetadata
+      if (rawOwnerReservations.length !== 1 || !isReservation(rawOwnerReservations[0])
+        || rawOwnerReservations[0].worldId !== worldId
+        || !sameTime(rawOwnerReservations[0].worldStartTime, metadata.worldStartTime)) {
+        return { status: 'rejected', reason: 'w6-owner-reservation-world-mismatch' }
+      }
       const eventRows = (rawEvents as unknown[]).sort((left, right) => {
         const a = left as Record<string, unknown>, b = right as Record<string, unknown>
         return Number(a.seq) - Number(b.seq)
