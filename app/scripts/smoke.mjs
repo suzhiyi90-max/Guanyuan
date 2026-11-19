@@ -594,7 +594,19 @@ try {
   check('FE-176 情报来源跳转账房并保留回原处入口', await page.locator('.return-chip').isVisible() && await page.locator('.ledger-section').isVisible())
   await click('.return-chip')
   await page.waitForSelector('.intelligence-drawer', { state: 'visible' })
-  check('FE-176 账房来源回跳恢复原情报筛选表面', await page.locator('.intelligence-drawer').isVisible() && await page.locator('.knowledge-legend button:has-text("已核实")').getAttribute('aria-pressed') === 'true')
+  await page.waitForFunction(expected => {
+    const drawer = document.querySelector('.intelligence-drawer')
+    const scroll = drawer?.querySelector('.drawer-scroll')
+    const selectedFilter = drawer?.querySelector('.knowledge-legend button[aria-pressed="true"]')
+    return Boolean(drawer && scroll && selectedFilter
+      && document.activeElement === selectedFilter
+      && Math.abs(scroll.scrollTop - expected) <= 2)
+  }, intelOriginScroll, { timeout: 3500 }).catch(() => undefined)
+  check('FE-176 账房来源回跳恢复原情报筛选表面',
+    await page.locator('.intelligence-drawer').isVisible()
+    && await page.locator('.knowledge-legend button:has-text("已核实")').getAttribute('aria-pressed') === 'true'
+    && await intelScroll.evaluate((node, expected) => Math.abs(node.scrollTop - expected) <= 2, intelOriginScroll)
+    && await page.locator('.knowledge-legend button[aria-pressed="true"]').evaluate(node => document.activeElement === node))
   await click('.knowledge-legend button:has-text("推测")')
   await settle(350)
   check('推测档不编造记录', (await page.locator('.intelligence-records').innerText()).includes('不替你推断'))
