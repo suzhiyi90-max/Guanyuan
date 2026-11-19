@@ -12,7 +12,6 @@ import {
   type EventLedger,
   type WorldId,
 } from '../../domain/event-ledger'
-import type { StreamCursor } from '../../domain/event-replay'
 import type { EventRegistry } from '../../domain/event-registry'
 import type { WorldTime } from '../../domain/shared/world-time'
 import { createEmptyWorldAggregate, type WorldAggregate } from '../../domain/world/aggregate'
