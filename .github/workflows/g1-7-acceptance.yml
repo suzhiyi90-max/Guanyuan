@@ -48,6 +48,8 @@ on:
       - work/fe172-1024-hotspot-density-audit
       - work/fe174-debt-ledger-keyboard-audit
       - work/fe175-intel-source-pin-audit
+      - work/fe176-cross-source-return-audit
+      - work/fe176-cross-source-return-audit
   pull_request:
     branches:
       - work/w5-e2a-portable-import-core
