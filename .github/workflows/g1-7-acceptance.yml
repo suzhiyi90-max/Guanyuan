@@ -46,6 +46,7 @@ on:
       - integration/w5-e3-fe170-scene-art
       - feat/c157-rank-card-frames
       - work/fe172-1024-hotspot-density-audit
+      - work/fe174-debt-ledger-keyboard-audit
   pull_request:
     branches:
       - work/w5-e2a-portable-import-core
@@ -54,6 +55,7 @@ on:
       - work/w5-e3-local-save-management
       - integration/w5-e3-fe170-scene-art
       - feat/c157-rank-card-frames
+      - work/s03-person-archive-focus-audit
       - feat/g1-engine
       - work/w1-a-person-core
       - work/w1-b-identity-office-auth
