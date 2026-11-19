@@ -168,7 +168,7 @@ export class IndexedDbWorldRuntime {
   private readonly databaseName: string
   private readonly allocateWorldId: () => WorldId
   readonly registry: EventRegistry<WorldDomainEventKind>
-  readonly projector: WorldProjectionPort<WorldDomainEventKind>
+  private readonly configuredProjector: WorldProjectionPort<WorldDomainEventKind> | null
 
   constructor(options: IndexedDbWorldRuntimeOptions = {}) {
     this.factory = options.factory === undefined ? globalThis.indexedDB ?? null : options.factory
@@ -176,10 +176,7 @@ export class IndexedDbWorldRuntime {
     this.allocateWorldId = options.allocateWorldId ?? defaultWorldId
     this.registry = options.registry ?? createWorldDomainEventRegistry()
     if (!this.registry.frozen || !Object.isFrozen(this.registry)) throw new Error('w6-runtime-registry-not-frozen')
-    this.projector = options.projector ?? createWorldAggregateProjector({
-      registry: this.registry,
-      worldStartTime: { day: 1, period: '晨' },
-    })
+    this.configuredProjector = options.projector ?? null
   }
 
   private open(): Promise<IDBDatabase> {
@@ -382,17 +379,22 @@ export class IndexedDbWorldRuntime {
     }
   }
 
-  createWorldAdapter(worldId: WorldId): {
+  createWorldAdapter(worldId: WorldId, worldStartTime: WorldTime): {
     readonly commands: WorldCommandPort
     readonly queries: WorldQueryPort
     readonly projector: WorldProjectionPort<WorldDomainEventKind>
     readLedger(): Promise<EventLedger<WorldDomainEventKind> | null>
   } {
+    if (!isValidWorldTime(worldStartTime)) throw new Error('w6-runtime-start-time-invalid')
+    const projector = this.configuredProjector ?? createWorldAggregateProjector({
+      registry: this.registry,
+      worldStartTime,
+    })
     const listeners = new Set<(aggregate: WorldAggregate) => void>()
     const readAggregate = async (): Promise<WorldAggregate | null> => {
       const loaded = await this.loadLedger(worldId)
-      if (loaded.status !== 'loaded') return null
-      const projected = await this.projector.rebuild({
+      if (loaded.status !== 'loaded' || !sameTime(loaded.metadata.worldStartTime, worldStartTime)) return null
+      const projected = await projector.rebuild({
         ledger: loaded.ledger,
         target: loaded.metadata.streamHead,
       })
@@ -400,14 +402,14 @@ export class IndexedDbWorldRuntime {
     }
     const submit = async (request: Parameters<WorldCommandPort['submit']>[0]): Promise<WorldCommandReceipt> => {
       const loaded = await this.loadLedger(worldId)
-      if (loaded.status !== 'loaded') {
+      if (loaded.status !== 'loaded' || !sameTime(loaded.metadata.worldStartTime, worldStartTime)) {
         return {
           status: 'rejected', worldId: request.worldId, clientRequestId: request.clientRequestId,
           reason: loaded.status === 'missing' ? 'w6-world-not-found' : loaded.reason,
           streamHead: { kind: 'genesis', seq: 0 },
         }
       }
-      const projected = await this.projector.rebuild({ ledger: loaded.ledger, target: loaded.metadata.streamHead })
+      const projected = await projector.rebuild({ ledger: loaded.ledger, target: loaded.metadata.streamHead })
       if (projected.status !== 'valid') {
         return {
           status: 'rejected', worldId: request.worldId, clientRequestId: request.clientRequestId,
@@ -417,7 +419,7 @@ export class IndexedDbWorldRuntime {
       }
       const prepared = await prepareWorldCommand({
         ledger: loaded.ledger, aggregate: projected.aggregate, request,
-        registry: this.registry, projector: this.projector,
+        registry: this.registry, projector,
       })
       if (prepared.status !== 'prepared') return prepared.receipt
       const commit = await this.commitPrepared(prepared.event, prepared.idempotencyRecord, request.expectedHead)
@@ -434,7 +436,7 @@ export class IndexedDbWorldRuntime {
             reason: refreshed.status === 'missing' ? 'w6-world-not-found' : refreshed.reason,
             streamHead: loaded.metadata.streamHead }
         }
-        const refreshedProjection = await this.projector.rebuild({
+        const refreshedProjection = await projector.rebuild({
           ledger: refreshed.ledger, target: refreshed.metadata.streamHead,
         })
         if (refreshedProjection.status !== 'valid') {
@@ -444,7 +446,7 @@ export class IndexedDbWorldRuntime {
         }
         const retried = await prepareWorldCommand({
           ledger: refreshed.ledger, aggregate: refreshedProjection.aggregate, request,
-          registry: this.registry, projector: this.projector,
+          registry: this.registry, projector,
         })
         if (retried.status !== 'prepared') return retried.receipt
         return {
@@ -469,7 +471,7 @@ export class IndexedDbWorldRuntime {
     return Object.freeze({
       commands: commandQueue,
       queries,
-      projector: this.projector,
+      projector,
       readLedger: async () => {
         const loaded = await this.loadLedger(worldId)
         return loaded.status === 'loaded' ? loaded.ledger : null
