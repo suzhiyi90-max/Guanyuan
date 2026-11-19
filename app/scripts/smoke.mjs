@@ -112,6 +112,30 @@ try {
     console.log('FE172_HOTSPOT_GEOMETRY', label, JSON.stringify(geometry))
     check(`FE-172 ${label} 县衙四枚热点均在场景内`, geometry.hotspots.length === 4 && geometry.hotspots.every(item => geometry.panel && item.rect.x >= geometry.panel.x - 1 && item.rect.y >= geometry.panel.y - 1 && item.rect.right <= geometry.panel.right + 1 && item.rect.bottom <= geometry.panel.bottom + 1), `${geometry.hotspots.length}/4; intersections=${geometry.intersections.length}`)
     await shot(`FE172-county-${label}`)
+
+    // FE-172 interaction audit: the icon-only 701–1100px treatment must reveal
+    // its accessible label on pointer hover and keyboard focus without moving the anchor.
+    const firstHotspot = page.locator('.scene-hotspot').first()
+    await firstHotspot.hover()
+    const hoverLabel = await firstHotspot.locator('.hotspot-label').evaluate(el => {
+      const rect = el.getBoundingClientRect()
+      const style = getComputedStyle(el)
+      return { width: rect.width, height: rect.height, clipPath: style.clipPath, visibility: style.visibility }
+    })
+    check(`FE-172 ${label} hover reveals hotspot label`, hoverLabel.width > 1 && hoverLabel.height > 1 && hoverLabel.clipPath === 'none' && hoverLabel.visibility === 'visible', JSON.stringify(hoverLabel))
+    await shot(`FE172-county-${label}-hover`)
+
+    await firstHotspot.focus()
+    await page.keyboard.press('Tab')
+    const keyboardLabel = await page.evaluate(() => {
+      const active = document.activeElement
+      const label = active?.querySelector('.hotspot-label')
+      const rect = label?.getBoundingClientRect()
+      const style = label ? getComputedStyle(label) : null
+      return { hotspot: active?.classList.contains('scene-hotspot') ?? false, focusVisible: active?.matches(':focus-visible') ?? false, width: rect?.width ?? 0, height: rect?.height ?? 0, clipPath: style?.clipPath ?? null, visibility: style?.visibility ?? null }
+    })
+    check(`FE-172 ${label} keyboard Tab reaches a labelled hotspot`, keyboardLabel.hotspot && keyboardLabel.focusVisible && keyboardLabel.width > 1 && keyboardLabel.height > 1 && keyboardLabel.clipPath === 'none' && keyboardLabel.visibility === 'visible', JSON.stringify(keyboardLabel))
+    await shot(`FE172-county-${label}-keyboard`)
   }
   await page.setViewportSize({ width: 1440, height: 900 })
   await settle(250)
