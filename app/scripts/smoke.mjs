@@ -85,6 +85,62 @@ try {
   await settle(500)
   check('返回县衙恢复原业务热点', await page.locator('.scene-county').isVisible() && await page.locator('.hotspot-document').isVisible())
   await shot('02-today-1440')
+
+  // FE-172 baseline diagnostic: 1024px county-scene hotspot geometry only; no layout mutation.
+  for (const [label, height] of [['1024x768', 768], ['1024x800', 800]]) {
+    await page.setViewportSize({ width: 1024, height })
+    await settle(300)
+    const geometry = await page.evaluate(() => {
+      const panel = document.querySelector('.scene-panel')
+      const panelRect = panel?.getBoundingClientRect()
+      const hotspots = Array.from(panel?.querySelectorAll('.scene-hotspot') ?? []).map((node, index) => {
+        const rect = node.getBoundingClientRect()
+        const label = node.querySelector('.hotspot-label')
+        const labelRect = label?.getBoundingClientRect()
+        const style = label ? getComputedStyle(label) : null
+        return { index, className: node.className, text: node.innerText.replace(/\\s+/g, ' ').trim(), rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height, right: rect.right, bottom: rect.bottom }, label: labelRect ? { x: labelRect.x, y: labelRect.y, width: labelRect.width, height: labelRect.height, right: labelRect.right, bottom: labelRect.bottom, display: style.display, visibility: style.visibility, clipPath: style.clipPath } : null }
+      })
+      const intersections = []
+      for (let i = 0; i < hotspots.length; i++) for (let j = i + 1; j < hotspots.length; j++) {
+        const a = hotspots[i].rect, b = hotspots[j].rect
+        const width = Math.max(0, Math.min(a.right, b.right) - Math.max(a.x, b.x))
+        const height = Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.y, b.y))
+        if (width * height > 0) intersections.push({ a: hotspots[i].className, b: hotspots[j].className, area: Math.round(width * height) })
+      }
+      return { panel: panelRect ? { x: panelRect.x, y: panelRect.y, width: panelRect.width, height: panelRect.height, right: panelRect.right, bottom: panelRect.bottom } : null, hotspots, intersections }
+    })
+    console.log('FE172_HOTSPOT_GEOMETRY', label, JSON.stringify(geometry))
+    check(`FE-172 ${label} 县衙四枚热点均在场景内`, geometry.hotspots.length === 4 && geometry.hotspots.every(item => geometry.panel && item.rect.x >= geometry.panel.x - 1 && item.rect.y >= geometry.panel.y - 1 && item.rect.right <= geometry.panel.right + 1 && item.rect.bottom <= geometry.panel.bottom + 1), `${geometry.hotspots.length}/4; intersections=${geometry.intersections.length}`)
+    await shot(`FE172-county-${label}`)
+
+    // FE-172 interaction audit: the icon-only 701–1100px treatment must reveal
+    // its accessible label on pointer hover and keyboard focus without moving the anchor.
+    const firstHotspot = page.locator('.scene-hotspot').first()
+    await firstHotspot.hover()
+    const hoverLabel = await firstHotspot.locator('.hotspot-label').evaluate(el => {
+      const rect = el.getBoundingClientRect()
+      const style = getComputedStyle(el)
+      return { width: rect.width, height: rect.height, clipPath: style.clipPath, visibility: style.visibility }
+    })
+    check(`FE-172 ${label} hover reveals hotspot label`, hoverLabel.width > 1 && hoverLabel.height > 1 && hoverLabel.clipPath === 'none' && hoverLabel.visibility === 'visible', JSON.stringify(hoverLabel))
+    await shot(`FE172-county-${label}-hover`)
+
+    await firstHotspot.focus()
+    await page.keyboard.press('Tab')
+    const keyboardLabel = await page.evaluate(() => {
+      const active = document.activeElement
+      const label = active?.querySelector('.hotspot-label')
+      const rect = label?.getBoundingClientRect()
+      const style = label ? getComputedStyle(label) : null
+      return { hotspot: active?.classList.contains('scene-hotspot') ?? false, focusVisible: active?.matches(':focus-visible') ?? false, width: rect?.width ?? 0, height: rect?.height ?? 0, clipPath: style?.clipPath ?? null, visibility: style?.visibility ?? null }
+    })
+    check(`FE-172 ${label} keyboard Tab reaches a labelled hotspot`, keyboardLabel.hotspot && keyboardLabel.focusVisible && keyboardLabel.width > 1 && keyboardLabel.height > 1 && keyboardLabel.clipPath === 'none' && keyboardLabel.visibility === 'visible', JSON.stringify(keyboardLabel))
+    await shot(`FE172-county-${label}-keyboard`)
+  }
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await settle(250)
+  check('FE-172 复核后恢复 1440 县衙视口', await page.locator('.scene-county').isVisible() && await page.locator('.hotspot-document').isVisible())
+
   check('首日日程标记与洪峰倒计时', (await page.locator('.calendar-row.active .day-number').innerText()) === '01' && (await page.locator('.flood-calendar > header').innerText()).includes('距洪峰 8 日'))
   await page.locator('.flood-calendar .calendar-row').nth(2).click()
   await settle(250)
