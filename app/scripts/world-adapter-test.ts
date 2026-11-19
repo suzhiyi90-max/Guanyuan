@@ -23,6 +23,8 @@ import {
   createPersonExposureRecordedEventInput,
 } from '../src/application'
 import type { PersonCreationData, WorldBootstrapRequest, WorldCommandRequest } from '../src/application'
+import { prepareWorldCommand } from '../src/application/world/command-processor'
+import { createWorldDomainEventRegistry } from '../src/application/world/event-catalog'
 
 let passed = 0
 let failed = 0
@@ -401,6 +403,184 @@ async function main(): Promise<void> {
     && concurrentAfter.streamHead.seq === concurrentBase.streamHead.seq + 1
     && [concurrentGoalA, concurrentGoalB].filter(id =>
       concurrentAfter.planning.goals.some(goal => goal.id === id)).length === 1)
+
+  const processorBase = (await adapter.queries.read(worldId))!
+  const processorGoalId = brandedId<'GoalId'>('goal:adapter:processor-prepared')
+  const processorGoalEvent = toLedgerEventInput(createGoalCreatedEventInput({
+    id: processorGoalId,
+    person: actor.id,
+    statement: '共享命令处理器准备阶段测试',
+    priority: 1,
+    visibility: { observer: 'player', level: 'private' },
+  }, {
+    actor: 'system', source: 'rule', requestWorldTime: nextEvening,
+    clientRequestId: 'adapter-processor-prepared',
+  }))
+  const processorRequest: WorldCommandRequest = {
+    worldId,
+    clientRequestId: processorGoalEvent.clientRequestId,
+    actor: processorGoalEvent.actor,
+    source: 'rule',
+    intentKind: processorGoalEvent.intentKind,
+    requestedAt: processorGoalEvent.requestWorldTime,
+    expectedHead: processorBase.streamHead,
+    payload: processorGoalEvent.payload,
+  }
+  const processorLedgerBefore = adapter.readLedger()
+  const processorPrepared = await prepareWorldCommand({
+    ledger: processorLedgerBefore,
+    aggregate: processorBase,
+    request: processorRequest,
+    registry: createWorldDomainEventRegistry(),
+    projector: adapter.projector,
+  })
+  check('shared command processor prepares a replay-valid candidate without mutating adapter state',
+    processorPrepared.status === 'prepared'
+    && processorPrepared.receipt.status === 'committed'
+    && processorPrepared.ledger.head === processorLedgerBefore.head + 1
+    && adapter.readLedger() === processorLedgerBefore
+    && (await adapter.queries.read(worldId)) === processorBase)
+
+  const processorCommit = await adapter.commands.submit(processorRequest)
+  check('in-memory adapter commits the exact command through the shared processor',
+    processorCommit.status === 'committed'
+    && processorCommit.eventId === (processorPrepared.status === 'prepared' ? processorPrepared.receipt.eventId : null)
+    && adapter.readLedger().head === processorLedgerBefore.head + 1)
+
+  const duplicateWithStaleCursor = await prepareWorldCommand({
+    ledger: adapter.readLedger(),
+    aggregate: (await adapter.queries.read(worldId))!,
+    request: processorRequest,
+    registry: createWorldDomainEventRegistry(),
+    projector: adapter.projector,
+  })
+  check('shared processor recognizes identical retries before rejecting their stale expected cursor',
+    duplicateWithStaleCursor.status === 'duplicate'
+    && duplicateWithStaleCursor.receipt.status === 'duplicate'
+    && duplicateWithStaleCursor.receipt.eventId === processorCommit.eventId)
+
+  const conflictingPayload = toLedgerEventInput(createGoalCreatedEventInput({
+    id: brandedId<'GoalId'>('goal:adapter:processor-conflicting-payload'),
+    person: actor.id,
+    statement: '同一请求标识但不同内容',
+    priority: 1,
+    visibility: { observer: 'player', level: 'private' },
+  }, {
+    actor: 'system', source: 'rule', requestWorldTime: nextEvening,
+    clientRequestId: processorRequest.clientRequestId,
+  }))
+  const idempotencyConflict = await prepareWorldCommand({
+    ledger: adapter.readLedger(),
+    aggregate: (await adapter.queries.read(worldId))!,
+    request: {
+      ...processorRequest,
+      payload: conflictingPayload.payload,
+    },
+    registry: createWorldDomainEventRegistry(),
+    projector: adapter.projector,
+  })
+  check('shared processor rejects a reused request identity with a different fingerprint',
+    idempotencyConflict.status === 'conflict'
+    && idempotencyConflict.receipt.status === 'conflict'
+    && idempotencyConflict.receipt.reason === 'world-command-idempotency-conflict')
+
+  const processorCurrent = (await adapter.queries.read(worldId))!
+  const staleGoalEvent = toLedgerEventInput(createGoalCreatedEventInput({
+    id: brandedId<'GoalId'>('goal:adapter:processor-stale'),
+    person: actor.id,
+    statement: '过期游标不得写入',
+    priority: 1,
+    visibility: { observer: 'player', level: 'private' },
+  }, {
+    actor: 'system', source: 'rule', requestWorldTime: nextEvening,
+    clientRequestId: 'adapter-processor-stale-head',
+  }))
+  const stalePrepared = await prepareWorldCommand({
+    ledger: adapter.readLedger(),
+    aggregate: processorCurrent,
+    request: {
+      worldId,
+      clientRequestId: staleGoalEvent.clientRequestId,
+      actor: staleGoalEvent.actor,
+      source: 'rule',
+      intentKind: staleGoalEvent.intentKind,
+      requestedAt: staleGoalEvent.requestWorldTime,
+      expectedHead: processorBase.streamHead,
+      payload: staleGoalEvent.payload,
+    },
+    registry: createWorldDomainEventRegistry(),
+    projector: adapter.projector,
+  })
+  check('shared processor rejects a stale expected head before producing a commit candidate',
+    stalePrepared.status === 'conflict'
+    && stalePrepared.receipt.status === 'conflict'
+    && adapter.readLedger().head === processorCurrent.streamHead.seq)
+
+  const unknownIntent = await prepareWorldCommand({
+    ledger: adapter.readLedger(),
+    aggregate: processorCurrent,
+    request: {
+      ...processorRequest,
+      clientRequestId: 'adapter-processor-unknown-intent',
+      intentKind: 'unregistered.processor.intent',
+      expectedHead: processorCurrent.streamHead,
+    },
+    registry: createWorldDomainEventRegistry(),
+    projector: adapter.projector,
+  })
+  check('shared processor rejects unregistered intent without creating a candidate',
+    unknownIntent.status === 'rejected'
+    && unknownIntent.receipt.status === 'rejected'
+    && unknownIntent.receipt.reason === 'world-command-intent-unsupported')
+
+  const invalidPayload = await prepareWorldCommand({
+    ledger: adapter.readLedger(),
+    aggregate: processorCurrent,
+    request: {
+      ...processorRequest,
+      clientRequestId: 'adapter-processor-invalid-payload',
+      expectedHead: processorCurrent.streamHead,
+      payload: {},
+    },
+    registry: createWorldDomainEventRegistry(),
+    projector: adapter.projector,
+  })
+  check('shared processor rejects payloads that do not satisfy the frozen event schema',
+    invalidPayload.status === 'rejected'
+    && invalidPayload.receipt.status === 'rejected'
+    && invalidPayload.receipt.reason.startsWith('world-command-payload-invalid:'))
+
+  const invalidPersonGoal = toLedgerEventInput(createGoalCreatedEventInput({
+    id: brandedId<'GoalId'>('goal:adapter:processor-unknown-person'),
+    person: brandedId<'PersonId'>('person:adapter:does-not-exist'),
+    statement: '不能为不存在的人物建立目标',
+    priority: 1,
+    visibility: { observer: 'player', level: 'private' },
+  }, {
+    actor: 'system', source: 'rule', requestWorldTime: nextEvening,
+    clientRequestId: 'adapter-processor-reducer-invariant',
+  }))
+  const reducerRejected = await prepareWorldCommand({
+    ledger: adapter.readLedger(),
+    aggregate: processorCurrent,
+    request: {
+      worldId,
+      clientRequestId: invalidPersonGoal.clientRequestId,
+      actor: invalidPersonGoal.actor,
+      source: 'rule',
+      intentKind: invalidPersonGoal.intentKind,
+      requestedAt: invalidPersonGoal.requestWorldTime,
+      expectedHead: processorCurrent.streamHead,
+      payload: invalidPersonGoal.payload,
+    },
+    registry: createWorldDomainEventRegistry(),
+    projector: adapter.projector,
+  })
+  check('shared processor rejects schema-valid commands that violate reducer/domain invariants',
+    reducerRejected.status === 'rejected'
+    && reducerRejected.receipt.status === 'rejected'
+    && reducerRejected.receipt.reason.includes('world-reducer-goal-person-missing')
+    && adapter.readLedger().head === processorCurrent.streamHead.seq)
 
   unsubscribe()
   if (failed > 0) throw new Error(`In-memory world adapter tests failed: ${failed}/${passed + failed}`)
