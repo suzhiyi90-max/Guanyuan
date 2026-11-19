@@ -52,6 +52,7 @@ on:
       - work/w5-e2c-local-save-library
       - work/w5-e3-local-save-management
       - integration/w5-e3-fe170-scene-art
+      - feat/c157-rank-card-frames
       - feat/g1-engine
       - work/w1-a-person-core
       - work/w1-b-identity-office-auth
