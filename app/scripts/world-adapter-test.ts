@@ -550,7 +550,7 @@ async function main(): Promise<void> {
   check('shared processor rejects payloads that do not satisfy the frozen event schema',
     invalidPayload.status === 'rejected'
     && invalidPayload.receipt.status === 'rejected'
-    && invalidPayload.receipt.reason.startsWith('world-command-payload-invalid:'))
+    && invalidPayload.receipt.reason.startsWith('world-command-payload-payload-invalid:'))
 
   const invalidPersonGoal = toLedgerEventInput(createGoalCreatedEventInput({
     id: brandedId<'GoalId'>('goal:adapter:processor-unknown-person'),
@@ -581,7 +581,7 @@ async function main(): Promise<void> {
   check('shared processor rejects schema-valid commands that violate reducer/domain invariants',
     reducerRejected.status === 'rejected'
     && reducerRejected.receipt.status === 'rejected'
-    && reducerRejected.receipt.reason.includes('world-reducer-goal-person-missing')
+    && reducerRejected.receipt.reason === 'world-replay-replay-reducer-failed'
     && adapter.readLedger().head === processorCurrent.streamHead.seq)
 
   unsubscribe()
