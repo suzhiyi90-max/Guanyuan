@@ -5,7 +5,6 @@
  * not import or mutate the W5 SavePackage / SaveRepository implementation.
  */
 import {
-  createEventLedger,
   restoreEventLedgerFromVerifiedEvents,
   type EventLedger,
   type LedgerEvent,
@@ -64,12 +63,6 @@ interface StoredIdempotencyRecord {
   readonly fingerprint: string
 }
 
-interface StoredOwnerPersonBinding {
-  readonly ownerId: OwnerId
-  readonly worldId: WorldId
-  readonly personId: string
-  readonly confirmedHead: StreamCursor
-}
 
 export type W6ReservationResult =
   | { readonly status: 'reserved'; readonly reservation: W6OwnerWorldReservation }
@@ -136,12 +129,6 @@ function isWorldMetadata(value: unknown): value is W6WorldMetadata {
     && Number(row.head) === (row.streamHead as StreamCursor).seq
 }
 
-function canonicalComparable(value: unknown): string {
-  if (value === null || typeof value !== 'object') return JSON.stringify(value)
-  if (Array.isArray(value)) return `[${value.map(canonicalComparable).join(',')}]`
-  const record = value as Record<string, unknown>
-  return `{${Object.keys(record).sort().map(key => `${JSON.stringify(key)}:${canonicalComparable(record[key])}`).join(',')}}`
-}
 
 function requestValue<T>(request: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -261,11 +248,21 @@ export class IndexedDbWorldRuntime implements OwnerWorldReservationPort, Durable
             try { tx.abort() } catch {}
             return
           }
-          result = existing.clientRequestId === clientRequestId && sameTime(existing.worldStartTime, worldStartTime)
-            ? { status: 'reserved', reservation: existing }
-            : { status: 'conflict', reason: existing.clientRequestId === clientRequestId
-              ? 'reservation-request-conflict'
-              : 'owner-already-reserved' }
+          const metadataRead = worlds.get(existing.worldId)
+          metadataRead.onerror = () => { abortReason = { status: 'rejected', reason: 'w6-reservation-world-read-failed' }; try { tx.abort() } catch {} }
+          metadataRead.onsuccess = () => {
+            if (!isWorldMetadata(metadataRead.result) || metadataRead.result.worldId !== existing.worldId
+              || !sameTime(metadataRead.result.worldStartTime, existing.worldStartTime)) {
+              abortReason = { status: 'rejected', reason: 'w6-reservation-world-metadata-corrupt' }
+              try { tx.abort() } catch {}
+              return
+            }
+            result = existing.clientRequestId === clientRequestId && sameTime(existing.worldStartTime, worldStartTime)
+              ? { status: 'reserved', reservation: existing }
+              : { status: 'conflict', reason: existing.clientRequestId === clientRequestId
+                ? 'reservation-request-conflict'
+                : 'owner-already-reserved' }
+          }
           return
         }
 
@@ -363,6 +360,14 @@ export class IndexedDbWorldRuntime implements OwnerWorldReservationPort, Durable
       }
       const restored = await restoreEventLedgerFromVerifiedEvents<WorldDomainEventKind>(worldId, events, this.registry)
       if (restored.status !== 'restored') return { status: 'rejected', reason: restored.issue }
+      const projector = this.configuredProjector ?? createWorldAggregateProjector({
+        registry: this.registry,
+        worldStartTime: metadata.worldStartTime,
+      })
+      const projected = await projector.rebuild({ ledger: restored.ledger, target: metadata.streamHead })
+      if (projected.status !== 'valid') {
+        return { status: 'rejected', reason: projected.issues.map(issue => issue.code).join(',') }
+      }
       const persistedRecords = rawIdempotency as StoredIdempotencyRecord[]
       if (persistedRecords.length !== restored.ledger.idempotency.length) {
         return { status: 'rejected', reason: 'w6-idempotency-count-mismatch' }
