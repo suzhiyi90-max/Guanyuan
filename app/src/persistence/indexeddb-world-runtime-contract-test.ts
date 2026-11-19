@@ -1,10 +1,12 @@
 import { brandedId } from '../domain/shared/ids'
 import type { WorldId } from '../domain/event-ledger'
 import type { WorldTime } from '../domain/shared/world-time'
+import { field } from '../domain/shared/field'
 import { ownerIdFromTrustedValue } from '../application/identity/owner'
 import { initializeWorldThroughPorts } from '../application/world/initialize'
 import type { WorldBootstrapRequest } from '../application/world/bootstrap'
 import {
+  createPersonCreatedEventInput,
   createWorldTimeAdvancedEventInput,
   toLedgerEventInput,
 } from '../application/world/event-catalog'
@@ -119,6 +121,74 @@ export async function runIndexedDbWorldRuntimeContractTests(): Promise<readonly 
     && committed.metadata.head === 2, passed)
   if (committed.status !== 'loaded') throw new Error('w6-contract-ledger-not-loaded')
 
+  const playerId = brandedId<'PersonId'>(`person:w6:genesis:${suffix}`)
+  const player = {
+    id: playerId,
+    displayName: 'Genesis 契约玩家',
+    birth: field.unknown,
+    capability: brandedId<'CapabilityRef'>(`capability:w6:genesis:${suffix}`),
+    stateDomains: {
+      body: brandedId<'BodyScopeRef'>(`body:w6:genesis:${suffix}`),
+      mind: brandedId<'MindScopeRef'>(`mind:w6:genesis:${suffix}`),
+      knowledge: brandedId<'KnowledgeScopeId'>(`knowledge:w6:genesis:${suffix}`),
+      goals: [],
+      scheduleScope: brandedId<'ScheduleScopeId'>(`schedule:w6:genesis:${suffix}`),
+      economy: brandedId<'EconomyScopeId'>(`economy:w6:genesis:${suffix}`),
+      location: brandedId<'LocationStateRef'>(`location:w6:genesis:${suffix}`),
+    },
+    history: brandedId<'LifeHistoryRef'>(`history:w6:genesis:${suffix}`),
+  }
+  const genesisInput = toLedgerEventInput(createPersonCreatedEventInput(player, { kind: 'player-character' }, {
+    actor: owner,
+    source: 'player-command',
+    requestWorldTime: start,
+    clientRequestId: first.reservation.clientRequestId,
+  }))
+  const genesisReceipt = await adapter.commands.submit({
+    worldId: allocatedWorldId,
+    clientRequestId: genesisInput.clientRequestId,
+    actor: genesisInput.actor,
+    source: 'player-command',
+    intentKind: genesisInput.intentKind,
+    requestedAt: genesisInput.requestWorldTime,
+    expectedHead: committed.metadata.streamHead,
+    payload: genesisInput.payload,
+  })
+  check('Genesis player-character is appended as Owner player-command through canonical command processor',
+    genesisReceipt.status === 'committed' && genesisReceipt.eventId, passed)
+  if (genesisReceipt.status !== 'committed') throw new Error('w6-contract-genesis-event-not-committed')
+  const checkpoint = Object.freeze({
+    personId: playerId,
+    eventId: genesisReceipt.eventId,
+    streamHead: genesisReceipt.streamHead,
+  })
+  const prematureFinalize = await runtime.finalizeOwnerPersonBinding(owner, first.reservation.clientRequestId, checkpoint)
+  check('Owner→Person binding cannot finalize before Genesis checkpoint state advances',
+    prematureFinalize.status === 'rejected', passed)
+  const marked = await runtime.markGenesisEventCommitted(owner, first.reservation.clientRequestId, checkpoint)
+  check('Genesis committed state requires canonical event and replay proof',
+    marked.status === 'committed' && marked.reservation.state === 'genesis-event-committed', passed)
+  const markedAgain = await runtime.markGenesisEventCommitted(owner, first.reservation.clientRequestId, checkpoint)
+  check('Genesis checkpoint transition is idempotent',
+    markedAgain.status === 'already-committed', passed)
+  const wrongPerson = await runtime.markGenesisEventCommitted(owner, first.reservation.clientRequestId, {
+    ...checkpoint, personId: brandedId<'PersonId'>(`person:w6:wrong:${suffix}`),
+  })
+  check('Genesis checkpoint rejects PersonId that differs from canonical player projection',
+    wrongPerson.status === 'rejected', passed)
+  const finalized = await runtime.finalizeOwnerPersonBinding(owner, first.reservation.clientRequestId, checkpoint)
+  check('Owner→Person binding and finalized reservation commit atomically',
+    finalized.status === 'finalized' && finalized.binding.personId === playerId
+      && finalized.binding.worldId === allocatedWorldId, passed)
+  const finalizedAgain = await runtime.finalizeOwnerPersonBinding(owner, first.reservation.clientRequestId, checkpoint)
+  check('Owner→Person binding finalization is idempotent',
+    finalizedAgain.status === 'already-finalized', passed)
+  const bindingRead = await runtime.readOwnerPersonBinding(owner)
+  const finalizedReservation = await runtime.readReservation(owner)
+  check('binding recovery read requires matching finalized reservation',
+    bindingRead?.personId === playerId && bindingRead.genesisEventId === genesisReceipt.eventId
+      && finalizedReservation?.state === 'binding-finalized', passed)
+
   const firstEvent = committed.ledger.events[0]!
   const duplicate = await adapter.commands.submit({
     worldId: allocatedWorldId,
@@ -152,8 +222,9 @@ export async function runIndexedDbWorldRuntimeContractTests(): Promise<readonly 
   const restartedAdapter = restartedRuntime.createWorldAdapter(allocatedWorldId, start)
   const restoredAggregate = await restartedAdapter.queries.read(allocatedWorldId)
   const restoredLedger = await restartedAdapter.readLedger()
-  check('new adapter instance reconstructs aggregate and ledger after restart', restoredAggregate?.persons.length === 1
-    && restoredAggregate.streamHead.seq === 2 && restoredLedger?.head === 2, passed)
+  check('new adapter instance reconstructs aggregate and ledger after restart', restoredAggregate?.persons.length === 2
+    && restoredAggregate.playerPersonId === playerId
+    && restoredAggregate.streamHead.seq === 3 && restoredLedger?.head === 3, passed)
 
   const current = await restartedAdapter.queries.read(allocatedWorldId)
   if (!current) throw new Error('w6-contract-restored-aggregate-missing')
@@ -181,7 +252,7 @@ export async function runIndexedDbWorldRuntimeContractTests(): Promise<readonly 
   check('cross-adapter compare-and-swap permits exactly one concurrent writer', raceStatuses === 'committed,conflict', passed)
   const afterRace = await restartedRuntime.loadLedger(allocatedWorldId)
   check('losing concurrent writer leaves no orphan event or idempotency row', afterRace.status === 'loaded'
-    && afterRace.ledger.head === 3 && afterRace.ledger.idempotency.length === 3, passed)
+    && afterRace.ledger.head === 4 && afterRace.ledger.idempotency.length === 4, passed)
 
   const db = await new Promise<IDBDatabase>((resolve, reject) => {
     const request = globalThis.indexedDB.open(databaseName, 1)
