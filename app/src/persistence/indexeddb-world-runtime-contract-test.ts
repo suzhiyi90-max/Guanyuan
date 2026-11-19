@@ -194,6 +194,17 @@ export async function runIndexedDbWorldRuntimeContractTests(): Promise<readonly 
   const damaged = await restartedRuntime.loadLedger(allocatedWorldId)
   check('missing persisted idempotency row is corruption, never an empty ledger', damaged.status === 'rejected'
     && damaged.reason === 'w6-idempotency-count-mismatch', passed)
+  const orphanOwner = db.transaction('ownerReservations', 'readwrite')
+  const orphanOwnerDone = new Promise<void>((resolve, reject) => {
+    orphanOwner.oncomplete = () => resolve()
+    orphanOwner.onabort = () => reject(orphanOwner.error ?? new Error('w6-contract-owner-delete-aborted'))
+    orphanOwner.onerror = () => reject(orphanOwner.error ?? new Error('w6-contract-owner-delete-failed'))
+  })
+  orphanOwner.objectStore('ownerReservations').delete(owner)
+  await orphanOwnerDone
+  const ownerlessWorld = await restartedRuntime.loadLedger(allocatedWorldId)
+  check('world ledger without its unique owner reservation fails closed', ownerlessWorld.status === 'rejected'
+    && ownerlessWorld.reason === 'w6-owner-reservation-world-mismatch', passed)
   db.close()
   return Object.freeze(passed)
 }
