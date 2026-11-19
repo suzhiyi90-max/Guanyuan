@@ -44,6 +44,35 @@ export async function runIndexedDbWorldRuntimeContractTests(): Promise<readonly 
     allocateWorldId: () => allocatedWorldId,
   })
   const unavailable = new IndexedDbWorldRuntime({ factory: null, databaseName: `${databaseName}-unavailable` })
+  const reservationRaceDb = `${databaseName}-reservation-race`
+  let reservationWorldCounter = 0
+  const allocateReservationWorld = () => brandedId<'WorldId'>(`world:w6:reservation-race-${++reservationWorldCounter}`) as WorldId
+  const reservationRuntimeA = new IndexedDbWorldRuntime({
+    factory: globalThis.indexedDB, databaseName: reservationRaceDb, allocateWorldId: allocateReservationWorld,
+  })
+  const reservationRuntimeB = new IndexedDbWorldRuntime({
+    factory: globalThis.indexedDB, databaseName: reservationRaceDb, allocateWorldId: allocateReservationWorld,
+  })
+  const sameRequestOwner = ownerIdFromTrustedValue(`owner:local:same-request-race-${suffix}`)
+  const [sameRaceA, sameRaceB] = await Promise.all([
+    reservationRuntimeA.reserveWorld(sameRequestOwner, 'req:parallel-same', start),
+    reservationRuntimeB.reserveWorld(sameRequestOwner, 'req:parallel-same', start),
+  ])
+  check('concurrent same-owner same-request reservations converge on one WorldId',
+    sameRaceA.status === 'reserved' && sameRaceB.status === 'reserved'
+      && sameRaceA.reservation.worldId === sameRaceB.reservation.worldId, passed)
+
+  const differentRequestOwner = ownerIdFromTrustedValue(`owner:local:different-request-race-${suffix}`)
+  const [differentRaceA, differentRaceB] = await Promise.all([
+    reservationRuntimeA.reserveWorld(differentRequestOwner, 'req:parallel-a', start),
+    reservationRuntimeB.reserveWorld(differentRequestOwner, 'req:parallel-b', start),
+  ])
+  check('concurrent different requests for one owner yield one reservation and one conflict',
+    [differentRaceA.status, differentRaceB.status].sort().join(',')
+      === 'conflict,reserved'
+      && [differentRaceA, differentRaceB].some(item => item.status === 'conflict'
+        && item.reason === 'owner-already-reserved'), passed)
+
   check('missing IndexedDB fails closed for reservation', (await unavailable.reserveWorld(owner, 'req:unavailable', start)).status === 'rejected', passed)
 
   const invalidOwner = await runtime.reserveWorld(ownerIdFromTrustedValue('owner:test'), '', start)
