@@ -216,7 +216,7 @@ export async function runIndexedDbWorldRuntimeContractTests(): Promise<readonly 
   const afterFingerprintConflict = await runtime.loadLedger(allocatedWorldId)
   check('same request identity with changed fingerprint conflicts without append', fingerprintConflict.status === 'conflict'
     && afterFingerprintConflict.status === 'loaded'
-    && afterFingerprintConflict.ledger.head === 2, passed)
+    && afterFingerprintConflict.ledger.head === 3, passed)
 
   const restartedRuntime = new IndexedDbWorldRuntime({ factory: globalThis.indexedDB, databaseName })
   const restartedAdapter = restartedRuntime.createWorldAdapter(allocatedWorldId, start)
