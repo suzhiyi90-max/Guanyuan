@@ -22,6 +22,7 @@ import {
 } from '../world/player-boundary'
 import type { WorldCommandAuthorizationPolicy } from '../world/authorization-gate'
 import { projectWorldForObserver } from '../world/observer-view'
+import type { WorldObserver, WorldObserverSocialView } from '../world/observer-view'
 import type { WorldObserverQueryPort } from '../world/ports'
 
 export interface OwnerPlayerBoundarySessionDependencies {
@@ -128,7 +129,7 @@ export async function createOwnerPlayerBoundarySession(
   }
 
   const observerQueries: WorldObserverQueryPort = Object.freeze({
-    async read(worldId, observer) {
+    async read(worldId: WorldId, observer: WorldObserver): Promise<WorldObserverSocialView | null> {
       if (worldId !== reservation.worldId) return null
       try {
         const current = await adapter.queries.read(worldId)
@@ -138,7 +139,11 @@ export async function createOwnerPlayerBoundarySession(
         return null
       }
     },
-    subscribe(worldId, observer, listener) {
+    subscribe(
+      worldId: WorldId,
+      observer: WorldObserver,
+      listener: (view: WorldObserverSocialView) => void,
+    ): () => void {
       if (worldId !== reservation.worldId) return () => undefined
       let active = true
       let unsubscribe: (() => void) | null = null
