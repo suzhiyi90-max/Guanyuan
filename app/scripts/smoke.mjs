@@ -600,7 +600,8 @@ try {
   await shot('31-intelligence-hearsay-1440')
   await page.setViewportSize({ width: 390, height: 844 })
   await settle(350)
-  const intelScroll = page.locator('.intelligence-drawer .drawer-scroll')
+  // Reuse the drawer scroll locator captured for the FE-176 return-context checks.
+
   const intelScrollMetrics = await intelScroll.evaluate(node => ({ overflowY: getComputedStyle(node).overflowY, scrollHeight: node.scrollHeight, clientHeight: node.clientHeight }))
   check('FE-175 390px情报台账使用独立纵向滚动区', ['auto', 'scroll'].includes(intelScrollMetrics.overflowY) && intelScrollMetrics.scrollHeight > intelScrollMetrics.clientHeight, JSON.stringify(intelScrollMetrics))
   await intelScroll.evaluate(node => { node.scrollTop = node.scrollHeight })
