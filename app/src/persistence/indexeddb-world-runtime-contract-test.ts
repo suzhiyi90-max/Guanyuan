@@ -451,7 +451,7 @@ export async function runIndexedDbWorldRuntimeContractTests(): Promise<readonly 
     checkpointRecovery.status === 'recovered'
       && checkpointRecoveryBinding?.personId === checkpointPerson.id
       && checkpointRecoveryLedger.status === 'loaded'
-      && checkpointRecoveryLedger.ledger.events.length === 1, passed)
+      && checkpointRecoveryLedger.ledger.events.length === 3, passed)
 
   return Object.freeze(passed)
 }
