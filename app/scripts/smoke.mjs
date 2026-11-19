@@ -566,11 +566,25 @@ try {
 
   // FE-176：情报台账跨来源回查后，回原处须恢复表面、筛选、滚动与模态焦点。
   const intelScroll = page.locator('.intelligence-drawer .drawer-scroll')
-  await verifiedPins.first().scrollIntoViewIfNeeded()
-  // 记录 Playwright 将真实来源钉滚入可视区后的实际位置；不能在点击前再把目标滚出视口，
-  // 否则 locator.click() 的自动可视化滚动会把被测位置改写成另一数值。
+  await intelScroll.evaluate(root => {
+    const pins = Array.from(root.querySelectorAll<HTMLElement>('.fact-row .clue-source'))
+    const rootRect = root.getBoundingClientRect()
+    const positions = pins.map(pin => pin.getBoundingClientRect().top - rootRect.top + root.scrollTop)
+    const center = (positions[0] + positions[positions.length - 1]) / 2
+    root.scrollTop = Math.max(0, Math.min(root.scrollHeight - root.clientHeight, center - root.clientHeight / 2))
+  })
+  // 两枚来源钉都保持在抽屉可视区内，避免 locator.click() 自动滚动污染回查前的捕获值。
   const intelOriginScroll = await intelScroll.evaluate(node => node.scrollTop)
-  check('FE-176 回查起点为真实非零内层滚动位置', intelOriginScroll > 0, `originScroll=${intelOriginScroll}`)
+  const sourcePinsVisible = await verifiedPins.evaluateAll(nodes => {
+    const root = document.querySelector('.intelligence-drawer .drawer-scroll')
+    if (!root) return false
+    const bounds = root.getBoundingClientRect()
+    return nodes.every(node => {
+      const rect = node.getBoundingClientRect()
+      return rect.top >= bounds.top && rect.bottom <= bounds.bottom
+    })
+  })
+  check('FE-176 回查起点为真实非零滚动且两枚来源钉均可见', intelOriginScroll > 0 && sourcePinsVisible, `originScroll=${intelOriginScroll}; pinsVisible=${sourcePinsVisible}`)
   await verifiedPins.first().click()
   await page.waitForSelector('.document-sheet', { state: 'visible' })
   check('FE-176 情报来源跳转文书并保留回原处入口', await page.locator('.return-chip').isVisible() && await page.locator('.document-sheet').isVisible())
