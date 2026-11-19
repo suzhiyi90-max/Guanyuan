@@ -9,6 +9,8 @@
 import {
   appendLedgerEvent,
   type EventLedger,
+  type LedgerEvent,
+  type LedgerIdempotencyRecord,
   type JsonValue,
 } from '../../domain/event-ledger'
 import type { EventRegistry } from '../../domain/event-registry'
@@ -70,6 +72,8 @@ export type PreparedWorldCommandResult =
       readonly status: 'prepared'
       readonly ledger: EventLedger<WorldDomainEventKind>
       readonly aggregate: WorldAggregate
+      readonly event: LedgerEvent<WorldDomainEventKind>
+      readonly idempotencyRecord: LedgerIdempotencyRecord
       readonly receipt: WorldCommandReceipt & { readonly status: 'committed' }
     }
   | {
@@ -214,6 +218,10 @@ export async function prepareWorldCommand(
   }
 
   const tail = appended.event
+  const idempotencyRecord = appended.ledger.idempotency.find(record => record.eventId === tail.id)
+  if (!idempotencyRecord) {
+    return rejected(request, aggregate.streamHead, 'world-command-idempotency-record-missing')
+  }
   const projected = await projector.rebuild({
     ledger: appended.ledger,
     target: { kind: 'event', seq: tail.seq, eventId: tail.id },
@@ -230,6 +238,8 @@ export async function prepareWorldCommand(
     status: 'prepared',
     ledger: appended.ledger,
     aggregate: projected.aggregate,
+    event: tail,
+    idempotencyRecord,
     receipt: {
       status: 'committed',
       worldId: request.worldId,
