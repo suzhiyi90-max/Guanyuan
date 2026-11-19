@@ -91,7 +91,18 @@ export function PersonArchive({ person, state, page, onPage, onExit, onOpenPerso
   const evidence = personEvidenceIdsOf(person.id).filter(ref => state.unlocked.includes(ref))
   const needs = topNeedsOf(person)
 
-  useEffect(() => { headRef.current?.focus() }, [page, person.id])
+  useEffect(() => {
+    // FE-173：档案从证据板回跳并重新挂载时，DrawerFrame 的初始焦点 RAF
+    // 会先将焦点放到抽屉首个按钮；延后一帧再将焦点交还当前档案标题。
+    let settleFrame = 0
+    const frame = requestAnimationFrame(() => {
+      settleFrame = requestAnimationFrame(() => headRef.current?.focus())
+    })
+    return () => {
+      cancelAnimationFrame(frame)
+      cancelAnimationFrame(settleFrame)
+    }
+  }, [page, person.id])
 
   const chip = (label: string, on = false) => <span className={`archive-chip${on ? ' is-on' : ''}`}>{label}</span>
 
