@@ -565,10 +565,12 @@ try {
   check('FE-175 Home巡览归首并保持单一停靠点', await verifiedPins.first().evaluate(node => document.activeElement === node && node.tabIndex === 0) && (await verifiedPins.evaluateAll(nodes => nodes.filter(node => node.tabIndex === 0).length)) === 1)
 
   // FE-176：情报台账跨来源回查后，回原处须恢复表面、筛选、滚动与模态焦点。
-  await verifiedPins.first().scrollIntoViewIfNeeded()
   const intelScroll = page.locator('.intelligence-drawer .drawer-scroll')
-  await intelScroll.evaluate(node => { node.scrollTop = 220 })
+  await verifiedPins.first().scrollIntoViewIfNeeded()
+  // 记录 Playwright 将真实来源钉滚入可视区后的实际位置；不能在点击前再把目标滚出视口，
+  // 否则 locator.click() 的自动可视化滚动会把被测位置改写成另一数值。
   const intelOriginScroll = await intelScroll.evaluate(node => node.scrollTop)
+  check('FE-176 回查起点为真实非零内层滚动位置', intelOriginScroll > 0, `originScroll=${intelOriginScroll}`)
   await verifiedPins.first().click()
   await page.waitForSelector('.document-sheet', { state: 'visible' })
   check('FE-176 情报来源跳转文书并保留回原处入口', await page.locator('.return-chip').isVisible() && await page.locator('.document-sheet').isVisible())
