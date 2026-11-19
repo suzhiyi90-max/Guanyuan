@@ -310,12 +310,21 @@ export class IndexedDbWorldRuntime implements OwnerWorldReservationPort, Durable
     let db: IDBDatabase
     try { db = await this.open() } catch { return null }
     try {
-      const tx = db.transaction(OWNER_RESERVATIONS, 'readonly')
+      const tx = db.transaction([OWNER_RESERVATIONS, WORLD_METADATA], 'readonly')
       const done = transactionDone(tx)
       const raw = await requestValue(tx.objectStore(OWNER_RESERVATIONS).get(ownerId))
+      if (raw === undefined) {
+        await done
+        return null
+      }
+      if (!isReservation(raw)) {
+        await done
+        return null
+      }
+      const metadata = await requestValue(tx.objectStore(WORLD_METADATA).get(raw.worldId))
       await done
-      if (raw === undefined) return null
-      return isReservation(raw) ? raw : null
+      return isWorldMetadata(metadata) && metadata.worldId === raw.worldId
+        && sameTime(metadata.worldStartTime, raw.worldStartTime) ? raw : null
     } catch { return null }
   }
 
@@ -506,7 +515,7 @@ export class IndexedDbWorldRuntime implements OwnerWorldReservationPort, Durable
     return new Promise(resolve => {
       let outcome: 'committed' | 'retry' | 'rejected' = 'rejected'
       let tx: IDBTransaction
-      try { tx = db.transaction([WORLD_METADATA, WORLD_EVENTS, IDEMPOTENCY_RECORDS], 'readwrite') } catch {
+      try { tx = db.transaction([OWNER_RESERVATIONS, WORLD_METADATA, WORLD_EVENTS, IDEMPOTENCY_RECORDS], 'readwrite') } catch {
         resolve('rejected')
         return
       }
@@ -515,11 +524,16 @@ export class IndexedDbWorldRuntime implements OwnerWorldReservationPort, Durable
       tx.onerror = () => { /* onabort resolves */ }
       let metadataReady = false
       let idempotencyReady = false
+      let ownerReservationReady = false
       let metadata: unknown
       let existingIdempotency: unknown
+      let ownerReservations: unknown
       const tryCommit = () => {
-        if (!metadataReady || !idempotencyReady) return
-        if (!isWorldMetadata(metadata) || metadata.worldId !== event.worldId) {
+        if (!metadataReady || !idempotencyReady || !ownerReservationReady) return
+        if (!isWorldMetadata(metadata) || metadata.worldId !== event.worldId
+          || !Array.isArray(ownerReservations) || ownerReservations.length !== 1
+          || !isReservation(ownerReservations[0]) || ownerReservations[0].worldId !== event.worldId
+          || !sameTime(ownerReservations[0].worldStartTime, metadata.worldStartTime)) {
           outcome = 'rejected'
           try { tx.abort() } catch {}
           return
@@ -549,10 +563,13 @@ export class IndexedDbWorldRuntime implements OwnerWorldReservationPort, Durable
       }
       const metaRequest = tx.objectStore(WORLD_METADATA).get(event.worldId)
       const idempotencyRequest = tx.objectStore(IDEMPOTENCY_RECORDS).get([event.worldId, idempotency.key])
+      const ownerRequest = tx.objectStore(OWNER_RESERVATIONS).index('worldId').getAll(event.worldId)
       metaRequest.onsuccess = () => { metadata = metaRequest.result; metadataReady = true; tryCommit() }
       idempotencyRequest.onsuccess = () => { existingIdempotency = idempotencyRequest.result; idempotencyReady = true; tryCommit() }
+      ownerRequest.onsuccess = () => { ownerReservations = ownerRequest.result; ownerReservationReady = true; tryCommit() }
       metaRequest.onerror = () => { outcome = 'rejected'; try { tx.abort() } catch {} }
       idempotencyRequest.onerror = () => { outcome = 'rejected'; try { tx.abort() } catch {} }
+      ownerRequest.onerror = () => { outcome = 'rejected'; try { tx.abort() } catch {} }
     })
   }
 }
