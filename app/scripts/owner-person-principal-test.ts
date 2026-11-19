@@ -1,16 +1,11 @@
 import { brandedId, createEmptyWorldAggregate } from '../src/domain'
-import {
-  createOwnerPersonPrincipalPort,
-  ownerIdFromTrustedValue,
-  type OwnerId,
-  type OwnerPersonBinding,
-  type OwnerWorldReservation,
-  type DurableWorldLedgerPort,
-  type OwnerWorldReservationPort,
-} from '../src/application'
+import { createOwnerPersonPrincipalPort, ownerIdFromTrustedValue } from '../src/application'
+import type { OwnerId } from '../src/application/identity/owner'
+import type {
+  OwnerPersonBinding, OwnerWorldReservation, DurableWorldLedgerPort, OwnerWorldReservationPort,
+} from '../src/application/world/durable-ports'
 import type { PersonId } from '../src/domain/shared/ids'
 import type { WorldAggregate } from '../src/domain/world/aggregate'
-import type { WorldDomainEventKind } from '../src/application/world/event-catalog'
 
 let passed = 0
 let failed = 0
