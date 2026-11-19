@@ -48,6 +48,7 @@ on:
       - work/fe172-1024-hotspot-density-audit
   pull_request:
     branches:
+      - work/fe172-1024-hotspot-density-audit
       - work/w5-e2a-portable-import-core
       - work/w5-e2b-portable-import-ui
       - work/w5-e2c-local-save-library
