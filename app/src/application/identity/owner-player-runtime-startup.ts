@@ -164,14 +164,19 @@ export async function startOwnerPlayerRuntime(
     reservation = currentReservation
   }
 
-  const genesis = await runPlayerGenesis({
+  let genesis: GenesisResult
+  try {
+    genesis = await runPlayerGenesis({
     identity: dependencies.identity,
     requestIds: dependencies.requestIds,
     clock: dependencies.clock,
     persons: dependencies.persons,
     reservations: dependencies.reservations,
     ledger: dependencies.ledger,
-  }, displayName)
+    }, displayName)
+  } catch {
+    return { status: 'rejected', reason: 'owner-player-startup-genesis-execution-failed' }
+  }
   if (genesis.status === 'rejected') {
     return { status: 'rejected', reason: `owner-player-startup-genesis-rejected:${genesis.reason}` }
   }
@@ -179,12 +184,17 @@ export async function startOwnerPlayerRuntime(
     return { status: 'rejected', reason: 'owner-player-startup-genesis-binding-mismatch' }
   }
 
-  const session = await createOwnerPlayerBoundarySession({
+  let session: OwnerPlayerBoundarySession | null
+  try {
+    session = await createOwnerPlayerBoundarySession({
     identity: dependencies.identity,
     reservations: dependencies.reservations,
     ledger: dependencies.ledger,
     authorizationPolicy: dependencies.authorizationPolicy,
-  })
+    })
+  } catch {
+    return { status: 'rejected', reason: 'owner-player-startup-boundary-resolution-failed' }
+  }
   if (!session || session.worldId !== reservation.worldId) {
     return { status: 'rejected', reason: 'owner-player-startup-player-boundary-unavailable' }
   }
