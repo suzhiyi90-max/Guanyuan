@@ -155,7 +155,7 @@ export async function runIndexedDbWorldRuntimeContractTests(): Promise<readonly 
     payload: genesisInput.payload,
   })
   check('Genesis player-character is appended as Owner player-command through canonical command processor',
-    genesisReceipt.status === 'committed' && genesisReceipt.eventId, passed)
+    genesisReceipt.status === 'committed' && !!genesisReceipt.eventId, passed)
   if (genesisReceipt.status !== 'committed') throw new Error('w6-contract-genesis-event-not-committed')
   const checkpoint = Object.freeze({
     personId: playerId,
