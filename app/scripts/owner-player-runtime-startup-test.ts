@@ -4,6 +4,7 @@ import { startOwnerPlayerRuntime } from '../src/application/identity/owner-playe
 import type { OwnerIdentityPort, OwnerId } from '../src/application/identity/owner'
 import type { OwnerPersonBinding, OwnerWorldReservation, OwnerWorldReservationPort, DurableWorldLedgerPort } from '../src/application/world/durable-ports'
 import type { WorldCommandAuthorizationPolicy } from '../src/application/world/authorization-gate'
+import type { WorldCommandRequest } from '../src/application/world/ports'
 import type { GenesisPersonFactoryPort } from '../src/application/world/genesis'
 import type { WorldAggregate } from '../src/domain/world/aggregate'
 import type { WorldId, LedgerEvent } from '../src/domain/event-ledger'
@@ -85,10 +86,7 @@ function fixture(options: {
   }
 
   const commands = {
-    async submit(request: {
-      worldId: WorldId; clientRequestId: string; actor: string; source: string;
-      intentKind: string; requestedAt: WorldTime; payload: unknown
-    }) {
+    async submit(request: WorldCommandRequest) {
       const event = {
         id: genesisEventId, worldId, seq: events.length + 1, actor: request.actor,
         source: request.source, intentKind: request.intentKind,
@@ -118,7 +116,7 @@ function fixture(options: {
     commands,
     queries,
     projector: { async rebuild() { return { status: 'valid' as const, aggregate } } },
-    async readLedger() { return { worldId, events } },
+    async readLedger() { return null },
   }
   const ledger: DurableWorldLedgerPort = {
     async loadLedger(id) {
