@@ -16,6 +16,7 @@ import type { EventRegistry } from '../domain/event-registry'
 import { isValidWorldTime, type WorldTime } from '../domain/shared/world-time'
 import type { StreamCursor } from '../domain/event-replay'
 import type { OwnerId } from '../application/identity/owner'
+import type { OwnerWorldReservationPort, DurableWorldLedgerPort } from '../application/world/durable-ports'
 import type { WorldAggregate } from '../domain/world/aggregate'
 import type { WorldDomainEventKind } from '../application/world/event-catalog'
 import { createWorldDomainEventRegistry } from '../application/world/event-catalog'
@@ -162,7 +163,7 @@ function defaultWorldId(): WorldId {
   return `world:w6:${globalThis.crypto.randomUUID()}` as WorldId
 }
 
-export class IndexedDbWorldRuntime {
+export class IndexedDbWorldRuntime implements OwnerWorldReservationPort, DurableWorldLedgerPort {
   private database: Promise<IDBDatabase> | null = null
   private readonly factory: IDBFactory | null
   private readonly databaseName: string
@@ -405,7 +406,8 @@ export class IndexedDbWorldRuntime {
       if (loaded.status !== 'loaded' || !sameTime(loaded.metadata.worldStartTime, worldStartTime)) {
         return {
           status: 'rejected', worldId: request.worldId, clientRequestId: request.clientRequestId,
-          reason: loaded.status === 'missing' ? 'w6-world-not-found' : loaded.reason,
+          reason: loaded.status === 'missing' ? 'w6-world-not-found'
+            : loaded.status === 'rejected' ? loaded.reason : 'w6-world-start-time-mismatch',
           streamHead: { kind: 'genesis', seq: 0 },
         }
       }
