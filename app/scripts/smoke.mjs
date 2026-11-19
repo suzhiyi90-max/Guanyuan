@@ -361,12 +361,14 @@ try {
   await click('.archive-module:has-text("历史与公文")')
   await settle(250)
   check('人物档案历史公文子页可达', (await page.locator('.archive-title').innerText()).includes('历史与公文'))
+  check('档案翻页后键盘焦点落在子页标题', await page.evaluate(() => document.activeElement === document.querySelector('.archive-title')))
   check('未解锁凭据不进入人物档案', await page.locator('.archive-chips .is-link').count() === 0 && (await page.locator('.person-archive').innerText()).includes('凭据尚未入卷'))
   await shot('91-person-archive-history-1440')
   const archiveButtons = await page.locator('.person-archive button').allInnerTexts()
   check('人物档案不提供交谈请托委托等行动入口', !archiveButtons.some(label => /交谈|请托|委托|问话|送礼|升堂/.test(label)))
   await click('.archive-back')
   check('人物档案子页返回综合主页', (await page.locator('.archive-title').innerText()).includes('全貌'))
+  check('返回综合主页后焦点落在主页标题', await page.evaluate(() => document.activeElement === document.querySelector('.archive-title')))
   const originalArchivePerson = await page.locator('.archive-crumb b').innerText()
   await click('.archive-module:has-text("关系网络")')
   const switchableArchiveNodes = page.locator('.archive-nodes button')
@@ -375,6 +377,7 @@ try {
   await settle(250)
   const switchedArchivePerson = await page.locator('.archive-crumb b').innerText()
   check('切换档案人物后回到新人物综合主页', (await page.locator('.archive-title').innerText()).includes('全貌') && switchedArchivePerson !== originalArchivePerson)
+  check('跨人物切换后焦点落在新人物主页标题', await page.evaluate(() => document.activeElement === document.querySelector('.archive-title')))
   await page.setViewportSize({ width: 390, height: 844 })
   await settle(350)
   await page.locator('.side-drawer').evaluate(el => { window.scrollTo(0, 0); for (const node of [el, ...el.querySelectorAll('*')]) if (node instanceof HTMLElement) node.scrollTop = 0 })
@@ -786,12 +789,15 @@ try {
   if (hasE008ArchiveRef) {
     await archiveEvidenceLinks.first().click()
     await page.waitForSelector('.evidence-board', { state: 'visible' })
+    // FE-173：证据回查期间焦点必须留在模态内，回跳后再交还档案标题。
+    check('证据板打开后焦点由模态接管', await page.evaluate(() => { const board = document.querySelector('.evidence-board'); return Boolean(board && board.contains(document.activeElement)) }))
     check('人物档案回查沿用原证据板并定位E-008', await page.locator('.evidence-board').getAttribute('data-source-focus') === 'E-008' && await page.locator('[data-evidence-origin-ref="E-008"]').isVisible())
     await shot('96-archive-evidence-focus-1440')
     await click('.return-chip')
     await page.waitForSelector('.person-archive', { state: 'visible' })
     await settle(350) // 等返回转场完全落定，再截取稳定的原人物档案画面。
     check('E-008回查返回原人物历史子页', (await page.locator('.archive-title').innerText()).includes('历史与公文') && (await page.locator('.archive-crumb b').innerText()).includes('顾逢源'))
+    check('E-008回查返回后焦点归还人物档案标题', await page.evaluate(() => document.activeElement === document.querySelector('.archive-title')))
     await shot('97-archive-evidence-return-1440')
   } else {
     check('人物档案E-008回查路径可达', false, 'E-008 未进入人物档案可见凭据集合')
