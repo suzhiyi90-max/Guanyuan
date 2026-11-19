@@ -75,7 +75,10 @@ export function createInMemoryWorldAdapter(options: InMemoryWorldAdapterOptions)
     for (const listener of listeners) {
       try { listener(aggregate) } catch { /* subscriber failures cannot roll back a committed fact */ }
     }
-    return prepared.receipt
+    return {
+      status: 'committed',
+      ...prepared.receipt,
+    }
   }
   const commands: WorldCommandPort = {
     submit(request) {
