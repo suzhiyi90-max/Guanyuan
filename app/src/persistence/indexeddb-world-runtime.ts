@@ -349,7 +349,7 @@ export class IndexedDbWorldRuntime implements OwnerWorldReservationPort, Durable
         if (row.worldId !== worldId || row.seq !== index + 1 || !row.event || typeof row.event !== 'object') {
           return { status: 'rejected', reason: 'w6-world-event-sequence-corrupt' }
         }
-        const event = row.event as LedgerEvent<Kind>
+        const event = row.event as LedgerEvent<WorldDomainEventKind>
         if (event.worldId !== worldId || event.seq !== row.seq || event.id !== `evt:${worldId}:${row.seq}`) {
           return { status: 'rejected', reason: 'w6-world-event-envelope-corrupt' }
         }
