@@ -7,6 +7,7 @@
  */
 import type { OwnerIdentityPort } from './owner'
 import type { WorldId } from '../../domain/event-ledger'
+import type { PersonId } from '../../domain/shared/ids'
 import type { WorldTime } from '../../domain/shared/world-time'
 import type { OwnerWorldReservation, OwnerWorldReservationPort, DurableWorldLedgerPort } from '../world/durable-ports'
 import type { WorldCommandAuthorizationPolicy } from '../world/authorization-gate'
@@ -55,7 +56,7 @@ export type OwnerPlayerRuntimeStartupResult =
       readonly status: 'ready'
       readonly ownerId: OwnerWorldReservation['ownerId']
       readonly worldId: WorldId
-      readonly personId: GenesisResult extends { readonly personId: infer P } ? P : never
+      readonly personId: PersonId
       readonly genesis: Extract<GenesisResult, { readonly status: 'ready' | 'recovered' }>
       readonly session: OwnerPlayerBoundarySession
     }
