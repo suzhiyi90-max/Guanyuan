@@ -618,11 +618,25 @@ try {
       && document.activeElement === selectedFilter
       && Math.abs(scroll.scrollTop - expected) <= 2)
   }, intelOriginScroll, { timeout: 3500 }).catch(() => undefined)
+  const ledgerReturnState = await page.evaluate(() => {
+    const drawer = document.querySelector('.intelligence-drawer')
+    const scroll = drawer?.querySelector('.drawer-scroll')
+    const selected = drawer?.querySelector('.knowledge-legend button[aria-pressed="true"]')
+    return {
+      drawerVisible: Boolean(drawer && drawer.getBoundingClientRect().width > 0),
+      selectedFilter: selected?.innerText ?? null,
+      selectedPressed: selected?.getAttribute('aria-pressed') ?? null,
+      focusedFilter: Boolean(selected && document.activeElement === selected),
+      scrollTop: scroll?.scrollTop ?? null,
+      scrollHeight: scroll?.scrollHeight ?? null
+    }
+  })
   check('FE-176 账房来源回跳恢复原情报筛选表面',
-    await page.locator('.intelligence-drawer').isVisible()
+    ledgerReturnState.drawerVisible
     && await page.locator('.knowledge-legend button:has-text("已核实")').getAttribute('aria-pressed') === 'true'
     && await intelScroll.evaluate((node, expected) => Math.abs(node.scrollTop - expected) <= 2, intelOriginScroll)
-    && await page.locator('.knowledge-legend button[aria-pressed="true"]').evaluate(node => document.activeElement === node))
+    && ledgerReturnState.focusedFilter,
+    `expectedScroll=${intelOriginScroll}; state=${JSON.stringify(ledgerReturnState)}`)
   await click('.knowledge-legend button:has-text("推测")')
   await settle(350)
   check('推测档不编造记录', (await page.locator('.intelligence-records').innerText()).includes('不替你推断'))
