@@ -567,7 +567,7 @@ try {
   // FE-176：情报台账跨来源回查后，回原处须恢复表面、筛选、滚动与模态焦点。
   const intelScroll = page.locator('.intelligence-drawer .drawer-scroll')
   await intelScroll.evaluate(root => {
-    const pins = Array.from(root.querySelectorAll<HTMLElement>('.fact-row .clue-source'))
+    const pins = Array.from(root.querySelectorAll('.fact-row .clue-source'))
     const rootRect = root.getBoundingClientRect()
     const positions = pins.map(pin => pin.getBoundingClientRect().top - rootRect.top + root.scrollTop)
     const center = (positions[0] + positions[positions.length - 1]) / 2
