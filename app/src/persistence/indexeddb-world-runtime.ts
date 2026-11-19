@@ -15,7 +15,10 @@ import type { EventRegistry } from '../domain/event-registry'
 import { isValidWorldTime, type WorldTime } from '../domain/shared/world-time'
 import type { StreamCursor } from '../domain/event-replay'
 import type { OwnerId } from '../application/identity/owner'
-import type { OwnerWorldReservationPort, DurableWorldLedgerPort } from '../application/world/durable-ports'
+import type {
+  OwnerWorldReservationPort, DurableWorldLedgerPort, OwnerWorldGenesisCheckpoint,
+  OwnerPersonBinding, GenesisCheckpointResult, OwnerPersonBindingResult,
+} from '../application/world/durable-ports'
 import type { WorldAggregate } from '../domain/world/aggregate'
 import type { WorldDomainEventKind } from '../application/world/event-catalog'
 import { createWorldDomainEventRegistry } from '../application/world/event-catalog'
@@ -40,6 +43,7 @@ export interface W6OwnerWorldReservation {
   readonly clientRequestId: string
   readonly worldStartTime: WorldTime
   readonly state: W6ReservationState
+  readonly genesis?: OwnerWorldGenesisCheckpoint
 }
 
 export interface W6WorldMetadata {
@@ -116,6 +120,32 @@ function isReservation(value: unknown): value is W6OwnerWorldReservation {
     && typeof row.clientRequestId === 'string' && row.clientRequestId.trim().length > 0
     && isValidWorldTime(row.worldStartTime as WorldTime)
     && ['reserved', 'genesis-event-committed', 'binding-finalized'].includes(String(row.state))
+    && (row.genesis === undefined ? row.state === 'reserved' : isGenesisCheckpoint(row.genesis))
+    && (row.state === 'reserved' ? row.genesis === undefined : row.genesis !== undefined)
+}
+
+function isGenesisCheckpoint(value: unknown): value is OwnerWorldGenesisCheckpoint {
+  if (!value || typeof value !== 'object') return false
+  const row = value as Record<string, unknown>
+  return typeof row.personId === 'string' && row.personId.trim().length > 0
+    && typeof row.eventId === 'string' && row.eventId.trim().length > 0
+    && validCursor(row.streamHead) && row.streamHead.kind === 'event'
+}
+
+function isOwnerPersonBinding(value: unknown): value is OwnerPersonBinding {
+  if (!value || typeof value !== 'object') return false
+  const row = value as Record<string, unknown>
+  return row.schemaVersion === 1
+    && typeof row.ownerId === 'string' && row.ownerId.trim().length > 0
+    && typeof row.worldId === 'string' && row.worldId.trim().length > 0
+    && typeof row.personId === 'string' && row.personId.trim().length > 0
+    && typeof row.genesisEventId === 'string' && row.genesisEventId.trim().length > 0
+    && validCursor(row.verifiedStreamHead) && row.verifiedStreamHead.kind === 'event'
+}
+
+function sameGenesisCheckpoint(left: OwnerWorldGenesisCheckpoint | undefined, right: OwnerWorldGenesisCheckpoint): boolean {
+  return !!left && left.personId === right.personId && left.eventId === right.eventId
+    && sameCursor(left.streamHead, right.streamHead)
 }
 
 function isWorldMetadata(value: unknown): value is W6WorldMetadata {
@@ -333,6 +363,212 @@ export class IndexedDbWorldRuntime implements OwnerWorldReservationPort, Durable
         metadataRequest.onerror = () => { result = null }
       }
       ownerRequest.onerror = () => { result = null }
+    })
+  }
+
+  private async verifyGenesisCheckpoint(
+    ownerId: OwnerId,
+    clientRequestId: string,
+    checkpoint: OwnerWorldGenesisCheckpoint,
+  ): Promise<W6OwnerWorldReservation | null> {
+    if (!isGenesisCheckpoint(checkpoint)) return null
+    const reservation = await this.readReservation(ownerId)
+    if (!reservation || reservation.clientRequestId !== clientRequestId
+      || (reservation.state !== 'reserved' && !sameGenesisCheckpoint(reservation.genesis, checkpoint))) return null
+    const loaded = await this.loadLedger(reservation.worldId)
+    if (loaded.status !== 'loaded') return null
+    const event = loaded.ledger.events.find(item => item.id === checkpoint.eventId)
+    if (!event || event.worldId !== reservation.worldId || event.seq !== checkpoint.streamHead.seq
+      || event.source !== 'player-command' || event.actor !== ownerId
+      || event.intentKind !== 'person.create' || event.kind !== 'person.created'
+      || event.clientRequestId !== reservation.clientRequestId
+      || !sameTime(event.requestWorldTime, reservation.worldStartTime)) return null
+    if (!event.payload || typeof event.payload !== 'object' || Array.isArray(event.payload)) return null
+    const payload = event.payload as Record<string, unknown>
+    if (!payload.person || typeof payload.person !== 'object' || Array.isArray(payload.person)
+      || !payload.origin || typeof payload.origin !== 'object' || Array.isArray(payload.origin)) return null
+    const person = payload.person as Record<string, unknown>
+    const origin = payload.origin as Record<string, unknown>
+    if (person.id !== checkpoint.personId || origin.kind !== 'player-character') return null
+    const target: StreamCursor = Object.freeze({ kind: 'event', seq: event.seq, eventId: event.id })
+    if (!sameCursor(target, checkpoint.streamHead)) return null
+    const projector = this.configuredProjector ?? createWorldAggregateProjector({
+      registry: this.registry, worldStartTime: reservation.worldStartTime,
+    })
+    const projected = await projector.rebuild({ ledger: loaded.ledger, target })
+    if (projected.status !== 'valid' || projected.aggregate.playerPersonId !== checkpoint.personId
+      || !projected.aggregate.persons.some(item => item.id === checkpoint.personId)) return null
+    const playerOrigins = projected.aggregate.personOrigins.filter(item => item.origin.kind === 'player-character')
+    if (playerOrigins.length !== 1 || playerOrigins[0]?.person !== checkpoint.personId) return null
+    return reservation
+  }
+
+  async markGenesisEventCommitted(
+    ownerId: OwnerId,
+    clientRequestId: string,
+    checkpoint: OwnerWorldGenesisCheckpoint,
+  ): Promise<GenesisCheckpointResult> {
+    const verified = await this.verifyGenesisCheckpoint(ownerId, clientRequestId, checkpoint)
+    if (!verified) return { status: 'rejected', reason: 'w6-genesis-checkpoint-not-canonical' }
+    let db: IDBDatabase
+    try { db = await this.open() } catch {
+      return { status: 'rejected', reason: 'w6-indexeddb-unavailable' }
+    }
+    return new Promise(resolve => {
+      let result: GenesisCheckpointResult = { status: 'rejected', reason: 'w6-genesis-checkpoint-transaction-failed' }
+      let tx: IDBTransaction
+      try { tx = db.transaction([OWNER_RESERVATIONS, WORLD_METADATA], 'readwrite') } catch {
+        resolve({ status: 'rejected', reason: 'w6-genesis-checkpoint-transaction-unavailable' })
+        return
+      }
+      tx.oncomplete = () => resolve(result)
+      tx.onabort = () => resolve(result)
+      tx.onerror = () => { /* onabort resolves */ }
+      const owners = tx.objectStore(OWNER_RESERVATIONS)
+      const worlds = tx.objectStore(WORLD_METADATA)
+      let ownerReady = false
+      let worldReady = false
+      let current: unknown
+      let metadata: unknown
+      const commit = () => {
+        if (!ownerReady || !worldReady) return
+        if (!isReservation(current) || !isWorldMetadata(metadata)
+          || current.ownerId !== ownerId || current.worldId !== verified.worldId
+          || current.clientRequestId !== clientRequestId || metadata.worldId !== current.worldId
+          || !sameTime(metadata.worldStartTime, current.worldStartTime)
+          || metadata.head < checkpoint.streamHead.seq) {
+          result = { status: 'rejected', reason: 'w6-genesis-reservation-mismatch' }
+          try { tx.abort() } catch {}
+          return
+        }
+        if (current.state !== 'reserved') {
+          result = sameGenesisCheckpoint(current.genesis, checkpoint)
+            ? { status: 'already-committed', reservation: current }
+            : { status: 'rejected', reason: 'w6-genesis-checkpoint-conflict' }
+          if (result.status === 'rejected') { try { tx.abort() } catch {} }
+          return
+        }
+        const next: W6OwnerWorldReservation = Object.freeze({
+          ...current, state: 'genesis-event-committed', genesis: Object.freeze({
+            personId: checkpoint.personId, eventId: checkpoint.eventId,
+            streamHead: Object.freeze({ ...checkpoint.streamHead }),
+          }),
+        })
+        owners.put(next)
+        result = { status: 'committed', reservation: next }
+      }
+      const ownerRequest = owners.get(ownerId)
+      const worldRequest = worlds.get(verified.worldId)
+      ownerRequest.onsuccess = () => { current = ownerRequest.result; ownerReady = true; commit() }
+      worldRequest.onsuccess = () => { metadata = worldRequest.result; worldReady = true; commit() }
+      ownerRequest.onerror = () => { result = { status: 'rejected', reason: 'w6-genesis-owner-read-failed' }; try { tx.abort() } catch {} }
+      worldRequest.onerror = () => { result = { status: 'rejected', reason: 'w6-genesis-world-read-failed' }; try { tx.abort() } catch {} }
+    })
+  }
+
+  async finalizeOwnerPersonBinding(
+    ownerId: OwnerId,
+    clientRequestId: string,
+    checkpoint: OwnerWorldGenesisCheckpoint,
+  ): Promise<OwnerPersonBindingResult> {
+    const verified = await this.verifyGenesisCheckpoint(ownerId, clientRequestId, checkpoint)
+    if (!verified || verified.state === 'reserved') {
+      return { status: 'rejected', reason: 'w6-genesis-checkpoint-not-committed' }
+    }
+    let db: IDBDatabase
+    try { db = await this.open() } catch {
+      return { status: 'rejected', reason: 'w6-indexeddb-unavailable' }
+    }
+    return new Promise(resolve => {
+      let result: OwnerPersonBindingResult = { status: 'rejected', reason: 'w6-owner-person-binding-transaction-failed' }
+      let tx: IDBTransaction
+      try { tx = db.transaction([OWNER_RESERVATIONS, OWNER_PERSON_BINDINGS], 'readwrite') } catch {
+        resolve({ status: 'rejected', reason: 'w6-owner-person-binding-transaction-unavailable' })
+        return
+      }
+      tx.oncomplete = () => resolve(result)
+      tx.onabort = () => resolve(result)
+      tx.onerror = () => { /* onabort resolves */ }
+      const owners = tx.objectStore(OWNER_RESERVATIONS)
+      const bindings = tx.objectStore(OWNER_PERSON_BINDINGS)
+      let ownerReady = false
+      let bindingReady = false
+      let current: unknown
+      let existing: unknown
+      const commit = () => {
+        if (!ownerReady || !bindingReady) return
+        if (!isReservation(current) || current.ownerId !== ownerId
+          || current.clientRequestId !== clientRequestId || current.worldId !== verified.worldId
+          || !sameGenesisCheckpoint(current.genesis, checkpoint)) {
+          result = { status: 'rejected', reason: 'w6-owner-person-reservation-mismatch' }
+          try { tx.abort() } catch {}
+          return
+        }
+        if (existing !== undefined) {
+          if (isOwnerPersonBinding(existing) && existing.ownerId === ownerId
+            && existing.worldId === current.worldId && existing.personId === checkpoint.personId
+            && existing.genesisEventId === checkpoint.eventId
+            && sameCursor(existing.verifiedStreamHead, checkpoint.streamHead)
+            && current.state === 'binding-finalized') {
+            result = { status: 'already-finalized', binding: existing }
+            return
+          }
+          result = { status: 'rejected', reason: 'w6-owner-person-binding-conflict' }
+          try { tx.abort() } catch {}
+          return
+        }
+        if (current.state !== 'genesis-event-committed') {
+          result = { status: 'rejected', reason: 'w6-owner-person-state-not-ready' }
+          try { tx.abort() } catch {}
+          return
+        }
+        const binding: OwnerPersonBinding = Object.freeze({
+          schemaVersion: 1, ownerId, worldId: current.worldId,
+          personId: checkpoint.personId, genesisEventId: checkpoint.eventId,
+          verifiedStreamHead: Object.freeze({ ...checkpoint.streamHead }),
+        })
+        const next: W6OwnerWorldReservation = Object.freeze({ ...current, state: 'binding-finalized' })
+        bindings.add(binding)
+        owners.put(next)
+        result = { status: 'finalized', binding }
+      }
+      const ownerRequest = owners.get(ownerId)
+      const bindingRequest = bindings.get(ownerId)
+      ownerRequest.onsuccess = () => { current = ownerRequest.result; ownerReady = true; commit() }
+      bindingRequest.onsuccess = () => { existing = bindingRequest.result; bindingReady = true; commit() }
+      ownerRequest.onerror = () => { result = { status: 'rejected', reason: 'w6-owner-person-owner-read-failed' }; try { tx.abort() } catch {} }
+      bindingRequest.onerror = () => { result = { status: 'rejected', reason: 'w6-owner-person-binding-read-failed' }; try { tx.abort() } catch {} }
+    })
+  }
+
+  async readOwnerPersonBinding(ownerId: OwnerId): Promise<OwnerPersonBinding | null> {
+    let db: IDBDatabase
+    try { db = await this.open() } catch { return null }
+    return new Promise(resolve => {
+      let binding: unknown
+      let reservation: unknown
+      let tx: IDBTransaction
+      try { tx = db.transaction([OWNER_RESERVATIONS, OWNER_PERSON_BINDINGS], 'readonly') } catch {
+        resolve(null)
+        return
+      }
+      tx.oncomplete = () => {
+        if (!isOwnerPersonBinding(binding) || !isReservation(reservation)
+          || reservation.state !== 'binding-finalized' || reservation.ownerId !== ownerId
+          || reservation.worldId !== binding.worldId || !sameGenesisCheckpoint(reservation.genesis, {
+            personId: binding.personId, eventId: binding.genesisEventId,
+            streamHead: binding.verifiedStreamHead,
+          })) { resolve(null); return }
+        resolve(binding)
+      }
+      tx.onabort = () => resolve(null)
+      tx.onerror = () => { /* onabort resolves */ }
+      const bindingRequest = tx.objectStore(OWNER_PERSON_BINDINGS).get(ownerId)
+      const reservationRequest = tx.objectStore(OWNER_RESERVATIONS).get(ownerId)
+      bindingRequest.onsuccess = () => { binding = bindingRequest.result }
+      reservationRequest.onsuccess = () => { reservation = reservationRequest.result }
+      bindingRequest.onerror = () => { binding = null }
+      reservationRequest.onerror = () => { reservation = null }
     })
   }
 
