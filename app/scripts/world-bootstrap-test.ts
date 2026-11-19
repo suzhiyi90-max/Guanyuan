@@ -28,12 +28,12 @@ const historicalMinister: HistoricalMinisterException = {
 
 const baseRequest: WorldBootstrapRequest = {
   worldId,
-  seed: 'jiajing2-world-seed-001',
-  scenarioPackId: 'scenario:ming-jiajing-02',
-  rulesetVersion: 'ruleset-0.16',
-  contentPackVersion: 'ming-content-0.1',
+  seed: 'test-bootstrap-seed-001',
+  scenarioPackId: 'scenario:test-bootstrap-fixture',
+  rulesetVersion: 'ruleset:test-fixture-v1',
+  contentPackVersion: 'content:test-fixture-v1',
   worldTime: { day: 1, period: '晨' },
-  locationCode: 'peixian',
+  locationCode: 'test-location:synthetic-county',
   roleSlots: [
     { roleCode: 'county-clerk', tier: 'county', minCount: 3, maxCount: 5 },
     { roleCode: 'grassroots-runner', tier: 'grassroots', minCount: 3, maxCount: 5 },
@@ -76,7 +76,7 @@ check('bootstrap persists the seed and fingerprint for reproducible regeneration
   && first.descriptor.seed === baseRequest.seed
   && first.descriptor.seedFingerprint.length === 8)
 
-const changedSeed = bootstrapWorld({ ...baseRequest, seed: 'jiajing2-world-seed-002' })
+const changedSeed = bootstrapWorld({ ...baseRequest, seed: 'test-bootstrap-seed-002' })
 check('different seed changes deterministic population identity', first.status === 'ready'
   && changedSeed.status === 'ready'
   && first.descriptor.seedFingerprint !== changedSeed.descriptor.seedFingerprint)
