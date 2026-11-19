@@ -504,18 +504,20 @@ function GameApp({ game }: { game: ReturnType<typeof useGuanyuanGame> }) {
     return doc && doc.scrollHeight - doc.clientHeight > 4 ? doc : null
   }
   const captureSpot = (label: string, detail: string) => ({ label, detail, overlay, section: activeSection, scrollTop: scrollRootOf()?.scrollTop ?? 0 })
-  const restoreScrollTo = (top: number) => {
+  const restoreScrollTo = (top: number, selector?: string, delay = 70) => {
     if (!top) return
     let tries = 0
     const step = () => {
-      const root = scrollRootOf()
+      const root = selector
+        ? document.querySelector<HTMLElement>(selector)
+        : scrollRootOf()
       if (root) {
         root.scrollTop = top
         if (Math.abs(root.scrollTop - top) <= 2) return
       }
       if (tries++ < 16) window.setTimeout(step, 60)
     }
-    window.setTimeout(step, 70)
+    window.setTimeout(step, delay)
   }
   const echoArrived = (detail: string) => {
     setArrivedSpot(detail)
@@ -528,7 +530,16 @@ function GameApp({ game }: { game: ReturnType<typeof useGuanyuanGame> }) {
     if (spot.overlay !== 'evidence') setEvidenceFocus(null)
     setOverlay(spot.overlay)
     setActiveSection(spot.section)
-    restoreScrollTo(spot.scrollTop)
+    if (spot.overlay === 'intelligence') {
+      // FE-176：抽屉重挂后将真实键盘焦点交还当前筛选项；随后定点恢复内层卷轴，避免外层叠层抢滚动。
+      window.setTimeout(() => {
+        document.querySelector<HTMLButtonElement>('.intelligence-drawer .knowledge-legend button[aria-pressed="true"]')
+          ?.focus({ preventScroll: true })
+      }, 180)
+      restoreScrollTo(spot.scrollTop, '.intelligence-drawer .drawer-scroll', 300)
+    } else {
+      restoreScrollTo(spot.scrollTop)
+    }
     echoArrived(spot.detail || '原处')
   }
   useEffect(() => () => { if (arrivedTimer.current) window.clearTimeout(arrivedTimer.current) }, [])
