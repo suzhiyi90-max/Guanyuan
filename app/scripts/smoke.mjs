@@ -889,6 +889,7 @@ try {
     await page.waitForSelector('.person-archive', { state: 'visible' })
     await settle(350) // 等返回转场完全落定，再截取稳定的原人物档案画面。
     check('E-008回查返回原人物历史子页', (await page.locator('.archive-title').innerText()).includes('历史与公文') && (await page.locator('.archive-crumb b').innerText()).includes('顾逢源'))
+    await page.waitForFunction(() => document.activeElement === document.querySelector('.archive-title'), undefined, { timeout: 1800 }).catch(() => undefined)
     check('E-008回查返回后焦点归还人物档案标题', await page.evaluate(() => document.activeElement === document.querySelector('.archive-title')))
     await shot('97-archive-evidence-return-1440')
   } else {
