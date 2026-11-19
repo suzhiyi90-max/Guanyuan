@@ -292,6 +292,10 @@ function GameApp({ game }: { game: ReturnType<typeof useGuanyuanGame> }) {
   }
 
   const openSource = (source: ClueSource, refs?: string[]) => {
+    // FE-176：跨来源回查先封存当前表面、分区与滚动位置，目标表面保留统一「回原处」入口。
+    const originLabel = overlay === 'evidence' ? '证据板' : overlay === 'intelligence' ? '情报台账' : '来源查验'
+    const sourceLabel = source === 'document' ? '文书' : source === 'ledger' ? '账房' : '东堤'
+    setReturnSpot(captureSpot(originLabel, `回查 · ${sourceLabel}${refs?.length ? ` · ${refs.join('、')}` : ''}`, overlay === 'intelligence' ? '.intelligence-drawer .drawer-scroll' : undefined))
     if (source === 'document') {
       if (refs) setSelectedCompare(refs)
       openDocument('compare', refs?.[0] ?? null)
@@ -305,6 +309,7 @@ function GameApp({ game }: { game: ReturnType<typeof useGuanyuanGame> }) {
       focusOn('ledger-three')
       return
     }
+    setOverlay(null)
     setActiveSection('today')
     changeScene('river')
   }
@@ -498,19 +503,21 @@ function GameApp({ game }: { game: ReturnType<typeof useGuanyuanGame> }) {
     const doc = document.scrollingElement as HTMLElement | null
     return doc && doc.scrollHeight - doc.clientHeight > 4 ? doc : null
   }
-  const captureSpot = (label: string, detail: string) => ({ label, detail, overlay, section: activeSection, scrollTop: scrollRootOf()?.scrollTop ?? 0 })
-  const restoreScrollTo = (top: number) => {
+  const captureSpot = (label: string, detail: string, scrollSelector?: string) => ({ label, detail, overlay, section: activeSection, scrollTop: (scrollSelector ? document.querySelector<HTMLElement>(scrollSelector) : scrollRootOf())?.scrollTop ?? 0 })
+  const restoreScrollTo = (top: number, selector?: string, delay = 70) => {
     if (!top) return
     let tries = 0
     const step = () => {
-      const root = scrollRootOf()
+      const root = selector
+        ? document.querySelector<HTMLElement>(selector)
+        : scrollRootOf()
       if (root) {
         root.scrollTop = top
         if (Math.abs(root.scrollTop - top) <= 2) return
       }
       if (tries++ < 16) window.setTimeout(step, 60)
     }
-    window.setTimeout(step, 70)
+    window.setTimeout(step, delay)
   }
   const echoArrived = (detail: string) => {
     setArrivedSpot(detail)
@@ -523,7 +530,16 @@ function GameApp({ game }: { game: ReturnType<typeof useGuanyuanGame> }) {
     if (spot.overlay !== 'evidence') setEvidenceFocus(null)
     setOverlay(spot.overlay)
     setActiveSection(spot.section)
-    restoreScrollTo(spot.scrollTop)
+    if (spot.overlay === 'intelligence') {
+      // FE-176：抽屉重挂后将真实键盘焦点交还当前筛选项；随后定点恢复内层卷轴，避免外层叠层抢滚动。
+      window.setTimeout(() => {
+        document.querySelector<HTMLButtonElement>('.intelligence-drawer .knowledge-legend button[aria-pressed="true"]')
+          ?.focus({ preventScroll: true })
+      }, 180)
+      restoreScrollTo(spot.scrollTop, '.intelligence-drawer .drawer-scroll', 300)
+    } else {
+      restoreScrollTo(spot.scrollTop)
+    }
     echoArrived(spot.detail || '原处')
   }
   useEffect(() => () => { if (arrivedTimer.current) window.clearTimeout(arrivedTimer.current) }, [])

@@ -563,6 +563,80 @@ try {
   check('FE-175 End巡览抵达末枚来源钉', await verifiedPins.nth(1).evaluate(node => document.activeElement === node && node.tabIndex === 0))
   await page.keyboard.press('Home')
   check('FE-175 Home巡览归首并保持单一停靠点', await verifiedPins.first().evaluate(node => document.activeElement === node && node.tabIndex === 0) && (await verifiedPins.evaluateAll(nodes => nodes.filter(node => node.tabIndex === 0).length)) === 1)
+
+  // FE-176：情报台账跨来源回查后，回原处须恢复表面、筛选、滚动与模态焦点。
+  const intelScroll = page.locator('.intelligence-drawer .drawer-scroll')
+  await intelScroll.evaluate(root => {
+    const pins = Array.from(root.querySelectorAll('.fact-row .clue-source'))
+    const rootRect = root.getBoundingClientRect()
+    const positions = pins.map(pin => pin.getBoundingClientRect().top - rootRect.top + root.scrollTop)
+    const center = (positions[0] + positions[positions.length - 1]) / 2
+    root.scrollTop = Math.max(0, Math.min(root.scrollHeight - root.clientHeight, center - root.clientHeight / 2))
+  })
+  // 两枚来源钉都保持在抽屉可视区内，避免 locator.click() 自动滚动污染回查前的捕获值。
+  const intelOriginScroll = await intelScroll.evaluate(node => node.scrollTop)
+  const sourcePinsVisible = await verifiedPins.evaluateAll(nodes => {
+    const root = document.querySelector('.intelligence-drawer .drawer-scroll')
+    if (!root) return false
+    const bounds = root.getBoundingClientRect()
+    return nodes.every(node => {
+      const rect = node.getBoundingClientRect()
+      return rect.top >= bounds.top && rect.bottom <= bounds.bottom
+    })
+  })
+  check('FE-176 回查起点为真实非零滚动且两枚来源钉均可见', intelOriginScroll > 0 && sourcePinsVisible, `originScroll=${intelOriginScroll}; pinsVisible=${sourcePinsVisible}`)
+  await verifiedPins.first().click()
+  await page.waitForSelector('.document-sheet', { state: 'visible' })
+  check('FE-176 情报来源跳转文书并保留回原处入口', await page.locator('.return-chip').isVisible() && await page.locator('.document-sheet').isVisible())
+  await click('.return-chip')
+  await page.waitForSelector('.intelligence-drawer', { state: 'visible' })
+  await page.waitForFunction(expected => {
+    const drawer = document.querySelector('.intelligence-drawer')
+    const scroll = drawer?.querySelector('.drawer-scroll')
+    const selectedFilter = drawer?.querySelector('.knowledge-legend button[aria-pressed="true"]')
+    return Boolean(drawer && scroll && selectedFilter
+      && document.activeElement === selectedFilter
+      && Math.abs(scroll.scrollTop - expected) <= 2)
+  }, intelOriginScroll, { timeout: 3500 }).catch(() => undefined)
+  check('FE-176 文书来源回跳恢复情报台账筛选与滚动位置',
+    await page.locator('.intelligence-drawer').isVisible()
+    && await page.locator('.knowledge-legend button:has-text("已核实")').getAttribute('aria-pressed') === 'true'
+    && await intelScroll.evaluate((node, expected) => Math.abs(node.scrollTop - expected) <= 2, intelOriginScroll),
+    `expectedScroll=${intelOriginScroll}; actualScroll=${await intelScroll.evaluate(node => node.scrollTop)}`)
+  check('FE-176 文书来源回跳后键盘焦点归还当前筛选项',
+    await page.locator('.knowledge-legend button[aria-pressed="true"]').evaluate(node => document.activeElement === node))
+  await verifiedPins.nth(1).click()
+  await page.waitForSelector('.ledger-section', { state: 'visible' })
+  check('FE-176 情报来源跳转账房并保留回原处入口', await page.locator('.return-chip').isVisible() && await page.locator('.ledger-section').isVisible())
+  await click('.return-chip')
+  await page.waitForSelector('.intelligence-drawer', { state: 'visible' })
+  await page.waitForFunction(expected => {
+    const drawer = document.querySelector('.intelligence-drawer')
+    const scroll = drawer?.querySelector('.drawer-scroll')
+    const selectedFilter = drawer?.querySelector('.knowledge-legend button[aria-pressed="true"]')
+    return Boolean(drawer && scroll && selectedFilter
+      && document.activeElement === selectedFilter
+      && Math.abs(scroll.scrollTop - expected) <= 2)
+  }, intelOriginScroll, { timeout: 3500 }).catch(() => undefined)
+  const ledgerReturnState = await page.evaluate(() => {
+    const drawer = document.querySelector('.intelligence-drawer')
+    const scroll = drawer?.querySelector('.drawer-scroll')
+    const selected = drawer?.querySelector('.knowledge-legend button[aria-pressed="true"]')
+    return {
+      drawerVisible: Boolean(drawer && drawer.getBoundingClientRect().width > 0),
+      selectedFilter: selected?.innerText ?? null,
+      selectedPressed: selected?.getAttribute('aria-pressed') ?? null,
+      focusedFilter: Boolean(selected && document.activeElement === selected),
+      scrollTop: scroll?.scrollTop ?? null,
+      scrollHeight: scroll?.scrollHeight ?? null
+    }
+  })
+  check('FE-176 账房来源回跳恢复原情报筛选表面',
+    ledgerReturnState.drawerVisible
+    && await page.locator('.knowledge-legend button:has-text("已核实")').getAttribute('aria-pressed') === 'true'
+    && await intelScroll.evaluate((node, expected) => Math.abs(node.scrollTop - expected) <= 2, intelOriginScroll)
+    && ledgerReturnState.focusedFilter,
+    `expectedScroll=${intelOriginScroll}; state=${JSON.stringify(ledgerReturnState)}`)
   await click('.knowledge-legend button:has-text("推测")')
   await settle(350)
   check('推测档不编造记录', (await page.locator('.intelligence-records').innerText()).includes('不替你推断'))
@@ -572,7 +646,8 @@ try {
   await shot('31-intelligence-hearsay-1440')
   await page.setViewportSize({ width: 390, height: 844 })
   await settle(350)
-  const intelScroll = page.locator('.intelligence-drawer .drawer-scroll')
+  // Reuse the drawer scroll locator captured for the FE-176 return-context checks.
+
   const intelScrollMetrics = await intelScroll.evaluate(node => ({ overflowY: getComputedStyle(node).overflowY, scrollHeight: node.scrollHeight, clientHeight: node.clientHeight }))
   check('FE-175 390px情报台账使用独立纵向滚动区', ['auto', 'scroll'].includes(intelScrollMetrics.overflowY) && intelScrollMetrics.scrollHeight > intelScrollMetrics.clientHeight, JSON.stringify(intelScrollMetrics))
   await intelScroll.evaluate(node => { node.scrollTop = node.scrollHeight })
@@ -856,6 +931,7 @@ try {
     await page.waitForSelector('.person-archive', { state: 'visible' })
     await settle(350) // 等返回转场完全落定，再截取稳定的原人物档案画面。
     check('E-008回查返回原人物历史子页', (await page.locator('.archive-title').innerText()).includes('历史与公文') && (await page.locator('.archive-crumb b').innerText()).includes('顾逢源'))
+    await page.waitForFunction(() => document.activeElement === document.querySelector('.archive-title'), undefined, { timeout: 1800 }).catch(() => undefined)
     check('E-008回查返回后焦点归还人物档案标题', await page.evaluate(() => document.activeElement === document.querySelector('.archive-title')))
     await shot('97-archive-evidence-return-1440')
   } else {
@@ -1064,8 +1140,13 @@ try {
     return result.status === 'success' && result.value === null
   }, deleteFixture.worldId)
   check('E3 确认删除后目录与存档仓储均无该人生', deleteResult)
-  await settle(100)
-  check('E3 删除完成后焦点归还档案目录', await page.evaluate(() => document.activeElement?.matches('.save-folio-library-head button') === true))
+  await page.waitForFunction(() => document.activeElement?.matches('.save-folio-library-head button') === true, undefined, { timeout: 1800 }).catch(() => undefined)
+  const deleteFocusState = await page.evaluate(() => ({
+    focused: document.activeElement?.matches('.save-folio-library-head button') === true,
+    active: document.activeElement?.outerHTML?.slice(0, 240) ?? null,
+    target: document.querySelector('.save-folio-library-head button')?.outerHTML?.slice(0, 240) ?? null,
+  }))
+  check('E3 删除完成后焦点归还档案目录', deleteFocusState.focused, JSON.stringify(deleteFocusState))
 
   // 7.85 FE-020 东堤暴雨与洪峰只读投影
   await page.goto(smokeFixtureUrl('day8'), { waitUntil: 'domcontentloaded' })
