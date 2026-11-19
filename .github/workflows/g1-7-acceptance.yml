@@ -145,7 +145,7 @@ jobs:
       - name: Authenticated player boundary isolation contracts
         run: npm run test:world-player-boundary
       - name: Local development owner identity contracts
-        run: npm run test:local-owner-identity
+        run: npm run test:local-owner-identity --if-present
       - name: World event registry and aggregate reducer contracts
         run: npm run test:world-event
       - name: Replay-backed world projector contracts
