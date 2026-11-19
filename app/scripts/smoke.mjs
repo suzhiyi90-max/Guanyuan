@@ -564,13 +564,27 @@ try {
   await page.keyboard.press('Home')
   check('FE-175 Home巡览归首并保持单一停靠点', await verifiedPins.first().evaluate(node => document.activeElement === node && node.tabIndex === 0) && (await verifiedPins.evaluateAll(nodes => nodes.filter(node => node.tabIndex === 0).length)) === 1)
 
-  // FE-176：情报台账跨来源回查后，回原处须恢复表面与筛选上下文。
+  // FE-176：情报台账跨来源回查后，回原处须恢复表面、筛选、滚动与模态焦点。
+  await verifiedPins.first().scrollIntoViewIfNeeded()
+  const intelScroll = page.locator('.intelligence-drawer .drawer-scroll')
+  await intelScroll.evaluate(node => { node.scrollTop = 220 })
+  const intelOriginScroll = await intelScroll.evaluate(node => node.scrollTop)
   await verifiedPins.first().click()
   await page.waitForSelector('.document-sheet', { state: 'visible' })
   check('FE-176 情报来源跳转文书并保留回原处入口', await page.locator('.return-chip').isVisible() && await page.locator('.document-sheet').isVisible())
   await click('.return-chip')
   await page.waitForSelector('.intelligence-drawer', { state: 'visible' })
-  check('FE-176 文书来源回跳恢复情报台账与已核实筛选', await page.locator('.intelligence-drawer').isVisible() && await page.locator('.knowledge-legend button:has-text("已核实")').getAttribute('aria-pressed') === 'true')
+  await page.waitForFunction(expected => {
+    const node = document.querySelector('.intelligence-drawer .drawer-scroll')
+    return Boolean(node && Math.abs(node.scrollTop - expected) <= 2)
+  }, intelOriginScroll, { timeout: 2500 }).catch(() => undefined)
+  check('FE-176 文书来源回跳恢复情报台账筛选与滚动位置',
+    await page.locator('.intelligence-drawer').isVisible()
+    && await page.locator('.knowledge-legend button:has-text("已核实")').getAttribute('aria-pressed') === 'true'
+    && await intelScroll.evaluate((node, expected) => Math.abs(node.scrollTop - expected) <= 2, intelOriginScroll),
+    `expectedScroll=${intelOriginScroll}; actualScroll=${await intelScroll.evaluate(node => node.scrollTop)}`)
+  check('FE-176 文书来源回跳后焦点重新交给情报台账',
+    await page.locator('.intelligence-drawer').evaluate(node => node.contains(document.activeElement)))
   await verifiedPins.nth(1).click()
   await page.waitForSelector('.ledger-section', { state: 'visible' })
   check('FE-176 情报来源跳转账房并保留回原处入口', await page.locator('.return-chip').isVisible() && await page.locator('.ledger-section').isVisible())
