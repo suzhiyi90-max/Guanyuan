@@ -48,6 +48,7 @@ on:
       - work/w6-world-aggregate-application-ports
   pull_request:
     branches:
+      - work/w6-player-boundary-composition
       - work/w5-e2a-portable-import-core
       - work/w5-e2b-portable-import-ui
       - work/w5-e2c-local-save-library
@@ -142,6 +143,10 @@ jobs:
         run: npm run test:world-scheduler
       - name: Player command authorization gate contracts
         run: npm run test:world-authorization-gate
+      - name: Authenticated player boundary isolation contracts
+        run: npm run test:world-player-boundary
+      - name: Local development owner identity contracts
+        run: npm run test:local-owner-identity --if-present
       - name: World event registry and aggregate reducer contracts
         run: npm run test:world-event
       - name: Replay-backed world projector contracts
