@@ -503,7 +503,7 @@ function GameApp({ game }: { game: ReturnType<typeof useGuanyuanGame> }) {
     const doc = document.scrollingElement as HTMLElement | null
     return doc && doc.scrollHeight - doc.clientHeight > 4 ? doc : null
   }
-  const captureSpot = (label: string, detail: string) => ({ label, detail, overlay, section: activeSection, scrollTop: scrollRootOf()?.scrollTop ?? 0 })
+  const captureSpot = (label: string, detail: string, scrollSelector?: string) => ({ label, detail, overlay, section: activeSection, scrollTop: (scrollSelector ? document.querySelector<HTMLElement>(scrollSelector) : scrollRootOf())?.scrollTop ?? 0 })
   const restoreScrollTo = (top: number, selector?: string, delay = 70) => {
     if (!top) return
     let tries = 0
