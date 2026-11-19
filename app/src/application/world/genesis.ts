@@ -141,6 +141,11 @@ export async function runPlayerGenesis(
   if (loaded.status !== 'loaded') {
     return { status: 'rejected', reason: loaded.status === 'rejected' ? loaded.reason : 'genesis-reserved-ledger-missing' }
   }
+  // A player character is a world fact and cannot be reduced before the
+  // canonical world.initialized event establishes bootstrap metadata.
+  if (loaded.ledger.events[0]?.kind !== 'world.initialized') {
+    return { status: 'rejected', reason: 'genesis-world-not-initialized' }
+  }
 
   let checkpoint = reservation.genesis
   let recovered = reservation.state !== 'reserved'
