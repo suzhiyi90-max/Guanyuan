@@ -317,7 +317,7 @@ export async function runIndexedDbWorldRuntimeContractTests(): Promise<readonly 
     ledger: serviceRuntime,
   }
   const serviceGenesis = await runPlayerGenesis(serviceDependencies, servicePerson.displayName)
-  check('trusted Genesis service reserves WorldId and commits canonical player binding',
+  check(`trusted Genesis service reserves WorldId and commits canonical player binding (${JSON.stringify(serviceGenesis)})`,
     serviceGenesis.status === 'ready' && serviceGenesis.worldId === serviceWorld
       && serviceGenesis.personId === servicePerson.id, passed)
   const serviceRetry = await runPlayerGenesis(serviceDependencies, servicePerson.displayName)
