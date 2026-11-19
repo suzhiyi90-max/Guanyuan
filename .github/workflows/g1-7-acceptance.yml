@@ -50,6 +50,7 @@ on:
       - work/w6-local-owner-identity
       - work/w6-i3a-shared-command-processor
       - work/w6-i3b-indexeddb-durable-runtime
+      - work/w6-i3c-genesis-binding-recovery
   pull_request:
     branches:
       - work/w5-e2a-portable-import-core
@@ -110,6 +111,7 @@ on:
       - work/w6-local-owner-identity
       - work/w6-i3a-shared-command-processor
       - work/w6-i3b-indexeddb-durable-runtime
+      - work/w6-i3c-genesis-binding-recovery
   workflow_dispatch:
 
 permissions:
