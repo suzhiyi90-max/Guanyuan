@@ -322,9 +322,9 @@ export class IndexedDbWorldRuntime implements OwnerWorldReservationPort, Durable
     } catch { return null }
   }
 
-  async loadLedger<Kind extends string = WorldDomainEventKind>(
+  async loadLedger(
     worldId: WorldId,
-  ): Promise<W6LedgerLoadResult<Kind>> {
+  ): Promise<W6LedgerLoadResult<WorldDomainEventKind>> {
     let db: IDBDatabase
     try { db = await this.open() } catch { return { status: 'rejected', reason: 'w6-indexeddb-unavailable' } }
     try {
@@ -346,7 +346,7 @@ export class IndexedDbWorldRuntime implements OwnerWorldReservationPort, Durable
         const a = left as Record<string, unknown>, b = right as Record<string, unknown>
         return Number(a.seq) - Number(b.seq)
       })
-      const events: LedgerEvent<Kind>[] = []
+      const events: LedgerEvent<WorldDomainEventKind>[] = []
       for (let index = 0; index < eventRows.length; index += 1) {
         const row = eventRows[index] as Record<string, unknown>
         if (row.worldId !== worldId || row.seq !== index + 1 || !row.event || typeof row.event !== 'object') {
@@ -361,7 +361,7 @@ export class IndexedDbWorldRuntime implements OwnerWorldReservationPort, Durable
       if (events.length !== metadata.head || !sameCursor(metadata.streamHead, cursorFor(metadata.head, events))) {
         return { status: 'rejected', reason: 'w6-world-head-mismatch' }
       }
-      const restored = await restoreEventLedgerFromVerifiedEvents<Kind>(worldId, events, this.registry)
+      const restored = await restoreEventLedgerFromVerifiedEvents<WorldDomainEventKind>(worldId, events, this.registry)
       if (restored.status !== 'restored') return { status: 'rejected', reason: restored.issue }
       const persistedRecords = rawIdempotency as StoredIdempotencyRecord[]
       if (persistedRecords.length !== restored.ledger.idempotency.length) {
@@ -495,7 +495,7 @@ export class IndexedDbWorldRuntime implements OwnerWorldReservationPort, Durable
         resolve('rejected')
         return
       }
-      tx.oncomplete = () => resolve(outcome)
+      tx.oncomplete = () => resolve('committed')
       tx.onabort = () => resolve(outcome)
       tx.onerror = () => { /* onabort resolves */ }
       let metadataReady = false
@@ -527,7 +527,6 @@ export class IndexedDbWorldRuntime implements OwnerWorldReservationPort, Durable
             streamHead: Object.freeze({ kind: 'event', seq: event.seq, eventId: event.id }),
           })
           tx.objectStore(WORLD_METADATA).put(nextMetadata)
-          outcome = 'committed'
         } catch {
           outcome = 'rejected'
           try { tx.abort() } catch {}
