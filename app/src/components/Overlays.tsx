@@ -147,6 +147,7 @@ export function IntelligenceDrawer({ clues, asked, onClose, onOpenSource, onOpen
     event.preventDefault()
     const step = event.key === 'ArrowRight' || event.key === 'ArrowDown' ? 1 : -1
     const next = event.key === 'Home' ? 0 : event.key === 'End' ? pins.length - 1 : (index + step + pins.length) % pins.length
+    pins.forEach((pin, pinIndex) => { pin.tabIndex = pinIndex === next ? 0 : -1 })
     pins[next].focus()
   }
   return (
