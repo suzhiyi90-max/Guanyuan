@@ -296,3 +296,37 @@ Reservation transaction 在单个 readwrite transaction 中对 ownerReservations
 - 完整 ledger 重建与 projector replay 的性能基线；不得在未测量前引入会改变一致性的快照捷径。
 
 以上决策锁定后，W6-I-3A 可进入共享 processor 的代码实现；3B–3D 仍受各自验收门槛约束。
+
+
+## 14. W6-I-3B 持久化实现补充裁决（2026-11-19）
+
+本节记录实现阶段对 canonical restore API 的核定，不改变 W5/domain ledger kernel，也不改变 13 节已锁定的事件语义。
+
+### 14.1 事件恢复使用既有 verified restore helper
+
+实现中不能简单对历史事件逐条调用普通 `appendLedgerEvent` 来恢复：普通 append API 以传入的 request/commit time 生成新事件信封，无法保证保留历史事件原始 `committedAt`；AI candidate validation receipt / candidate fact 还具有专用追加语义。
+
+因此 durable load 应调用现有 `restoreEventLedgerFromVerifiedEvents(worldId, events, registry)`：
+- 从空 ledger 按序重建；
+- 保留并核对每个原始事件信封（包括 committedAt）；
+- 复用现有内部 canonical append/idempotency 语义，重建幂等索引；
+- 对 AI candidate 专用收据走既有验证路径；
+- 之后必须调用现有 W6 projector，从 genesis 完整重放并验证 schema/reducer/domain invariants；
+- 最后逐条核对持久化 idempotency rows 与重建结果完全一致。
+
+禁止在 persistence adapter 中复制 event id、sequence、request identity、fingerprint 或 AI receipt 算法；禁止为此修改 W5/domain ledger kernel。
+
+### 14.2 W6 IndexedDB schema 与事务
+
+首期数据库名：`guanyuan-w6-runtime`，schema version 1。Stores：
+- `ownerReservations`：ownerId 主键、worldId 唯一索引、ownerId + clientRequestId 唯一索引；
+- `worldMetadata`：worldId 主键，保存 worldStartTime/head/streamHead；
+- `worldEvents`：复合主键 [worldId, seq]，按 worldId 查询；
+- `idempotencyRecords`：复合主键 [worldId, key]，worldId + eventId 唯一索引；
+- `ownerPersonBindings`：ownerId 主键、worldId 唯一索引、worldId + personId 唯一索引；仅预留 schema，3C 前不得写入。
+
+Reservation 在一个 readwrite transaction 中 add owner reservation 与 world metadata。Command commit 在一个 readwrite transaction 中读取当前 metadata/head 与幂等 key，再 add immutable event、add idempotency record、更新 world metadata head。事务完成事件是唯一提交成功信号；事务 abort 不得返回 committed。
+
+### 14.3 当前代码与测试状态
+
+PR #92（Draft/Open，未合并）实现以上 schema、reservation 与 durable command adapter；新增浏览器 IndexedDB contracts，并由 Playwright smoke 调用。完整 G1.7 未通过前不得将实现标为验收完成。Genesis player-character event、reservation 状态推进、Owner→Person binding finalize/recovery 仍属于 3C；UI migration 仍禁止提前启动。
