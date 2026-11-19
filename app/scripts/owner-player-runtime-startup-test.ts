@@ -128,7 +128,7 @@ function fixture(options: {
           schemaVersion: 1, worldId, worldStartTime, head: events.length,
           streamHead: { kind: 'event', seq: last.seq, eventId: last.id },
         },
-        ledger: { worldId, events },
+        ledger: { worldId, head: events.length, events, idempotency: [] },
       }
     },
     createWorldAdapter() { return adapter },
