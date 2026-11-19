@@ -10,7 +10,6 @@ import {
   appendLedgerEvent,
   type EventLedger,
   type JsonValue,
-  type WorldId,
 } from '../../domain/event-ledger'
 import type { EventRegistry } from '../../domain/event-registry'
 import type { StreamCursor } from '../../domain/event-replay'
@@ -83,6 +82,33 @@ function sameCursor(left: StreamCursor, right: StreamCursor): boolean {
     && (left.kind === 'genesis' || (right.kind === 'event' && left.eventId === right.eventId))
 }
 
+function snapshotJsonValue(value: JsonValue, ancestors = new Set<object>()): JsonValue {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean' || typeof value === 'number') {
+    if (typeof value === 'number' && !Number.isFinite(value)) throw new Error('world-command-payload-not-json')
+    return value
+  }
+  if (typeof value !== 'object') throw new Error('world-command-payload-not-json')
+  if (ancestors.has(value)) throw new Error('world-command-payload-circular-reference')
+  ancestors.add(value)
+  try {
+    if (Array.isArray(value)) {
+      return Object.freeze(value.map(item => snapshotJsonValue(item, ancestors)))
+    }
+    const prototype = Object.getPrototypeOf(value)
+    if (prototype !== Object.prototype && prototype !== null) {
+      throw new Error('world-command-payload-not-plain-object')
+    }
+    const record = value as { readonly [key: string]: JsonValue }
+    const entries: [string, JsonValue][] = []
+    for (const key of Object.keys(record)) {
+      entries.push([key, snapshotJsonValue(record[key]!, ancestors)])
+    }
+    return Object.freeze(Object.fromEntries(entries)) as { readonly [key: string]: JsonValue }
+  } finally {
+    ancestors.delete(value)
+  }
+}
+
 function rejected(
   request: WorldCommandRequest,
   streamHead: StreamCursor,
@@ -127,7 +153,18 @@ function conflict(
 export async function prepareWorldCommand(
   options: PrepareWorldCommandOptions,
 ): Promise<PreparedWorldCommandResult> {
-  const { ledger, aggregate, request, registry, projector } = options
+  const { ledger, aggregate, registry, projector } = options
+  let request: WorldCommandRequest
+  try {
+    request = Object.freeze({
+      ...options.request,
+      requestedAt: Object.freeze({ ...options.request.requestedAt }),
+      expectedHead: Object.freeze({ ...options.request.expectedHead }),
+      payload: snapshotJsonValue(options.request.payload),
+    })
+  } catch {
+    return rejected(options.request, aggregate.streamHead, 'world-command-request-snapshot-failed')
+  }
   if (request.worldId !== ledger.worldId || request.worldId !== aggregate.worldId) {
     return rejected(request, aggregate.streamHead, 'world-command-world-id-mismatch')
   }
@@ -195,7 +232,7 @@ export async function prepareWorldCommand(
     aggregate: projected.aggregate,
     receipt: {
       status: 'committed',
-      worldId: request.worldId as WorldId,
+      worldId: request.worldId,
       clientRequestId: request.clientRequestId,
       eventId: tail.id,
       streamHead: projected.aggregate.streamHead,
