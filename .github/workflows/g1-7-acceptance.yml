@@ -49,7 +49,6 @@ on:
       - work/fe174-debt-ledger-keyboard-audit
       - work/fe175-intel-source-pin-audit
       - work/fe176-cross-source-return-audit
-      - work/fe176-cross-source-return-audit
   pull_request:
     branches:
       - work/w5-e2a-portable-import-core
@@ -60,6 +59,7 @@ on:
       - feat/c157-rank-card-frames
       - work/s03-person-archive-focus-audit
       - work/fe175-intel-source-pin-audit
+      - work/fe176-cross-source-return-audit
       - feat/g1-engine
       - work/w1-a-person-core
       - work/w1-b-identity-office-auth
