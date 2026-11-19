@@ -186,3 +186,113 @@ Genesis service 在可信应用组合内部使用专用 capability，不把 raw 
 当前技术路径可行，但 3A 前必须先解决第 10 节列出的 Genesis actor/source 语义与共享 command pipeline 抽取方案。不得直接以现有 `WorldCommandPort` 作为 Genesis API，也不得在当前 in-memory adapter 外再复制一套 command semantics。
 
 本文件通过后，下一施工提交先做 W6-I-3A 的接口/状态机/共享 command pipeline 设计与测试边界；只有代码证明能够复用现有 append/schema/projector/replay，才进入 IndexedDB 实现。
+
+## 13. W6-I-3A 架构决策锁定（2026-11-19）
+
+本节以 PR #89 最新 head `198cc008b75ac80d7f9364ecc8013e4b803b5e8d` 与 PR #90 最新 head `37375383812b6538db4d978dd5228bcae3e80a31` 的代码为依据，覆盖第 10、12 节中已经解决的 Genesis actor/source 与 command pipeline 抽取问题。
+
+### 13.1 Genesis 的 actor/source 语义
+
+**决定：Genesis 是 Owner 发起的 player-command，不伪装成 rule/schedule/system 事件，也不扩展 LedgerSource 枚举。**
+
+- `source = 'player-command'`；
+- `actor = OwnerId`（保留其自身命名空间，例如 `owner:local:<UUID>`），不伪装成尚未创建的 PersonId；
+- `intentKind = 'person.create'`，事件 kind = `person.created`；
+- `clientRequestId` 由可信 reservation service 生成并持久化，客户端不得提供、覆盖或重置；
+- payload 仍严格遵循现有 `person.created` schema：`{ person, origin: { kind: 'player-character' } }`，不得为了塞入 OwnerId 而扩展 payload 或复制人物事实。
+
+理由：LedgerSource 已有 `player-command`，而 Genesis 的因果发起者确为已认证 Owner。把它记作 `rule` 会错误表达事实来源；把 OwnerId 伪装为 PersonId 则破坏身份边界。Ledger event actor 当前为 string，故保留 OwnerId 的命名空间字符串即可；Owner→World reservation 记录与事件的 worldId + clientRequestId + actor 构成可核验关联。
+
+### 13.2 Genesis 的授权边界
+
+Genesis 不经过 `createAuthorizationGatedWorldCommandPort` 的 PersonId 授权路径，因为此时 player Person 尚不存在；也不放宽该 gate。
+
+- `WorldGenesisService` 是单独的、窄能力入口，只暴露 `create(PlayerGenesisInputV1)` 与必要的恢复查询。
+- Service 内部从可信 `OwnerIdentityPort` resolve OwnerId；禁止从 UI 参数接收 ownerId、worldId、actor、source、permission、scope、PersonId 或任何领域内部引用。
+- Service 必须先读取/建立该 Owner 的 durable reservation，再从 reservation 取得 WorldId 与稳定 clientRequestId。
+- 只有 reservation service 持有的私有 append capability 能产生上述 Genesis event。通用 `WorldCommandPort`、raw ledger store 和 reservation store 不得暴露给 UI。
+- 事件提交后，只有完整 canonical ledger replay 确认 `aggregate.playerPersonId` 与唯一 `player-character` origin，才能 finalize Owner→Person binding。
+- Genesis finalized 后，W6-H 的 principal adapter 才能将可信 OwnerId 映射为绑定 PersonId；既有 `requireWorldPlayer` 检查继续执行，不降低要求。
+
+### 13.3 共享 command pipeline：先 prepare，再原子 append
+
+当前 `createInMemoryWorldAdapter` 的 command 路径在一个函数中完成 intent 映射、schema validation、`appendLedgerEvent`、expected-head 检查、projector rebuild 和内存发布。不能为 IndexedDB 复制这套语义。
+
+W6-I-3A 抽取纯 application command processor，概念接口：
+
+```ts
+prepareWorldCommand({
+  ledger,
+  request,
+  registry,
+  projector,
+}): Promise<
+  | { status: 'prepared'; nextLedger; nextAggregate; event; idempotencyRecord }
+  | { status: 'duplicate'; event; streamHead }
+  | { status: 'conflict'; reason; streamHead }
+  | { status: 'rejected'; reason; streamHead }
+>
+```
+
+约束：
+1. 对 request 做 plain-JSON snapshot / validation；沿用当前 intent→kind allow-list，不允许未知 intent fallback。
+2. 校验 worldId 和 expectedHead；幂等 duplicate 检查仍必须支持“提交成功但响应丢失后重试”。
+3. 通过现有 `validateWorldDomainEventPayload` 和 `appendLedgerEvent` 生成候选 ledger/event/idempotency record。
+4. 通过现有 `WorldProjectionPort.rebuild` 对候选 ledger 做 reducer/domain invariant 校验；未通过不得提交。
+5. 返回 prepared 结果，不在 processor 内写 IndexedDB、不修改 W5、不发布 UI。
+6. Adapter commit 阶段必须执行 expected-head compare-and-swap；只有 CAS 成功才持久化候选 event、idempotency record 与新 head。
+7. 若 CAS 失败，重新 load canonical ledger 并重新 prepare；不能把旧 candidate 覆盖到新 head 上。
+8. 同 request 并发时，持久化层在事务内先查唯一 idempotency key：fingerprint 一致返回 duplicate，不一致返回 idempotency conflict；这比简单 head conflict 优先。
+9. In-memory adapter 也改为调用同一 processor，并以其现有串行 command queue + 内存 CAS 完成 commit；保持既有 receipt 行为、listener 发布时机和 replay 结果。
+
+这里的 prepare/commit 分离是 application/infrastructure 边界，不更改 domain ledger 规则。processor 不复制 event schema、reducer 或 idempotency 算法。
+
+### 13.4 W6 durable ledger 的重建与防篡改校验
+
+持久化层按 `[worldId, seq]` 存事件行，并按 `[worldId, idempotencyKey]` 存幂等行。加载时不能直接信任数据库中保存的 head、key、fingerprint 或数组顺序。
+
+**规范重建方法：**
+1. 从空 `createEventLedger(worldId)` 开始；
+2. 按 seq 连续读取事件，要求 seq 从 1 开始无缺口、无重复，event.worldId 与目标一致；
+3. 对每条存储事件，剥离持久化 envelope 字段，使用现有 `appendLedgerEvent(rebuiltLedger, eventInput, event.committedAt)` 重建；
+4. 必须返回 `appended`，并逐字段核对重建事件与存储事件一致；若返回 duplicate/conflict/rejected 或任何字段不一致，fail closed；
+5. 比较由 appendLedgerEvent 重建出的 idempotency rows 与持久化 idempotency store 的所有记录，要求一一对应且 key、eventId、fingerprint 全部一致；
+6. 比较重建 head 与 world metadata head；不一致则拒绝恢复。
+
+此法复用现有私有 idempotency 语义，不修改或导出 W5/domain kernel 内部算法。事件 ID 当前由 ledger 依 seq 生成，重建核对必须覆盖 event id、worldId、seq、source、kind、intentKind、actor、requestWorldTime、clientRequestId、payload、committedAt。
+
+### 13.5 IndexedDB 事务协议进一步明确
+
+W6 独立数据库建议 stores：
+
+- `ownerReservations`：ownerId 主键；worldId unique index；持久化 reservationId、requestId、genesisRequestId、状态与 schema version。
+- `worldMetadata`：worldId 主键；持久化 schema/registry/ruleset version、start time、head/cursor。
+- `worldEvents`：复合主键 [worldId, seq]；只允许 add，不允许 put 覆盖既有事件。
+- `worldIdempotency`：复合主键 [worldId, key]；只允许 add；唯一性由主键保证。
+- `ownerPersonBindings`：ownerId 主键；worldId 与 personId unique index；只存最终绑定指针及核验 cursor。
+
+Reservation transaction 在单个 readwrite transaction 中对 ownerReservations 与 worldMetadata 原子 add；Genesis append transaction 对 worldMetadata、worldEvents、worldIdempotency 原子 CAS/add；binding finalize transaction 对 ownerReservations 与 ownerPersonBindings 原子更新。跨事务流程仍由 durable reservation 状态机恢复，不声称整个 Genesis 是单一事务。
+
+### 13.6 3A 的实际交付范围与验收
+
+3A 首个代码提交只做共享 processor 抽取及其纯契约测试，不引入 IndexedDB、不迁移 UI、不修改 W5。必须证明：
+- 现有 in-memory command 行为与 receipt 类型兼容；
+- expected-head stale request 被拒绝，不写 ledger；
+- 同 request retry 返回 duplicate，不追加第二条；
+- 相同 request key、不同 fingerprint 返回 conflict；
+- 未知 intent / 非法 payload / projector reducer invariant failure 均不写入；
+- projector failure 不发布新 aggregate、不通知 listener；
+- command queue rejection 后队列仍可继续处理后续请求；
+- 原有 world adapter、authorization gate、player boundary、world projector 与全量 G1.7 回归不退化。
+
+通过后再实现 3B IndexedDB adapter。3A 不改 event-ledger domain kernel，不新增 LedgerSource，不触碰 W5 文件。
+
+### 13.7 仍需在 3B 前核定的技术细节
+
+- IndexedDB 事务中 request callback / promise continuation 的生命周期，必须以真实浏览器多连接测试验证，不能仅靠 fake-indexeddb 证明。
+- 数据库 schema 升级、blocked/versionchange、多标签页关闭与损坏处理。
+- WorldId allocator 的注入接口、随机源和失败策略。
+- IndexedDB store 读写操作的事务封装，避免事务内跨越网络/AI/projector await。
+- 完整 ledger 重建与 projector replay 的性能基线；不得在未测量前引入会改变一致性的快照捷径。
+
+以上决策锁定后，W6-I-3A 可进入共享 processor 的代码实现；3B–3D 仍受各自验收门槛约束。
