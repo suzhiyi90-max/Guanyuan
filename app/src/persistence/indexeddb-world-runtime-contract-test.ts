@@ -312,14 +312,15 @@ export async function runIndexedDbWorldRuntimeContractTests(): Promise<readonly 
     identity: { resolve: async () => serviceOwner },
     requestIds: { create: () => `req:genesis-service:${suffix}` },
     clock: { current: async () => start },
+    persons: { create: async () => servicePerson },
     reservations: serviceRuntime,
     ledger: serviceRuntime,
   }
-  const serviceGenesis = await runPlayerGenesis(serviceDependencies, servicePerson)
+  const serviceGenesis = await runPlayerGenesis(serviceDependencies, servicePerson.displayName)
   check('trusted Genesis service reserves WorldId and commits canonical player binding',
     serviceGenesis.status === 'ready' && serviceGenesis.worldId === serviceWorld
       && serviceGenesis.personId === servicePerson.id, passed)
-  const serviceRetry = await runPlayerGenesis(serviceDependencies, servicePerson)
+  const serviceRetry = await runPlayerGenesis(serviceDependencies, servicePerson.displayName)
   const serviceRetryLedger = await serviceRuntime.loadLedger(serviceWorld)
   check('Genesis service retry recovers the finalized binding without a second person event',
     serviceRetry.status === 'recovered' && serviceRetryLedger.status === 'loaded'
@@ -362,10 +363,11 @@ export async function runIndexedDbWorldRuntimeContractTests(): Promise<readonly 
     identity: { resolve: async () => crashOwner },
     requestIds: { create: () => 'unused-after-reservation' },
     clock: { current: async () => start },
+    persons: { create: async () => { throw new Error('factory-must-not-run-during-recovery') } },
     reservations: crashRuntime,
     ledger: crashRuntime,
   }
-  const crashRecovery = await runPlayerGenesis(crashDependencies, crashPerson)
+  const crashRecovery = await runPlayerGenesis(crashDependencies, crashPerson.displayName)
   const crashLedger = await crashRuntime.loadLedger(crashWorld)
   check('crash recovery after append-before-checkpoint finalizes the existing Genesis event exactly once',
     crashRecovery.status === 'recovered' && crashLedger.status === 'loaded'
@@ -417,9 +419,10 @@ export async function runIndexedDbWorldRuntimeContractTests(): Promise<readonly 
     identity: { resolve: async () => checkpointOwner },
     requestIds: { create: () => 'unused-after-checkpoint' },
     clock: { current: async () => start },
+    persons: { create: async () => { throw new Error('factory-must-not-run-after-checkpoint') } },
     reservations: checkpointRuntime,
     ledger: checkpointRuntime,
-  }, checkpointPerson)
+  }, checkpointPerson.displayName)
   const checkpointRecoveryBinding = await checkpointRuntime.readOwnerPersonBinding(checkpointOwner)
   const checkpointRecoveryLedger = await checkpointRuntime.loadLedger(checkpointWorld)
   check('crash recovery after checkpoint-before-binding finalizes without replay append',
