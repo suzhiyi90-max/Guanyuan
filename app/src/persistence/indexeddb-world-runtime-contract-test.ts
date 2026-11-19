@@ -83,6 +83,11 @@ export async function runIndexedDbWorldRuntimeContractTests(): Promise<readonly 
     && first.reservation.worldId === allocatedWorldId && first.reservation.state === 'reserved', passed)
   if (first.status !== 'reserved') throw new Error('w6-contract-first-reservation-missing')
 
+  const readBackReservation = await runtime.readReservation(owner)
+  check('reservation recovery read verifies Owner and World metadata together',
+    readBackReservation?.worldId === first.reservation.worldId
+      && readBackReservation.clientRequestId === first.reservation.clientRequestId, passed)
+
   const repeated = await runtime.reserveWorld(owner, 'req:first', start)
   check('same owner and request retry returns the exact existing reservation', repeated.status === 'reserved'
     && repeated.reservation.worldId === first.reservation.worldId
