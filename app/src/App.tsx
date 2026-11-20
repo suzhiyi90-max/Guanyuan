@@ -295,7 +295,8 @@ function GameApp({ game }: { game: ReturnType<typeof useGuanyuanGame> }) {
     // FE-176：跨来源回查先封存当前表面、分区与滚动位置，目标表面保留统一「回原处」入口。
     const originLabel = overlay === 'evidence' ? '证据板' : overlay === 'intelligence' ? '情报台账' : '来源查验'
     const sourceLabel = source === 'document' ? '文书' : source === 'ledger' ? '账房' : '东堤'
-    setReturnSpot(captureSpot(originLabel, `回查 · ${sourceLabel}${refs?.length ? ` · ${refs.join('、')}` : ''}`, overlay === 'intelligence' ? '.intelligence-drawer .drawer-scroll' : undefined))
+    setReturnSpot(captureSpot(originLabel, `回查 · ${sourceLabel}${refs?.length ? ` · ${refs.join('、')}` : ''}`, overlay === 'intelligence' ? '.intelligence-drawer .drawer-scroll' : overlay === 'evidence' ? '.evidence-board .evidence-scroll' : undefined))
+    if (overlay === 'evidence' && refs?.[0]) setEvidenceFocus(refs[0])
     if (source === 'document') {
       if (refs) setSelectedCompare(refs)
       openDocument('compare', refs?.[0] ?? null)
@@ -537,6 +538,17 @@ function GameApp({ game }: { game: ReturnType<typeof useGuanyuanGame> }) {
           ?.focus({ preventScroll: true })
       }, 180)
       restoreScrollTo(spot.scrollTop, '.intelligence-drawer .drawer-scroll', 300)
+    } else if (spot.overlay === 'evidence') {
+      // FE-177：证据板重挂后将焦点交还原来源卡；若来源不是证据钉，则落在模态关闭控件。
+      window.setTimeout(() => {
+        const board = document.querySelector<HTMLElement>('.evidence-board')
+        const source = evidenceFocus
+          ? Array.from(board?.querySelectorAll<HTMLElement>('[data-chain-id]') ?? []).find(node => node.dataset.chainId === evidenceFocus)?.querySelector<HTMLElement>('.chain-card')
+          : null
+        const target = source ?? board?.querySelector<HTMLButtonElement>('.evidence-head button[aria-label="收起并置"]')
+        target?.focus({ preventScroll: true })
+      }, 180)
+      restoreScrollTo(spot.scrollTop, '.evidence-board .evidence-scroll', 300)
     } else {
       restoreScrollTo(spot.scrollTop)
     }
