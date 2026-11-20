@@ -707,7 +707,10 @@ try {
   check('FE-024 回查同时恢复原批阅焦点', (await page.locator('.document-sheet').getAttribute('data-review-focus')) === 'cause-initial' && (await page.locator('.compare-row.is-focused').count()) === 1)
   await click('.return-chip')
   await page.waitForSelector('.evidence-board', { state: 'visible' })
-  await settle(350)
+  await page.waitForFunction(expected => {
+    const root = document.querySelector('.evidence-board .evidence-scroll')
+    return Boolean(root && Math.abs(root.scrollTop - expected) <= 2)
+  }, evidenceDocumentOriginScroll, { timeout: 2500 }).catch(() => {})
   check('FE-177 文书回跳恢复证据板内层滚动位置',
     await evidenceScroll.evaluate((node, expected) => Math.abs(node.scrollTop - expected) <= 2, evidenceDocumentOriginScroll),
     `expected=${evidenceDocumentOriginScroll}; actual=${await evidenceScroll.evaluate(node => node.scrollTop)}`)
@@ -722,7 +725,9 @@ try {
   await settle(350)
   const ledgerSourceAction = page.locator('.evidence-board .chain-inspector .text-link').filter({ hasText: '带回账房并置' })
   await ledgerSourceAction.waitFor({ state: 'visible' })
-  await ledgerSourceAction.evaluate(node => node.scrollIntoView({ block: 'center' }))
+  await evidenceScroll.evaluate(node => {
+    node.scrollTop = Math.min(173, node.scrollHeight - node.clientHeight)
+  })
   const evidenceLedgerOriginScroll = await evidenceScroll.evaluate(node => node.scrollTop)
   check('FE-177 账房回查前证据板处于真实非零内层滚动位置', evidenceLedgerOriginScroll > 0, `scroll=${evidenceLedgerOriginScroll}`)
   const ledgerSourceRef = await ledgerOriginCard.locator('header span').innerText()
@@ -730,7 +735,10 @@ try {
   await page.waitForSelector('.ledger-section', { state: 'visible' })
   await click('.return-chip')
   await page.waitForSelector('.evidence-board', { state: 'visible' })
-  await settle(350)
+  await page.waitForFunction(expected => {
+    const root = document.querySelector('.evidence-board .evidence-scroll')
+    return Boolean(root && Math.abs(root.scrollTop - expected) <= 2)
+  }, evidenceLedgerOriginScroll, { timeout: 2500 }).catch(() => {})
   check('FE-177 账房回跳恢复证据板内层滚动位置',
     await evidenceScroll.evaluate((node, expected) => Math.abs(node.scrollTop - expected) <= 2, evidenceLedgerOriginScroll),
     `expected=${evidenceLedgerOriginScroll}; actual=${await evidenceScroll.evaluate(node => node.scrollTop)}`)
