@@ -735,7 +735,8 @@ try {
   check('FE-177 账房回查前证据板处于真实非零内层滚动位置', evidenceLedgerOriginScroll > 0, `scroll=${evidenceLedgerOriginScroll}`)
   const ledgerSourceRef = await ledgerOriginCard.locator('header span').innerText()
   await ledgerSourceAction.click()
-  await page.waitForSelector('.ledger-section', { state: 'visible' })
+  // ledger-section 在背景布局中常驻；必须等待来源回查入口出现，不能用它作为导航完成信号。
+  await page.waitForSelector('.return-chip', { state: 'visible' })
   await click('.return-chip')
   await page.waitForSelector('.evidence-board', { state: 'visible' })
   await page.waitForFunction(expected => {
@@ -745,8 +746,11 @@ try {
   check('FE-177 账房回跳恢复证据板内层滚动位置',
     await evidenceScroll.evaluate((node, expected) => Math.abs(node.scrollTop - expected) <= 2, evidenceLedgerOriginScroll),
     `expected=${evidenceLedgerOriginScroll}; actual=${await evidenceScroll.evaluate(node => node.scrollTop)}`)
-  check('FE-177 账房回跳后焦点精确归还原证据钉',
-    await page.locator(`.evidence-board [data-chain-id="${ledgerSourceRef}"] .chain-card`).evaluate(node => document.activeElement === node))
+  const ledgerReturnFocus = await page.evaluate(ref => {
+    const target = document.querySelector(`.evidence-board [data-chain-id="${ref}"] .chain-card`)
+    return { targetExists: Boolean(target), focused: Boolean(target && document.activeElement === target), active: document.activeElement instanceof HTMLElement ? document.activeElement.outerHTML.slice(0, 240) : String(document.activeElement) }
+  }, ledgerSourceRef)
+  check('FE-177 账房回跳后焦点精确归还原证据钉', ledgerReturnFocus.targetExists && ledgerReturnFocus.focused, JSON.stringify(ledgerReturnFocus))
   check('FE-177 账房回跳保留原来源上下文',
     (await page.locator('.evidence-board').getAttribute('data-source-focus')) === ledgerSourceRef)
   await click('.evidence-head button[aria-label="收起并置"]')
