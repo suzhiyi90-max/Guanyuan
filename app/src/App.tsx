@@ -516,7 +516,8 @@ function GameApp({ game }: { game: ReturnType<typeof useGuanyuanGame> }) {
         root.scrollTop = top
         if (Math.abs(root.scrollTop - top) <= 2) return
       }
-      if (tries++ < 16) window.setTimeout(step, 60)
+      // 叠层退场/重挂与内容展开可能分帧完成；持续重试，直到真实滚动容器具备目标容量。
+      if (tries++ < 48) window.setTimeout(step, 60)
     }
     window.setTimeout(step, delay)
   }
@@ -541,13 +542,16 @@ function GameApp({ game }: { game: ReturnType<typeof useGuanyuanGame> }) {
     } else if (spot.overlay === 'evidence') {
       // FE-177：证据板重挂后将焦点交还原来源卡；若来源不是证据钉，则落在模态关闭控件。
       window.setTimeout(() => {
-        const board = document.querySelector<HTMLElement>('.evidence-board')
-        const source = evidenceFocus
-          ? Array.from(board?.querySelectorAll<HTMLElement>('[data-chain-id]') ?? []).find(node => node.dataset.chainId === evidenceFocus)?.querySelector<HTMLElement>('.chain-card')
-          : null
-        const target = source ?? board?.querySelector<HTMLButtonElement>('.evidence-head button[aria-label="收起并置"]')
-        target?.focus({ preventScroll: true })
-      }, 180)
+        // 等待新证据板完成挂载与首帧焦点接管，再把焦点交还原证据钉。
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          const board = document.querySelector<HTMLElement>('.evidence-board')
+          const source = evidenceFocus
+            ? Array.from(board?.querySelectorAll<HTMLElement>('[data-chain-id]') ?? []).find(node => node.dataset.chainId === evidenceFocus)?.querySelector<HTMLElement>('.chain-card')
+            : null
+          const target = source ?? board?.querySelector<HTMLButtonElement>('.evidence-head button[aria-label="收起并置"]')
+          target?.focus({ preventScroll: true })
+        }))
+      }, 240)
       restoreScrollTo(spot.scrollTop, '.evidence-board .evidence-scroll', 300)
     } else {
       restoreScrollTo(spot.scrollTop)
