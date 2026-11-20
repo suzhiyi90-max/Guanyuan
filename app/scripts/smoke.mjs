@@ -722,7 +722,8 @@ try {
 
   const ledgerOriginCard = page.locator('.evidence-board .chain-card:not(:disabled)').first()
   await ledgerOriginCard.waitFor({ state: 'visible' })
-  await ledgerOriginCard.click()
+  // 文书回跳可能保留原证据钉的展开态；只在尚未展开时点击，避免把 inspector 反向收起。
+  if ((await ledgerOriginCard.getAttribute('aria-expanded')) !== 'true') await ledgerOriginCard.click()
   await settle(350)
   // 使用证据钉展开后对应的「带回账房并置」主操作，避免依赖回文路径区的悬停/焦点联动态按钮。
   const ledgerInspectorAction = page.locator('.chain-inspector .text-link').filter({ hasText: '带回账房并置' })
