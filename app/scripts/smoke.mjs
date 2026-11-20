@@ -724,17 +724,16 @@ try {
   await ledgerOriginCard.waitFor({ state: 'visible' })
   await ledgerOriginCard.click()
   await settle(350)
-  // 证据板的账房回查入口属于「回文路径」来源卡，不是链条检查器内的文本链接。
-  const ledgerSourceAction = page.locator('.evidence-board .source-correspondence-grid > button').filter({ hasText: '账房' }).first()
-  await ledgerSourceAction.waitFor({ state: 'visible' })
-  if (!(await ledgerSourceAction.isEnabled())) throw new Error('账房来源回查入口未解锁；停止本路径验收，避免把禁用入口当作可用路径')
+  // 使用证据钉展开后对应的「带回账房并置」主操作，避免依赖回文路径区的悬停/焦点联动态按钮。
+  const ledgerInspectorAction = page.locator('.chain-inspector .text-link').filter({ hasText: '带回账房并置' })
+  await ledgerInspectorAction.waitFor({ state: 'visible' })
   await evidenceScroll.evaluate(node => {
     node.scrollTop = Math.min(173, node.scrollHeight - node.clientHeight)
   })
   const evidenceLedgerOriginScroll = await evidenceScroll.evaluate(node => node.scrollTop)
   check('FE-177 账房回查前证据板处于真实非零内层滚动位置', evidenceLedgerOriginScroll > 0, `scroll=${evidenceLedgerOriginScroll}`)
   const ledgerSourceRef = await ledgerOriginCard.locator('header span').innerText()
-  await ledgerSourceAction.click()
+  await ledgerInspectorAction.click()
   // FE-177 诊断：账房切屏后纸签应由 App 的 returnSpot 状态驱动出现。
   // 不以背景常驻的 ledger-section 作为回跳入口，也不让 30 秒通用超时吞掉现场状态。
   await page.waitForTimeout(900)
