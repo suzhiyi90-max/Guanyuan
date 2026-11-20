@@ -734,7 +734,7 @@ try {
     `expected=${evidenceLedgerOriginScroll}; actual=${await evidenceScroll.evaluate(node => node.scrollTop)}`)
   check('FE-177 账房回跳后键盘焦点仍由证据板模态接管',
     await page.locator('.evidence-board').evaluate(node => node.contains(document.activeElement)))
-  await click('.document-close')
+  await click('.evidence-head button[aria-label="收起并置"]')
   await settle(300)
 
   // 5.5 人杰册共事收录与闻名遮罩
