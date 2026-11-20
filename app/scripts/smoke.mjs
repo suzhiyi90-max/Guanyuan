@@ -716,11 +716,11 @@ try {
   check('FE-177 文书回跳保留原来源上下文',
     (await page.locator('.evidence-board').getAttribute('data-source-focus')) !== 'none')
 
-  const ledgerOriginCard = page.locator('.chain-card:not(:disabled)').first()
+  const ledgerOriginCard = page.locator('.evidence-board .chain-card:not(:disabled)').first()
   await ledgerOriginCard.waitFor({ state: 'visible' })
   await ledgerOriginCard.click()
   await settle(350)
-  const ledgerSourceAction = page.locator('.chain-inspector .text-link').filter({ hasText: '带回账房并置' })
+  const ledgerSourceAction = page.locator('.evidence-board .chain-inspector .text-link').filter({ hasText: '带回账房并置' })
   await ledgerSourceAction.waitFor({ state: 'visible' })
   await ledgerSourceAction.evaluate(node => node.scrollIntoView({ block: 'center' }))
   const evidenceLedgerOriginScroll = await evidenceScroll.evaluate(node => node.scrollTop)
