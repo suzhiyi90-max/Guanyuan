@@ -716,15 +716,16 @@ try {
   check('FE-177 文书回跳保留原来源上下文',
     (await page.locator('.evidence-board').getAttribute('data-source-focus')) !== 'none')
 
-  const ledgerOriginCard = page.locator('.chain-card').first()
-  await ledgerOriginCard.evaluate(node => node.scrollIntoView({ block: 'center' }))
+  const ledgerOriginCard = page.locator('.chain-card:not(:disabled)').first()
+  await ledgerOriginCard.waitFor({ state: 'visible' })
   await ledgerOriginCard.click()
   await settle(350)
-  const ledgerSourceAction = page.locator('.source-correspondence-grid button').last()
+  const ledgerSourceAction = page.locator('.chain-inspector .text-link').filter({ hasText: '带回账房并置' })
   await ledgerSourceAction.waitFor({ state: 'visible' })
   await ledgerSourceAction.evaluate(node => node.scrollIntoView({ block: 'center' }))
   const evidenceLedgerOriginScroll = await evidenceScroll.evaluate(node => node.scrollTop)
   check('FE-177 账房回查前证据板处于真实非零内层滚动位置', evidenceLedgerOriginScroll > 0, `scroll=${evidenceLedgerOriginScroll}`)
+  const ledgerSourceRef = await ledgerOriginCard.locator('header span').innerText()
   await ledgerSourceAction.click()
   await page.waitForSelector('.ledger-section', { state: 'visible' })
   await click('.return-chip')
@@ -733,8 +734,10 @@ try {
   check('FE-177 账房回跳恢复证据板内层滚动位置',
     await evidenceScroll.evaluate((node, expected) => Math.abs(node.scrollTop - expected) <= 2, evidenceLedgerOriginScroll),
     `expected=${evidenceLedgerOriginScroll}; actual=${await evidenceScroll.evaluate(node => node.scrollTop)}`)
-  check('FE-177 账房回跳后键盘焦点仍由证据板模态接管',
-    await page.locator('.evidence-board').evaluate(node => node.contains(document.activeElement)))
+  check('FE-177 账房回跳后焦点精确归还原证据钉',
+    await page.locator(`.evidence-board [data-chain-id="${ledgerSourceRef}"] .chain-card`).evaluate(node => document.activeElement === node))
+  check('FE-177 账房回跳保留原来源上下文',
+    (await page.locator('.evidence-board').getAttribute('data-source-focus')) === ledgerSourceRef)
   await click('.evidence-head button[aria-label="收起并置"]')
   await settle(300)
 
