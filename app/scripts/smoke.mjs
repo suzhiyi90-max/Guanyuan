@@ -735,8 +735,24 @@ try {
   check('FE-177 账房回查前证据板处于真实非零内层滚动位置', evidenceLedgerOriginScroll > 0, `scroll=${evidenceLedgerOriginScroll}`)
   const ledgerSourceRef = await ledgerOriginCard.locator('header span').innerText()
   await ledgerSourceAction.click()
-  // ledger-section 在背景布局中常驻；必须等待来源回查入口出现，不能用它作为导航完成信号。
-  await page.waitForSelector('.return-chip', { state: 'visible' })
+  // FE-177 诊断：账房切屏后纸签应由 App 的 returnSpot 状态驱动出现。
+  // 不以背景常驻的 ledger-section 作为回跳入口，也不让 30 秒通用超时吞掉现场状态。
+  await page.waitForTimeout(900)
+  const ledgerReturnEntry = await page.evaluate(() => {
+    const chip = document.querySelector('.return-chip')
+    const ledger = document.querySelector('.ledger-section')
+    const activeNav = document.querySelector('.main-nav button[aria-current="page"], .main-nav button.active, .main-nav button[aria-pressed="true"]')
+    return {
+      chipExists: Boolean(chip),
+      chipVisible: Boolean(chip && chip.getClientRects().length && getComputedStyle(chip).display !== 'none'),
+      chipOverlay: chip?.getAttribute('data-overlay') ?? null,
+      chipLabel: chip?.getAttribute('aria-label') ?? null,
+      ledgerExists: Boolean(ledger),
+      activeNav: activeNav?.innerText?.trim() ?? null,
+      visibleDialogs: Array.from(document.querySelectorAll('[role="dialog"][aria-modal="true"]')).filter(node => node.getClientRects().length).map(node => node.className),
+    }
+  })
+  if (!ledgerReturnEntry.chipVisible) throw new Error(`FE-177 账房来源切屏后未出现回跳纸签：${JSON.stringify(ledgerReturnEntry)}`)
   await click('.return-chip')
   await page.waitForSelector('.evidence-board', { state: 'visible' })
   await page.waitForFunction(expected => {
