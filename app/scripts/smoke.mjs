@@ -695,10 +695,45 @@ try {
   check('证据节点可展开查验', (await page.locator('.chain-inspector').innerText()).includes('运输损耗'))
   check('FE-024 证据钉同步账房回文且未接触留白', (await page.locator('.source-correspondence').getAttribute('data-source-path')) === 'ledger' && (await page.locator('.chain-node.is-source-linked').count()) === 1 && (await page.locator('.chain-card:disabled').count()) === 2)
   await shot('10-evidence-1440')
-  await click('.comparison-card .text-link')
+  // FE-177：证据板跨来源回查必须恢复证据板内层滚动与来源操作焦点。
+  const evidenceScroll = page.locator('.evidence-board .evidence-scroll')
+  const documentSourceAction = page.locator('.comparison-card .text-link').first()
+  await documentSourceAction.evaluate(node => node.scrollIntoView({ block: 'center' }))
+  const evidenceDocumentOriginScroll = await evidenceScroll.evaluate(node => node.scrollTop)
+  check('FE-177 文书回查前证据板处于真实非零内层滚动位置', evidenceDocumentOriginScroll > 0, `scroll=${evidenceDocumentOriginScroll}`)
+  await documentSourceAction.click()
   await settle(500)
   check('疑点回查恢复呈文原选项', (await page.locator('.compare-row button.selected').count()) === 2)
   check('FE-024 回查同时恢复原批阅焦点', (await page.locator('.document-sheet').getAttribute('data-review-focus')) === 'cause-initial' && (await page.locator('.compare-row.is-focused').count()) === 1)
+  await click('.return-chip')
+  await page.waitForSelector('.evidence-board', { state: 'visible' })
+  await settle(350)
+  check('FE-177 文书回跳恢复证据板内层滚动位置',
+    await evidenceScroll.evaluate((node, expected) => Math.abs(node.scrollTop - expected) <= 2, evidenceDocumentOriginScroll),
+    `expected=${evidenceDocumentOriginScroll}; actual=${await evidenceScroll.evaluate(node => node.scrollTop)}`)
+  check('FE-177 文书回跳后键盘焦点仍由证据板模态接管',
+    await page.locator('.evidence-board').evaluate(node => node.contains(document.activeElement)))
+  check('FE-177 文书回跳保留原来源上下文',
+    (await page.locator('.evidence-board').getAttribute('data-source-focus')) !== 'none')
+
+  const ledgerOriginCard = page.locator('.chain-card').first()
+  await ledgerOriginCard.evaluate(node => node.scrollIntoView({ block: 'center' }))
+  await ledgerOriginCard.click()
+  await settle(350)
+  const ledgerSourceAction = page.locator('.chain-inspector button').filter({ hasText: '带回账房并置' })
+  await ledgerSourceAction.evaluate(node => node.scrollIntoView({ block: 'center' }))
+  const evidenceLedgerOriginScroll = await evidenceScroll.evaluate(node => node.scrollTop)
+  check('FE-177 账房回查前证据板处于真实非零内层滚动位置', evidenceLedgerOriginScroll > 0, `scroll=${evidenceLedgerOriginScroll}`)
+  await ledgerSourceAction.click()
+  await page.waitForSelector('.ledger-section', { state: 'visible' })
+  await click('.return-chip')
+  await page.waitForSelector('.evidence-board', { state: 'visible' })
+  await settle(350)
+  check('FE-177 账房回跳恢复证据板内层滚动位置',
+    await evidenceScroll.evaluate((node, expected) => Math.abs(node.scrollTop - expected) <= 2, evidenceLedgerOriginScroll),
+    `expected=${evidenceLedgerOriginScroll}; actual=${await evidenceScroll.evaluate(node => node.scrollTop)}`)
+  check('FE-177 账房回跳后键盘焦点仍由证据板模态接管',
+    await page.locator('.evidence-board').evaluate(node => node.contains(document.activeElement)))
   await click('.document-close')
   await settle(300)
 
