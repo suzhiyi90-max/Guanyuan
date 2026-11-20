@@ -605,6 +605,7 @@ try {
     `expectedScroll=${intelOriginScroll}; actualScroll=${await intelScroll.evaluate(node => node.scrollTop)}`)
   check('FE-176 文书来源回跳后键盘焦点归还当前筛选项',
     await page.locator('.knowledge-legend button[aria-pressed="true"]').evaluate(node => document.activeElement === node))
+  const ledgerOriginFilter = await page.locator('.knowledge-legend button[aria-pressed="true"]').innerText()
   await verifiedPins.nth(1).click()
   await page.waitForSelector('.ledger-section', { state: 'visible' })
   check('FE-176 情报来源跳转账房并保留回原处入口', await page.locator('.return-chip').isVisible() && await page.locator('.ledger-section').isVisible())
@@ -633,7 +634,7 @@ try {
   })
   check('FE-176 账房来源回跳恢复原情报筛选表面',
     ledgerReturnState.drawerVisible
-    && await page.locator('.knowledge-legend button:has-text("已核实")').getAttribute('aria-pressed') === 'true'
+    && await page.locator('.knowledge-legend button[aria-pressed="true"]').innerText().then(value => value === ledgerOriginFilter)
     && await intelScroll.evaluate((node, expected) => Math.abs(node.scrollTop - expected) <= 2, intelOriginScroll)
     && ledgerReturnState.focusedFilter,
     `expectedScroll=${intelOriginScroll}; state=${JSON.stringify(ledgerReturnState)}`)
