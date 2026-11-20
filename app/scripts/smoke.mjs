@@ -723,8 +723,10 @@ try {
   await ledgerOriginCard.waitFor({ state: 'visible' })
   await ledgerOriginCard.click()
   await settle(350)
-  const ledgerSourceAction = page.locator('.evidence-board .chain-inspector .text-link').filter({ hasText: '带回账房并置' })
+  // 证据板的账房回查入口属于「回文路径」来源卡，不是链条检查器内的文本链接。
+  const ledgerSourceAction = page.locator('.evidence-board .source-correspondence-grid > button').filter({ hasText: '账房' }).first()
   await ledgerSourceAction.waitFor({ state: 'visible' })
+  if (!(await ledgerSourceAction.isEnabled())) throw new Error('账房来源回查入口未解锁；停止本路径验收，避免把禁用入口当作可用路径')
   await evidenceScroll.evaluate(node => {
     node.scrollTop = Math.min(173, node.scrollHeight - node.clientHeight)
   })
